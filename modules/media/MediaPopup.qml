@@ -34,7 +34,10 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Overlay
 
+        BackgroundEffect.blurRegion: ConfigService.blurEnabled ? Region { item: mediaSurface } : null
+
         Surface {
+            id: mediaSurface
             anchors.fill: parent
             radius: Theme.radiusLarge
             color: Theme.alpha(Theme.background, Theme.popupOpacity)
