@@ -16,7 +16,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.settingsVisible
+        visible: ConfigService.settingsVisible && KWinService.isTargetOverlayScreen(modelData)
         color: "transparent"
 
         anchors {
@@ -28,7 +28,11 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (visible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+        BackgroundEffect.blurRegion: Region {
+            item: ConfigService.blurEnabled ? mainContainer : null
+        }
 
         function closeSettings() {
             ConfigService.settingsVisible = false;
@@ -42,8 +46,8 @@ Variants {
         Surface {
             id: mainContainer
             anchors.centerIn: parent
-            width: Math.min(640, parent.width - 40)
-            height: Math.min(520, parent.height - 60)
+            width: Math.min(680, parent.width - 40)
+            height: Math.min(620, parent.height - 60)
             radius: Theme.radiusLarge
             color: Theme.alpha(Theme.background, Theme.popupOpacity)
             border.color: Theme.border
@@ -57,7 +61,7 @@ Variants {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 18
-                spacing: 16
+                spacing: 14
 
                 // Header
                 RowLayout {
@@ -88,7 +92,7 @@ Variants {
                     }
                 }
 
-                // Tabs / Sections
+                // Scrollable Settings Sections
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -96,9 +100,9 @@ Variants {
 
                     ColumnLayout {
                         width: parent.width - 16
-                        spacing: 16
+                        spacing: 14
 
-                        // Theme Section
+                        // 1. Appearance Section
                         Surface {
                             Layout.fillWidth: true
                             implicitHeight: themeCol.implicitHeight + 20
@@ -112,7 +116,7 @@ Variants {
                                 spacing: 10
 
                                 Text {
-                                    text: "Theme Preset"
+                                    text: "Appearance & Themes"
                                     color: Theme.foreground
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeMedium
@@ -130,7 +134,7 @@ Variants {
                                             id: themeBtn
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            implicitHeight: 36
+                                            implicitHeight: 34
                                             radius: Theme.radiusSmall
                                             color: (Theme.activeThemeId === modelData.id) ? Theme.primary : (tMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
 
@@ -153,10 +157,30 @@ Variants {
                                         }
                                     }
                                 }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "KWin Background Blur"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.blurEnabled ? "Enabled" : "Disabled"
+                                        size: 28
+                                        backgroundColor: ConfigService.blurEnabled ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.blurEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setBlurEnabled(!ConfigService.blurEnabled)
+                                    }
+                                }
                             }
                         }
 
-                        // Bar Position Section
+                        // 2. Bar Configuration
                         Surface {
                             Layout.fillWidth: true
                             implicitHeight: barCol.implicitHeight + 20
@@ -170,11 +194,18 @@ Variants {
                                 spacing: 10
 
                                 Text {
-                                    text: "Bar Position"
+                                    text: "Panel Bar"
                                     color: Theme.foreground
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeMedium
                                     font.bold: true
+                                }
+
+                                Text {
+                                    text: "Bar Edge Position"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
 
                                 RowLayout {
@@ -193,7 +224,7 @@ Variants {
                                             id: posBtn
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            implicitHeight: 36
+                                            implicitHeight: 32
                                             radius: Theme.radiusSmall
                                             color: (ConfigService.barPosition === modelData.id) ? Theme.primary : (pMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
 
@@ -216,10 +247,118 @@ Variants {
                                         }
                                     }
                                 }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Bar Height (" + ConfigService.barHeight + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 32
+                                        maximumValue: 72
+                                        stepSize: 2
+                                        value: ConfigService.barHeight
+                                        onValueModified: val => ConfigService.setBarHeight(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Bar Opacity (" + Math.round(ConfigService.barOpacity * 100) + "%)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 0.40
+                                        maximumValue: 1.00
+                                        stepSize: 0.02
+                                        value: ConfigService.barOpacity
+                                        onValueModified: val => ConfigService.setBarOpacity(parseFloat(val.toFixed(2)))
+                                    }
+                                }
+
+                                // Bar Displays Selection UI
+                                Text {
+                                    text: "Bar Output Displays"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Rectangle {
+                                        id: barAllBtn
+                                        Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: (ConfigService.barMonitors === "all") ? Theme.primary : (bAllMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "All Displays"
+                                            color: (ConfigService.barMonitors === "all") ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.bold: ConfigService.barMonitors === "all"
+                                        }
+
+                                        MouseArea {
+                                            id: bAllMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: ConfigService.setBarMonitors("all")
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: Quickshell.screens
+
+                                        Rectangle {
+                                            id: bScrBtn
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 30
+                                            radius: Theme.radiusSmall
+                                            readonly property bool isAllowed: ConfigService.isScreenAllowed(modelData, ConfigService.barMonitors)
+                                            color: (ConfigService.barMonitors !== "all" && isAllowed) ? Theme.primary : (bScrMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: bScrBtn.modelData.name + (bScrBtn.modelData.model ? (" (" + bScrBtn.modelData.model + ")") : "")
+                                                color: (ConfigService.barMonitors !== "all" && bScrBtn.isAllowed) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: ConfigService.barMonitors !== "all" && bScrBtn.isAllowed
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MouseArea {
+                                                id: bScrMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.toggleBarMonitor(bScrBtn.modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        // Dock Configuration Section
+                        // 3. Dock Configuration
                         Surface {
                             Layout.fillWidth: true
                             implicitHeight: dockCol.implicitHeight + 20
@@ -236,7 +375,7 @@ Variants {
                                     Layout.fillWidth: true
 
                                     Text {
-                                        text: "Dock Configuration"
+                                        text: "Application Dock"
                                         color: Theme.foreground
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeMedium
@@ -246,7 +385,7 @@ Variants {
 
                                     IconButton {
                                         text: ConfigService.dockEnabled ? "Enabled" : "Disabled"
-                                        size: 30
+                                        size: 28
                                         backgroundColor: ConfigService.dockEnabled ? Theme.primary : Theme.surfaceVariant
                                         iconColor: ConfigService.dockEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
                                         onClicked: ConfigService.setDockEnabled(!ConfigService.dockEnabled)
@@ -254,7 +393,7 @@ Variants {
                                 }
 
                                 Text {
-                                    text: "Dock Position"
+                                    text: "Dock Edge Position"
                                     color: Theme.foregroundMuted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
@@ -299,10 +438,164 @@ Variants {
                                         }
                                     }
                                 }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Dock Icon Size (" + ConfigService.dockIconSize + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 28
+                                        maximumValue: 72
+                                        stepSize: 2
+                                        value: ConfigService.dockIconSize
+                                        onValueModified: val => ConfigService.setDockIconSize(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Auto-hide Dock on Inactivity"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockAutoHide ? "Auto-hide On" : "Auto-hide Off"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockAutoHide ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockAutoHide ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockAutoHide(!ConfigService.dockAutoHide)
+                                    }
+                                }
+
+                                // Dock Displays Selection UI
+                                Text {
+                                    text: "Dock Output Displays"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Rectangle {
+                                        id: dockAllBtn
+                                        Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: (ConfigService.dockMonitors === "all") ? Theme.primary : (dAllMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "All Displays"
+                                            color: (ConfigService.dockMonitors === "all") ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.bold: ConfigService.dockMonitors === "all"
+                                        }
+
+                                        MouseArea {
+                                            id: dAllMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: ConfigService.setDockMonitors("all")
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: Quickshell.screens
+
+                                        Rectangle {
+                                            id: dScrBtn
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 30
+                                            radius: Theme.radiusSmall
+                                            readonly property bool isAllowed: ConfigService.isScreenAllowed(modelData, ConfigService.dockMonitors)
+                                            color: (ConfigService.dockMonitors !== "all" && isAllowed) ? Theme.primary : (dScrMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: dScrBtn.modelData.name + (dScrBtn.modelData.model ? (" (" + dScrBtn.modelData.model + ")") : "")
+                                                color: (ConfigService.dockMonitors !== "all" && dScrBtn.isAllowed) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: ConfigService.dockMonitors !== "all" && dScrBtn.isAllowed
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MouseArea {
+                                                id: dScrMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.toggleDockMonitor(dScrBtn.modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        // Compositor Status Section
+                        // 4. Notifications Opt-in Section
+                        Surface {
+                            Layout.fillWidth: true
+                            implicitHeight: notifCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            ColumnLayout {
+                                id: notifCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Desktop Notifications"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.bold: true
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.notificationsEnabled ? "Server Active" : "Server Inactive"
+                                        size: 28
+                                        backgroundColor: ConfigService.notificationsEnabled ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.notificationsEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setNotificationsEnabled(!ConfigService.notificationsEnabled)
+                                    }
+                                }
+
+                                Text {
+                                    text: "Built-in Freedesktop notification server for standalone compositor sessions. When running in a standard KDE Plasma session, this remains disabled so KDE Plasma handles notifications without conflict."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+
+                        // 5. Compositor & Session Status
                         Surface {
                             Layout.fillWidth: true
                             implicitHeight: kwinCol.implicitHeight + 20
@@ -324,7 +617,7 @@ Variants {
                                 }
 
                                 Text {
-                                    text: "Compositor: KWin Wayland (KDE Plasma 6)"
+                                    text: "Compositor: KWin Wayland (KDE Plasma 6) | Running Windows: " + WindowService.windowCount
                                     color: Theme.foregroundMuted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall

@@ -5,5 +5,7 @@
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "power"],
   "opacity": 0.92,
+  "monitors": "all",
+  "blur": true,
   "notificationsEnabled": false
 }

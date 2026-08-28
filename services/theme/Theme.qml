@@ -29,38 +29,55 @@ Singleton {
 
     // Geometry / Radii
     property real radiusSmall: 6
-    property real radiusMedium: 12
-    property real radiusLarge: 18
+    property real radiusMedium: 10
+    property real radiusLarge: 16
     property real radiusFull: 9999
 
     // Spacing & Sizes
     property real barHeight: 44
     property real dockIconSize: 44
-    property real spacingSmall: 6
-    property real spacingMedium: 10
+    property real spacingTiny: 4
+    property real spacingSmall: 8
+    property real spacingMedium: 12
     property real spacingLarge: 16
+    property real spacingXLarge: 24
     property real paddingSmall: 6
     property real paddingMedium: 10
     property real paddingLarge: 16
 
-    // Transparency / Blur
+    // Icon Sizes
+    property real iconSmall: 16
+    property real iconMedium: 22
+    property real iconLarge: 32
+    property real iconXLarge: 48
+
+    // Transparency, Shadows & Blur
     property real barOpacity: 0.88
     property real dockOpacity: 0.90
     property real popupOpacity: 0.95
+    property real borderOpacity: 0.15
+    property color shadowColor: "#000000"
+    property real shadowOpacity: 0.35
     property bool blurEnabled: true
 
     // Typography
     property string fontFamily: "Noto Sans, sans-serif"
     property string fontFamilyMono: "Hack, monospace"
+    property int fontSizeCaption: 11
     property int fontSizeSmall: 11
+    property int fontSizeBody: 13
     property int fontSizeMedium: 13
+    property int fontSizeSubheading: 15
     property int fontSizeLarge: 16
-    property int fontSizeHeading: 20
+    property int fontSizeHeading: 18
+    property int fontSizeTitle: 22
 
     // Animation Timers & Curves
     property int animDurationFast: 150
     property int animDurationNormal: 250
     property int animDurationSlow: 400
+    property int animEasing: Easing.OutCubic
+    property int animEasingBack: Easing.OutBack
 
     // Utility functions for color adjustments
     function alpha(c, a) {

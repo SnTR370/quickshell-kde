@@ -49,6 +49,15 @@ All core services export reactive QML properties and signals. UI components decl
   * Handles dynamic monitor output detection via `Quickshell.screens` and `org.kde.KWin.activeOutputName`.
   * Exposes desktop switching (`setCurrentDesktop`, `nextDesktop`, `previousDesktop`), desktop creation, show-desktop toggling, and KDE settings launcher.
   * Employs an event debounce timer plus a lightweight 3000ms polling fallback to sync desktop changes made outside Quickshell (e.g. compositor shortcuts).
+* **`services/kwin/WindowService.qml`**:
+  * Queries running windows and window metadata via KWin's D-Bus runner interface (`org.kde.KWin /WindowsRunner`).
+  * Manages target window activation (`activateWindow`) and multi-window cycling (`cycleAppWindows`).
+  * Employs a 2500ms polling timer as an external lifecycle sync fallback under standard KWin Wayland sessions where `zwlr_foreign_toplevel_manager_v1` is restricted.
+* **`services/brightness/BrightnessService.qml`**:
+  * Event-driven display brightness management listening to `org.kde.ScreenBrightness` D-Bus signals (`BrightnessChanged`).
+  * Dynamically discovers connected display paths via `DisplaysDBusNames` and reads hardware `MaxBrightness` and `Brightness`.
+  * Adjusts brightness smoothly via `AdjustBrightnessRatio` with non-root sysfs `/sys/class/backlight/*` fallback.
+  * Dispatches `osdPulse()` signal on brightness changes to trigger on-screen display overlay.
 * **`services/audio/AudioService.qml`**:
   * Interacts with `Quickshell.Services.Pipewire` for default sink/source volume, mute state, and description.
   * Dispatches `osdPulse()` signal on volume changes to trigger the on-screen display overlay.
@@ -70,10 +79,10 @@ All core services export reactive QML properties and signals. UI components decl
 * **`services/battery/PowerService.qml`**:
   * Tracks battery charge level and AC power status via `Quickshell.Services.UPower` with sysfs fallback.
 * **`services/theme/Theme.qml` & `ThemeService.qml`**:
-  * Reactive color palette, geometry tokens, and font specifications.
+  * Comprehensive design token system: spacing scale, radius scale, icon sizes, typography, and animation curves.
   * Real-time loading of theme presets (`breeze-dark`, `catppuccin-mocha`, `nord`, `tokyo-night`).
 * **`services/config/ConfigService.qml`**:
-  * Persistent JSON settings store for bar position, dock configuration, and UI toggles.
+  * Persistent JSON settings store for bar position, height, opacity, output filtering, dock autohide, and theme settings.
   * Loads default schemas from `config/` via `JsonStore.fallbackPath` without hardcoding user/app IDs in QML.
 
 ### `components/`
@@ -86,13 +95,13 @@ All core services export reactive QML properties and signals. UI components decl
 * `Badge.qml`: Pill count badge.
 
 ### `modules/`
-* `modules/bar/`: Multi-screen top/side bar with dynamic slot rendering for Workspaces, Launcher button, Clock, Media, Tray, Network, Battery, and Audio.
-* `modules/dock/`: Magnifying dock adapting to top/bottom/left/right screen positions with pinned applications and running indicators.
+* `modules/bar/`: Multi-screen top/side bar with dynamic slot rendering, per-monitor output selection, and hardware blur.
+* `modules/dock/`: Magnifying dock with real autohide, pointer edge triggers, running app indicators, unpinned running tasks, and right-click context menu.
 * `modules/launcher/`: Spotlight application dashboard with category filtering, search input, and power management actions.
 * `modules/notifications/`: Floating toast popup notifications.
-* `modules/osd/`: HUD overlay for volume and brightness adjustments.
+* `modules/osd/`: HUD overlay for PipeWire volume and KDE display brightness adjustments.
 * `modules/media/`: Extended popup player with album art and track details.
-* `modules/settings/`: In-shell settings configuration window.
+* `modules/settings/`: Comprehensive settings configuration window.
 
 ---
 
@@ -123,18 +132,18 @@ qmllint shell.qml components/*.qml modules/**/*.qml services/**/*.qml
 
 ---
 
-## 4. Current Limitations & Milestone 2 Roadmap
+## 4. Milestone 2 Implementation & Milestone 3 Roadmap
 
-### Current Limitations in Milestone 1
-* **Window Taskbar / Foreign Toplevel in KWin**: Milestone 1 exposes pinned apps and basic window controls; full dynamic active window tracking and grouping under KWin Wayland will be expanded via enhanced foreign-toplevel tracking in Milestone 2.
-* **Dock Autohide**: True autohide with pointer edge triggers, animations, and layer-shell barrier geometry is planned for Milestone 2.
-* **Hardware Brightness Control**: Brightness control currently maps to OSD display hooks; direct DDC/sysfs backends will be added in Milestone 2.
-* **KWin Blur Protocol**: KWin Wayland layer-shell background blur uses layer-shell backdrop heuristics. Full native shader blur integration is planned for Milestone 2.
+### Milestone 2 Achievements
+* **KWin Window & Task Management**: Reactive window tracking, active window highlighting, and task activation via `WindowService.qml`.
+* **Complete Dock Experience**: Running app indicator pills, active focus highlight, unpinned running apps display, middle-click launch, right-click context menu, and true autohide with pointer edge triggers.
+* **Display Brightness & OSD**: D-Bus brightness service integrated with dynamic on-screen HUD overlay.
+* **Per-Monitor Output Selection**: Configurable per-module display filters (`all`, `primary`, or output names).
+* **Hardware Blur Integration**: Native KWin Wayland blur protocol integration via `ext_background_effect_manager_v1` / `BackgroundEffect.blurRegion`.
+* **Design System & Settings UX**: Centralized design tokens and structured in-shell settings dashboard.
 
-### Milestone 2 Objectives
-1. Add full KWin Window Taskbar module (live tasklist with minimized/active states).
-2. Implement true Dock Autohide with edge gesture detection.
-3. Implement Brightness control service (`ddcutil` / `brightnessctl` integration).
-4. Expand Settings UI with layout presets (KDE Traditional, macOS Floating, Minimalist Top).
-5. Add customizable color palette creator / Material You wallpaper color extraction.
-6. Create comprehensive automated test suite and continuous integration workflow.
+### Milestone 3 Objectives
+1. Layout presets (macOS floating dock, Windows/KDE classic taskbar, Minimalist top panel).
+2. Wallpaper color extraction (Material You / pywal color palette generation).
+3. Window preview tooltips on dock hover.
+4. Comprehensive automated test suite and CI workflow.

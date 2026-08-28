@@ -43,6 +43,7 @@ Variants {
 
         screen: modelData
         color: "transparent"
+        visible: ConfigService.isScreenAllowed(modelData, ConfigService.barMonitors)
 
         readonly property bool isVertical: ConfigService.barPosition === "left" || ConfigService.barPosition === "right"
 
@@ -58,6 +59,10 @@ Variants {
         exclusiveZone: ConfigService.barHeight
 
         WlrLayershell.layer: WlrLayer.Top
+
+        BackgroundEffect.blurRegion: Region {
+            item: ConfigService.blurEnabled ? barSurface : null
+        }
 
         Surface {
             id: barSurface

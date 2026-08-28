@@ -8,3 +8,5 @@ singleton PowerService 1.0 battery/PowerService.qml
 singleton ApplicationService 1.0 applications/ApplicationService.qml
 singleton NotificationService 1.0 notifications/NotificationService.qml
 singleton ConfigService 1.0 config/ConfigService.qml
+singleton WindowService 1.0 kwin/WindowService.qml
+singleton BrightnessService 1.0 brightness/BrightnessService.qml

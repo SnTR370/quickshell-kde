@@ -44,6 +44,19 @@ Singleton {
         activeOutputProc.running = true;
     }
 
+    function isTargetOverlayScreen(screenObj) {
+        if (!screenObj) return false;
+        if (root.activeOutputName && root.activeOutputName.length > 0) {
+            return screenObj.name === root.activeOutputName;
+        }
+        // Fallback: only target the first screen if activeOutputName is unknown
+        const s = Quickshell.screens;
+        if (s && s.length > 0) {
+            return screenObj === s[0];
+        }
+        return true;
+    }
+
     Process {
         id: activeOutputProc
         command: ["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.activeOutputName"]

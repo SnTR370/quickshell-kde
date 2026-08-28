@@ -15,7 +15,7 @@ Variants {
 
         screen: modelData
         color: "transparent"
-        visible: osdTimer.running
+        visible: osdTimer.running && KWinService.isTargetOverlayScreen(modelData)
 
         anchors {
             bottom: true
@@ -31,9 +31,22 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Overlay
 
+        property string osdType: "volume"
+
         VolumeOSD {
             anchors.centerIn: parent
-            opacity: osdWindow.visible ? 1.0 : 0.0
+            visible: osdWindow.osdType === "volume"
+            opacity: osdWindow.visible && osdWindow.osdType === "volume" ? 1.0 : 0.0
+            scale: osdWindow.visible ? 1.0 : 0.9
+
+            Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
+            Behavior on scale { NumberAnimation { duration: Theme.animDurationFast; easing.type: Easing.OutBack } }
+        }
+
+        BrightnessOSD {
+            anchors.centerIn: parent
+            visible: osdWindow.osdType === "brightness"
+            opacity: osdWindow.visible && osdWindow.osdType === "brightness" ? 1.0 : 0.0
             scale: osdWindow.visible ? 1.0 : 0.9
 
             Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
@@ -49,6 +62,15 @@ Variants {
         Connections {
             target: AudioService
             function onOsdPulse() {
+                osdWindow.osdType = "volume";
+                osdTimer.restart();
+            }
+        }
+
+        Connections {
+            target: BrightnessService
+            function onOsdPulse() {
+                osdWindow.osdType = "brightness";
                 osdTimer.restart();
             }
         }

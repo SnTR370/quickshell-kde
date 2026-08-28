@@ -17,7 +17,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.launcherVisible
+        visible: ConfigService.launcherVisible && KWinService.isTargetOverlayScreen(modelData)
         color: "transparent"
 
         anchors {
@@ -29,7 +29,11 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (visible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+        BackgroundEffect.blurRegion: Region {
+            item: ConfigService.blurEnabled ? mainContainer : null
+        }
 
         property string selectedCategory: "all"
         property var searchResults: ApplicationService.search(searchInput.text, selectedCategory)

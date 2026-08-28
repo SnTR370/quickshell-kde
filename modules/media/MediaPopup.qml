@@ -15,7 +15,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.mediaPopupVisible && MprisService.hasPlayers
+        visible: ConfigService.mediaPopupVisible && MprisService.hasPlayers && KWinService.isTargetOverlayScreen(modelData)
         color: "transparent"
 
         anchors {
@@ -34,7 +34,12 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Overlay
 
+        BackgroundEffect.blurRegion: Region {
+            item: ConfigService.blurEnabled ? mediaSurface : null
+        }
+
         Surface {
+            id: mediaSurface
             anchors.fill: parent
             radius: Theme.radiusLarge
             color: Theme.alpha(Theme.background, Theme.popupOpacity)

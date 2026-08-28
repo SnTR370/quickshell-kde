@@ -17,6 +17,8 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "power"],
   "opacity": 0.92,
+  "monitors": "all",
+  "blur": true,
   "notificationsEnabled": false
 }
 ```
@@ -27,9 +29,9 @@ If user configuration files do not exist, the shell automatically uses defaults 
 * `center`: List of module identifiers to render in the center
 * `right`: List of module identifiers to render on the end side
 * `opacity`: Background opacity value between `0.0` and `1.0`
+* `monitors`: `"all"`, `"primary"`, or array of display names (e.g. `["eDP-1"]`)
+* `blur`: `true` or `false` (enables KWin hardware background blur via `ext_background_effect_manager_v1`)
 * `notificationsEnabled`: `false` (default; enables built-in notification server for standalone compositor sessions)
-
-*Note: Per-monitor output filtering and KWin background blur integration are planned for Milestone 2.*
 
 ---
 
@@ -40,6 +42,10 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "enabled": true,
   "position": "bottom",
   "iconSize": 44,
+  "autoHide": false,
+  "hideDelay": 350,
+  "revealDelay": 120,
+  "monitors": "all",
   "pinned": [
     "org.kde.dolphin",
     "org.kde.konsole",
@@ -50,7 +56,14 @@ If user configuration files do not exist, the shell automatically uses defaults 
 }
 ```
 
-*Note: Dock autohide is planned for Milestone 2.*
+* `enabled`: `true` or `false`
+* `position`: `"bottom"`, `"top"`, `"left"`, or `"right"`
+* `iconSize`: Pixel size of dock icons (36, 44, 52, 64)
+* `autoHide`: `true` or `false` (smooth pointer edge reveal and slide-out)
+* `hideDelay`: Inactivity delay in milliseconds before sliding out (default: `350`)
+* `revealDelay`: Edge hotspot hover delay in milliseconds before sliding in (default: `120`)
+* `monitors`: `"all"`, `"primary"`, or array of display names
+* `pinned`: List of desktop application IDs displayed in the dock
 
 ---
 
