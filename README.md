@@ -24,7 +24,7 @@ Designed for Linux desktop enthusiasts who want a fluid, highly customizable, Wa
   * **Audio Mixer & OSD**: Native PipeWire audio volume slider, mute toggling, and animated volume overlay HUD.
   * **MPRIS Media Player**: Live playback status, album artwork, track information, and media controls for Spotify, browsers, VLC, etc.
   * **System Tray**: Freedesktop StatusNotifierItem integration with interactive DBus menus.
-  * **Desktop Notifications**: Freedesktop notification server with floating toast popups (supports standalone KWin sessions and coexists gracefully when Plasma notifications are active).
+  * **Desktop Notifications (Opt-in)**: Built-in Freedesktop notification server and toast popups for standalone compositor sessions (disabled by default to yield cleanly to KDE Plasma's notification daemon).
   * **Live Theming Engine**: Switch between built-in themes (*Breeze Dark*, *Catppuccin Mocha*, *Nord*, *Tokyo Night*) with real-time UI updates.
   * **Settings Dashboard**: Graphical UI for live configuration of bar positions, themes, dock settings, and compositor integration.
 

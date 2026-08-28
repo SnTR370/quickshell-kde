@@ -60,12 +60,13 @@ All core services export reactive QML properties and signals. UI components decl
   * Manages indexed applications parsed from XDG desktop directories by `scan_apps.py`.
   * Offers instant in-memory search and category filtering.
   * Launches applications safely via `gio launch` / `gtk-launch` or tokenized argument execution without invoking `sh -c`.
-  * Uses `ConfigService` as the single source of truth for dock pinned applications.
+  * Uses `ConfigService` as the single source of truth for dock pinned applications (loaded dynamically from configuration defaults).
 * **`services/notifications/NotificationService.qml`**:
-  * Implements `Quickshell.Services.Notifications.NotificationServer`.
-  * Maintains notification history and tracks active toast cards (when running in standalone session mode; yields cleanly to Plasma notification daemon when active).
+  * Implements `Quickshell.Services.Notifications.NotificationServer` via conditional dynamic `Loader`.
+  * Disabled by default (`notificationsEnabled: false`) so it does not attempt to register `org.freedesktop.Notifications` while KDE Plasma's notification daemon is active.
+  * Activates cleanly when enabled for standalone KWin compositor sessions.
 * **`services/network/NetworkService.qml`**:
-  * Event-driven network monitoring via native `Quickshell.Networking` (Ethernet / Wi-Fi / Disconnected), SSID, and signal strength.
+  * 100% declarative and event-driven network state tracking via native `Quickshell.Networking` (Ethernet / Wi-Fi / Disconnected), active device name, hardware MAC address, Wi-Fi SSID, and signal strength (0–100%) with zero polling timers.
 * **`services/battery/PowerService.qml`**:
   * Tracks battery charge level and AC power status via `Quickshell.Services.UPower` with sysfs fallback.
 * **`services/theme/Theme.qml` & `ThemeService.qml`**:
@@ -73,6 +74,7 @@ All core services export reactive QML properties and signals. UI components decl
   * Real-time loading of theme presets (`breeze-dark`, `catppuccin-mocha`, `nord`, `tokyo-night`).
 * **`services/config/ConfigService.qml`**:
   * Persistent JSON settings store for bar position, dock configuration, and UI toggles.
+  * Loads default schemas from `config/` via `JsonStore.fallbackPath` without hardcoding user/app IDs in QML.
 
 ### `components/`
 * `SvgIcon.qml`: Universal icon delegate supporting freedesktop system theme icons and SVG files.
@@ -125,12 +127,14 @@ qmllint shell.qml components/*.qml modules/**/*.qml services/**/*.qml
 
 ### Current Limitations in Milestone 1
 * **Window Taskbar / Foreign Toplevel in KWin**: Milestone 1 exposes pinned apps and basic window controls; full dynamic active window tracking and grouping under KWin Wayland will be expanded via enhanced foreign-toplevel tracking in Milestone 2.
+* **Dock Autohide**: True autohide with pointer edge triggers, animations, and layer-shell barrier geometry is planned for Milestone 2.
 * **Hardware Brightness Control**: Brightness control currently maps to OSD display hooks; direct DDC/sysfs backends will be added in Milestone 2.
 * **KWin Blur Protocol**: KWin Wayland layer-shell background blur uses layer-shell backdrop heuristics. Full native shader blur integration is planned for Milestone 2.
 
 ### Milestone 2 Objectives
 1. Add full KWin Window Taskbar module (live tasklist with minimized/active states).
-2. Implement Brightness control service (`ddcutil` / `brightnessctl` integration).
-3. Expand Settings UI with layout presets (KDE Traditional, macOS Floating, Minimalist Top).
-4. Add customizable color palette creator / Material You wallpaper color extraction.
-5. Create comprehensive automated test suite and continuous integration workflow.
+2. Implement true Dock Autohide with edge gesture detection.
+3. Implement Brightness control service (`ddcutil` / `brightnessctl` integration).
+4. Expand Settings UI with layout presets (KDE Traditional, macOS Floating, Minimalist Top).
+5. Add customizable color palette creator / Material You wallpaper color extraction.
+6. Create comprehensive automated test suite and continuous integration workflow.

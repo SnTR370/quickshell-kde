@@ -22,7 +22,7 @@
 * **AppGridItem.qml**: Application card with icon, title, description tooltip, and launch action.
 
 ## 4. Notifications (`modules/notifications/`)
-* **ToastHost.qml**: Floating notification toast host (active when running in standalone session mode; coexists gracefully when Plasma notification daemon is present).
+* **ToastHost.qml**: Floating notification toast host (active when notification server is enabled via configuration for standalone session mode).
 * **NotificationCard.qml**: Individual toast card with app icon, title, body, and action buttons.
 
 ## 5. On-Screen Display (`modules/osd/`)

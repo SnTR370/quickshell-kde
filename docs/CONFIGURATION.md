@@ -18,13 +18,14 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "power"],
   "opacity": 0.92,
-  "blur": true
+  "notificationsEnabled": false
 }
 ```
 
 * `position`: `"top"`, `"bottom"`, `"left"`, or `"right"`
 * `height`: Pixel height (or width in vertical mode)
 * `monitors`: `"all"` or specific monitor list
+* `notificationsEnabled`: `false` (default; enables built-in notification server for standalone compositor sessions)
 
 ---
 
@@ -35,7 +36,6 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "enabled": true,
   "position": "bottom",
   "iconSize": 44,
-  "autoHide": false,
   "pinned": [
     "org.kde.dolphin",
     "org.kde.konsole",
@@ -45,6 +45,8 @@ If user configuration files do not exist, the shell automatically uses defaults 
   ]
 }
 ```
+
+*Note: Dock autohide is planned for Milestone 2.*
 
 ---
 
