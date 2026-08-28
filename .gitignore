@@ -1,0 +1,12 @@
+# User configs & local state
+*.log
+*.tmp
+.cache/
+.DS_Store
+
+# QuickShell runtime logs
+*.qslog
+
+# Python cache
+__pycache__/
+*.py[cod]

@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "position": "bottom",
+  "iconSize": 44,
+  "pinned": [
+    "org.kde.dolphin",
+    "org.kde.konsole",
+    "firefox",
+    "code",
+    "systemsettings"
+  ]
+}

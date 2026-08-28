@@ -1,0 +1,10 @@
+Bar 1.0 Bar.qml
+LauncherButton 1.0 LauncherButton.qml
+WorkspacesModule 1.0 WorkspacesModule.qml
+ClockModule 1.0 ClockModule.qml
+AudioModule 1.0 AudioModule.qml
+MediaModule 1.0 MediaModule.qml
+BatteryModule 1.0 BatteryModule.qml
+NetworkModule 1.0 NetworkModule.qml
+TrayModule 1.0 TrayModule.qml
+PowerButton 1.0 PowerButton.qml
