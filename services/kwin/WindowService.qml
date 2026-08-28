@@ -136,6 +136,8 @@ Singleton {
         return result;
     }
 
+    property var appCycleIndices: ({})
+
     function activateWindow(windowId) {
         if (!windowId) return;
         Log.info("WindowService", "Activating window: " + windowId);
@@ -164,9 +166,15 @@ Singleton {
             return;
         }
 
-        // Cycle through windows
-        const nextIndex = 0;
-        activateWindow(wins[nextIndex].id);
+        const normAppId = appId.toLowerCase().replace(/\.desktop$/, "");
+        const curIdx = (root.appCycleIndices[normAppId] !== undefined) ? root.appCycleIndices[normAppId] : 0;
+        const validIdx = curIdx % wins.length;
+        const targetWin = wins[validIdx];
+
+        // Advance to next window index for next click
+        root.appCycleIndices[normAppId] = (validIdx + 1) % wins.length;
+
+        activateWindow(targetWin.id);
     }
 
     Component.onCompleted: {
