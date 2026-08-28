@@ -1,0 +1,7 @@
+SvgIcon 1.0 SvgIcon.qml
+IconButton 1.0 IconButton.qml
+Surface 1.0 Surface.qml
+Card 1.0 Card.qml
+Slider 1.0 Slider.qml
+Tooltip 1.0 Tooltip.qml
+Badge 1.0 Badge.qml
