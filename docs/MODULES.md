@@ -14,8 +14,8 @@
 
 ## 2. Dock (`modules/dock/`)
 * **Dock.qml**: Customizable dock adapting to bottom, top, left, or right screen edges with real autohide, pointer edge reveal, unpinned running apps display, and output selection.
-* **DockItem.qml**: Magnifying application icon with active running/focus indicator, middle-click new instance launch, and right-click context menu.
-* **DockMenu.qml**: Floating right-click context menu with Pin/Unpin, New Window, and Close All Windows actions.
+* **DockItem.qml**: Magnifying application icon with running indicator dot, multi-window cycling, middle-click new instance launch, and right-click context menu.
+* **DockMenu.qml**: Floating right-click context menu with open window list, Pin/Unpin, and New Window actions.
 * **DockSeparator.qml**: Horizontal / vertical layout divider.
 
 ## 3. Application Launcher (`modules/launcher/`)
@@ -35,4 +35,4 @@
 * **MediaPopup.qml**: Floating music card with album art, title, artist, and full playback controls.
 
 ## 7. Settings (`modules/settings/`)
-* **SettingsWindow.qml**: Unified configuration interface for theme presets, KWin background blur, bar edge position, dock autohide, output selection, and session controls.
+* **SettingsWindow.qml**: Unified configuration interface for theme presets, KWin background blur, bar height/opacity sliders, bar position, dock icon size slider, dock autohide, output selection, and session controls.

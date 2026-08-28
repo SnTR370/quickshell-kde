@@ -15,24 +15,24 @@ Designed for Linux desktop enthusiasts who want a fluid, highly customizable, Wa
 * **Pure KDE / KWin Wayland Architecture**: All compositor-specific functionality is isolated behind clean `KWinService` and `WindowService` adapters. No Hyprland, Niri, or Sway dependencies.
 * **Modular Layered Design**: Separated cleanly into `components/`, `modules/`, `services/`, and `themes/` with reactive QML singleton exports.
 * **Zero Root / Unsafe Scripts**: Strictly adheres to desktop security principles. No `/etc` modification, no `fstab` editing, no root privileges required.
-* **Multi-Monitor First**: Dynamically discovers and adapts to multi-monitor configurations with per-module display filtering (`all`, `primary`, or specific outputs).
+* **Multi-Monitor First**: Dynamically discovers and adapts to multi-monitor configurations with per-module display filtering (all displays or specific output selection).
 * **Integrated Modules**:
   * **Top / Side Bar**: Configurable layout (left/center/right slots), supports top, bottom, left, and right screen edges with hardware background blur.
   * **Interactive Virtual Desktops**: Live desktop status, seamless switching, and scroll-to-cycle powered by KWin DBus.
   * **Application Launcher**: Fullscreen spotlight-style overlay with fast in-memory search, category filtering, and session control buttons.
-  * **Dynamic Dock**: Real autohide with pointer edge triggers, running application indicators, focus highlighting, unpinned running apps, middle-click launch, and right-click context menus.
+  * **Dynamic Dock**: Real autohide with pointer edge triggers, running application indicators, unpinned running apps, middle-click launch, and right-click context menus with open window list.
   * **Audio Mixer & Display Brightness OSD**: Native PipeWire volume slider, mute toggling, and KDE ScreenBrightness HUD overlay.
   * **MPRIS Media Player**: Live playback status, album artwork, track information, and media controls for Spotify, browsers, VLC, etc.
   * **System Tray**: Freedesktop StatusNotifierItem integration with interactive DBus menus.
   * **Desktop Notifications (Opt-in)**: Built-in Freedesktop notification server and toast popups for standalone compositor sessions (disabled by default to yield cleanly to KDE Plasma's notification daemon).
   * **Live Theming Engine**: Switch between built-in themes (*Breeze Dark*, *Catppuccin Mocha*, *Nord*, *Tokyo Night*) with real-time UI updates.
-  * **Settings Dashboard**: Graphical UI for live configuration of themes, bar positions, dock autohide, display outputs, and compositor integration.
+  * **Settings Dashboard**: Graphical UI for live configuration of themes, bar positions, height/opacity sliders, dock icon size, dock autohide, display outputs, and compositor integration.
 
 ---
 
 ## Screenshots
 
-> *(Screenshots placeholder — visual preview will be added in milestone 2)*
+> *(Visual previews and screenshots pending)*
 
 ---
 
