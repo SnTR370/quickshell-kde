@@ -23,6 +23,7 @@ Singleton {
     JsonStore {
         id: themeConfigStore
         path: root.themeConfigFile
+        fallbackPath: Qt.resolvedUrl("../../config/theme_config.json").toString().replace(/^file:\/\//, "")
         defaultValue: ({ "activeTheme": "breeze-dark" })
         onLoadedValue: (parsed, _) => {
             if (parsed && parsed.activeTheme) {

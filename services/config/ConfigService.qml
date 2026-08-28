@@ -53,11 +53,11 @@ Singleton {
         defaultValue: ({
             "position": "top",
             "height": 44,
-            "monitors": "all",
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
             "right": ["media", "tray", "network", "battery", "audio", "power"],
-            "opacity": 0.92
+            "opacity": 0.92,
+            "notificationsEnabled": false
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.position) root.barPosition = parsed.position;

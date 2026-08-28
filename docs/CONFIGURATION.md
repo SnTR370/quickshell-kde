@@ -13,7 +13,6 @@ If user configuration files do not exist, the shell automatically uses defaults 
 {
   "position": "top",
   "height": 44,
-  "monitors": "all",
   "left": ["launcher", "workspaces"],
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "power"],
@@ -22,10 +21,15 @@ If user configuration files do not exist, the shell automatically uses defaults 
 }
 ```
 
-* `position`: `"top"`, `"bottom"`, `"left"`, or `"right"`
-* `height`: Pixel height (or width in vertical mode)
-* `monitors`: `"all"` or specific monitor list
+* `position`: `"top"`, `"bottom"`, `"left"`, or `"right"` (screen edge placement)
+* `height`: Thickness in pixels (panel height in horizontal mode, panel width in vertical mode)
+* `left`: List of module identifiers to render on the start side (`launcher`, `workspaces`, `clock`, `media`, `tray`, `network`, `battery`, `audio`, `power`)
+* `center`: List of module identifiers to render in the center
+* `right`: List of module identifiers to render on the end side
+* `opacity`: Background opacity value between `0.0` and `1.0`
 * `notificationsEnabled`: `false` (default; enables built-in notification server for standalone compositor sessions)
+
+*Note: Per-monitor output filtering and KWin background blur integration are planned for Milestone 2.*
 
 ---
 

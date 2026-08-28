@@ -2,14 +2,11 @@
   "enabled": true,
   "position": "bottom",
   "iconSize": 44,
-  "monitors": "primary",
   "pinned": [
     "org.kde.dolphin",
     "org.kde.konsole",
     "firefox",
     "code",
     "systemsettings"
-  ],
-  "opacity": 0.92,
-  "blur": true
+  ]
 }

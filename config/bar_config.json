@@ -1,10 +1,9 @@
 {
   "position": "top",
   "height": 44,
-  "monitors": "all",
   "left": ["launcher", "workspaces"],
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "power"],
   "opacity": 0.92,
-  "blur": true
+  "notificationsEnabled": false
 }
