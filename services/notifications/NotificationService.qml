@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Notifications
+import "../config"
 import "../core/Log.js" as Log
 
 Singleton {
@@ -14,19 +15,25 @@ Singleton {
     signal toastAdded(var notification)
     signal toastRemoved(var id)
 
-    NotificationServer {
-        id: server
-        keepOnReload: true
-        bodySupported: true
-        bodyMarkupSupported: true
-        bodyHyperlinksSupported: true
-        bodyImagesSupported: true
-        actionsSupported: true
-        actionIconsSupported: true
-        imageSupported: true
+    Loader {
+        id: serverLoader
+        active: ConfigService.notificationsEnabled
+        sourceComponent: Component {
+            NotificationServer {
+                id: server
+                keepOnReload: true
+                bodySupported: true
+                bodyMarkupSupported: true
+                bodyHyperlinksSupported: true
+                bodyImagesSupported: true
+                actionsSupported: true
+                actionIconsSupported: true
+                imageSupported: true
 
-        onNotification: notification => {
-            root.handleNotification(notification);
+                onNotification: notification => {
+                    root.handleNotification(notification);
+                }
+            }
         }
     }
 
