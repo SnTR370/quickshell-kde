@@ -21,8 +21,8 @@ Variants {
 
         readonly property bool isVertical: ConfigService.dockPosition === "left" || ConfigService.dockPosition === "right"
         readonly property bool autoHide: ConfigService.dockAutoHide
-        property bool mouseInside: dockHoverArea.containsMouse || edgeTriggerMouse.containsMouse
-        readonly property bool isRevealed: !autoHide || mouseInside || hideTimer.running
+        property bool hoverRevealed: false
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverArea.containsMouse
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
@@ -51,13 +51,30 @@ Variants {
         WlrLayershell.layer: WlrLayer.Top
 
         BackgroundEffect.blurRegion: Region {
-            item: dockSurface
+            item: ConfigService.blurEnabled ? dockSurface : null
+        }
+
+        // Mask region for click-through when hidden
+        mask: Region {
+            item: dockWindow.isRevealed ? dockSurface : edgeTrigger
+        }
+
+        Timer {
+            id: revealTimer
+            interval: Math.max(10, ConfigService.dockRevealDelay)
+            repeat: false
+            onTriggered: {
+                dockWindow.hoverRevealed = true;
+            }
         }
 
         Timer {
             id: hideTimer
-            interval: 350
+            interval: Math.max(50, ConfigService.dockHideDelay)
             repeat: false
+            onTriggered: {
+                dockWindow.hoverRevealed = false;
+            }
         }
 
         // Screen Edge Hotspot Trigger for Autohide Reveal
@@ -77,7 +94,16 @@ Variants {
                 id: edgeTriggerMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                onEntered: hideTimer.restart()
+                onEntered: {
+                    hideTimer.stop();
+                    revealTimer.restart();
+                }
+                onExited: {
+                    revealTimer.stop();
+                    if (!dockHoverArea.containsMouse) {
+                        hideTimer.restart();
+                    }
+                }
             }
         }
 
@@ -110,6 +136,11 @@ Variants {
                 id: dockHoverArea
                 anchors.fill: parent
                 hoverEnabled: true
+                onEntered: {
+                    revealTimer.stop();
+                    hideTimer.stop();
+                    dockWindow.hoverRevealed = true;
+                }
                 onExited: {
                     if (dockWindow.autoHide) hideTimer.restart();
                 }

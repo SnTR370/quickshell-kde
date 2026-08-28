@@ -15,7 +15,7 @@ Variants {
 
         screen: modelData
         color: "transparent"
-        visible: osdTimer.running
+        visible: osdTimer.running && KWinService.isTargetOverlayScreen(modelData)
 
         anchors {
             bottom: true

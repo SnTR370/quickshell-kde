@@ -16,7 +16,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.settingsVisible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)
+        visible: ConfigService.settingsVisible && KWinService.isTargetOverlayScreen(modelData)
         color: "transparent"
 
         anchors {
@@ -28,10 +28,10 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: (visible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         BackgroundEffect.blurRegion: Region {
-            item: mainContainer
+            item: ConfigService.blurEnabled ? mainContainer : null
         }
 
         function closeSettings() {
@@ -47,7 +47,7 @@ Variants {
             id: mainContainer
             anchors.centerIn: parent
             width: Math.min(680, parent.width - 40)
-            height: Math.min(580, parent.height - 60)
+            height: Math.min(620, parent.height - 60)
             radius: Theme.radiusLarge
             color: Theme.alpha(Theme.background, Theme.popupOpacity)
             border.color: Theme.border
@@ -248,23 +248,72 @@ Variants {
                                     }
                                 }
 
+                                // Bar Displays Selection UI
+                                Text {
+                                    text: "Bar Output Displays"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    spacing: 6
 
-                                    Text {
-                                        text: "Output Displays"
-                                        color: Theme.foregroundMuted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeSmall
+                                    Rectangle {
+                                        id: barAllBtn
                                         Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: (ConfigService.barMonitors === "all") ? Theme.primary : (bAllMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "All Displays"
+                                            color: (ConfigService.barMonitors === "all") ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.bold: ConfigService.barMonitors === "all"
+                                        }
+
+                                        MouseArea {
+                                            id: bAllMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: ConfigService.setBarMonitors("all")
+                                        }
                                     }
 
-                                    IconButton {
-                                        text: ConfigService.barMonitors === "primary" ? "Primary Only" : "All Displays"
-                                        size: 28
-                                        backgroundColor: Theme.surfaceVariant
-                                        onClicked: {
-                                            ConfigService.setBarMonitors(ConfigService.barMonitors === "primary" ? "all" : "primary");
+                                    Repeater {
+                                        model: Quickshell.screens
+
+                                        Rectangle {
+                                            id: bScrBtn
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 30
+                                            radius: Theme.radiusSmall
+                                            readonly property bool isAllowed: ConfigService.isScreenAllowed(modelData, ConfigService.barMonitors)
+                                            color: (ConfigService.barMonitors !== "all" && isAllowed) ? Theme.primary : (bScrMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: bScrBtn.modelData.name + (bScrBtn.modelData.model ? (" (" + bScrBtn.modelData.model + ")") : "")
+                                                color: (ConfigService.barMonitors !== "all" && bScrBtn.isAllowed) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: ConfigService.barMonitors !== "all" && bScrBtn.isAllowed
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MouseArea {
+                                                id: bScrMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.toggleBarMonitor(bScrBtn.modelData.name)
+                                            }
                                         }
                                     }
                                 }
@@ -372,23 +421,72 @@ Variants {
                                     }
                                 }
 
+                                // Dock Displays Selection UI
+                                Text {
+                                    text: "Dock Output Displays"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    spacing: 6
 
-                                    Text {
-                                        text: "Dock Output Displays"
-                                        color: Theme.foregroundMuted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeSmall
+                                    Rectangle {
+                                        id: dockAllBtn
                                         Layout.fillWidth: true
+                                        implicitHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: (ConfigService.dockMonitors === "all") ? Theme.primary : (dAllMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "All Displays"
+                                            color: (ConfigService.dockMonitors === "all") ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.bold: ConfigService.dockMonitors === "all"
+                                        }
+
+                                        MouseArea {
+                                            id: dAllMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: ConfigService.setDockMonitors("all")
+                                        }
                                     }
 
-                                    IconButton {
-                                        text: ConfigService.dockMonitors === "primary" ? "Primary Only" : "All Displays"
-                                        size: 28
-                                        backgroundColor: Theme.surfaceVariant
-                                        onClicked: {
-                                            ConfigService.setDockMonitors(ConfigService.dockMonitors === "primary" ? "all" : "primary");
+                                    Repeater {
+                                        model: Quickshell.screens
+
+                                        Rectangle {
+                                            id: dScrBtn
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 30
+                                            radius: Theme.radiusSmall
+                                            readonly property bool isAllowed: ConfigService.isScreenAllowed(modelData, ConfigService.dockMonitors)
+                                            color: (ConfigService.dockMonitors !== "all" && isAllowed) ? Theme.primary : (dScrMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: dScrBtn.modelData.name + (dScrBtn.modelData.model ? (" (" + dScrBtn.modelData.model + ")") : "")
+                                                color: (ConfigService.dockMonitors !== "all" && dScrBtn.isAllowed) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: ConfigService.dockMonitors !== "all" && dScrBtn.isAllowed
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MouseArea {
+                                                id: dScrMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.toggleDockMonitor(dScrBtn.modelData.name)
+                                            }
                                         }
                                     }
                                 }
