@@ -3,6 +3,8 @@
   "position": "bottom",
   "iconSize": 44,
   "autoHide": false,
+  "hideDelay": 350,
+  "revealDelay": 120,
   "monitors": "all",
   "pinned": [
     "org.kde.dolphin",

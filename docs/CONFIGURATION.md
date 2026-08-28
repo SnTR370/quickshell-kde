@@ -43,6 +43,8 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "position": "bottom",
   "iconSize": 44,
   "autoHide": false,
+  "hideDelay": 350,
+  "revealDelay": 120,
   "monitors": "all",
   "pinned": [
     "org.kde.dolphin",
@@ -58,6 +60,8 @@ If user configuration files do not exist, the shell automatically uses defaults 
 * `position`: `"bottom"`, `"top"`, `"left"`, or `"right"`
 * `iconSize`: Pixel size of dock icons (36, 44, 52, 64)
 * `autoHide`: `true` or `false` (smooth pointer edge reveal and slide-out)
+* `hideDelay`: Inactivity delay in milliseconds before sliding out (default: `350`)
+* `revealDelay`: Edge hotspot hover delay in milliseconds before sliding in (default: `120`)
 * `monitors`: `"all"`, `"primary"`, or array of display names
 * `pinned`: List of desktop application IDs displayed in the dock
 

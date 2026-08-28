@@ -116,6 +116,8 @@ Singleton {
             "position": "bottom",
             "iconSize": 44,
             "autoHide": false,
+            "hideDelay": 350,
+            "revealDelay": 120,
             "monitors": "all",
             "pinned": []
         })
@@ -124,6 +126,8 @@ Singleton {
             if (parsed.position) root.dockPosition = parsed.position;
             if (parsed.iconSize !== undefined) root.dockIconSize = parsed.iconSize;
             if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
+            if (parsed.hideDelay !== undefined) root.dockHideDelay = Math.max(50, Math.min(2000, parsed.hideDelay));
+            if (parsed.revealDelay !== undefined) root.dockRevealDelay = Math.max(0, Math.min(1000, parsed.revealDelay));
             if (parsed.monitors !== undefined) root.dockMonitors = parsed.monitors;
             if (parsed.pinned) root.dockPinned = parsed.pinned;
         }
@@ -207,6 +211,8 @@ Singleton {
             "position": root.dockPosition,
             "iconSize": root.dockIconSize,
             "autoHide": root.dockAutoHide,
+            "hideDelay": root.dockHideDelay,
+            "revealDelay": root.dockRevealDelay,
             "monitors": root.dockMonitors,
             "pinned": root.dockPinned
         });
@@ -229,6 +235,16 @@ Singleton {
 
     function setDockAutoHide(autoHide) {
         root.dockAutoHide = autoHide;
+        saveDockConfig();
+    }
+
+    function setDockHideDelay(delay) {
+        root.dockHideDelay = Math.max(50, Math.min(2000, delay));
+        saveDockConfig();
+    }
+
+    function setDockRevealDelay(delay) {
+        root.dockRevealDelay = Math.max(0, Math.min(1000, delay));
         saveDockConfig();
     }
 
