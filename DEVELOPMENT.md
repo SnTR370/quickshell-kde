@@ -50,10 +50,13 @@ All core services export reactive QML properties and signals. UI components decl
   * Exposes desktop switching (`setCurrentDesktop`, `nextDesktop`, `previousDesktop`), desktop creation, show-desktop toggling, and KDE settings launcher.
   * Employs an event debounce timer plus a lightweight 3000ms polling fallback to sync desktop changes made outside Quickshell (e.g. compositor shortcuts).
 * **`services/kwin/WindowService.qml`**:
-  * Tracks running windows, active window focus, and application groupings via KWin DBus (`org.kde.KWin /WindowsRunner`) and `Quickshell.Wayland.ToplevelManager`.
-  * Exposes window activation (`activateWindow`, `activateApp`), closing (`closeWindow`), and running state queries (`isAppRunning`, `isAppActive`).
+  * Queries running windows and window metadata via KWin's D-Bus runner interface (`org.kde.KWin /WindowsRunner`).
+  * Manages target window activation (`activateWindow`) and multi-window cycling (`cycleAppWindows`).
+  * Employs a 2500ms polling timer as an external lifecycle sync fallback under standard KWin Wayland sessions where `zwlr_foreign_toplevel_manager_v1` is restricted.
 * **`services/brightness/BrightnessService.qml`**:
-  * Tracks display brightness level and adjust ratios via KDE `org.kde.ScreenBrightness` D-Bus service with sysfs fallback.
+  * Event-driven display brightness management listening to `org.kde.ScreenBrightness` D-Bus signals (`BrightnessChanged`).
+  * Dynamically discovers connected display paths via `DisplaysDBusNames` and reads hardware `MaxBrightness` and `Brightness`.
+  * Adjusts brightness smoothly via `AdjustBrightnessRatio` with non-root sysfs `/sys/class/backlight/*` fallback.
   * Dispatches `osdPulse()` signal on brightness changes to trigger on-screen display overlay.
 * **`services/audio/AudioService.qml`**:
   * Interacts with `Quickshell.Services.Pipewire` for default sink/source volume, mute state, and description.
