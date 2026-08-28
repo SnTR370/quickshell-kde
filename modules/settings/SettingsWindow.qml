@@ -248,6 +248,44 @@ Variants {
                                     }
                                 }
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Bar Height (" + ConfigService.barHeight + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 32
+                                        maximumValue: 72
+                                        stepSize: 2
+                                        value: ConfigService.barHeight
+                                        onValueModified: val => ConfigService.setBarHeight(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Bar Opacity (" + Math.round(ConfigService.barOpacity * 100) + "%)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 0.40
+                                        maximumValue: 1.00
+                                        stepSize: 0.02
+                                        value: ConfigService.barOpacity
+                                        onValueModified: val => ConfigService.setBarOpacity(parseFloat(val.toFixed(2)))
+                                    }
+                                }
+
                                 // Bar Displays Selection UI
                                 Text {
                                     text: "Bar Output Displays"
@@ -398,6 +436,25 @@ Variants {
                                                 onClicked: ConfigService.setDockPosition(dPosBtn.modelData.id)
                                             }
                                         }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Dock Icon Size (" + ConfigService.dockIconSize + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 28
+                                        maximumValue: 72
+                                        stepSize: 2
+                                        value: ConfigService.dockIconSize
+                                        onValueModified: val => ConfigService.setDockIconSize(Math.round(val))
                                     }
                                 }
 

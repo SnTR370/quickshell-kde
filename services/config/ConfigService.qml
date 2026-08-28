@@ -66,15 +66,13 @@ Singleton {
         if (!screenObj) return false;
         if (!filter || filter === "all") return true;
         if (Array.isArray(filter)) {
+            if (filter.length === 0) return true; // Safe fallback: empty list means all screens
             return filter.indexOf(screenObj.name) !== -1;
         }
         if (typeof filter === "string") {
             if (filter === screenObj.name) return true;
-            if (filter === "primary" || filter === "default") {
-                const s = Quickshell.screens;
-                const defName = KWinService.activeOutputName || (s && s[0] ? s[0].name : "");
-                return screenObj.name === defName;
-            }
+            // Legacy migration fallback for old configs containing "primary" or "default"
+            if (filter === "primary" || filter === "default") return true;
         }
         return false;
     }
@@ -96,12 +94,14 @@ Singleton {
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.position) root.barPosition = parsed.position;
-            if (parsed.height !== undefined) root.barHeight = parsed.height;
+            if (parsed.height !== undefined) root.barHeight = Math.max(24, Math.min(120, parsed.height));
             if (parsed.left) root.barLeft = parsed.left;
             if (parsed.center) root.barCenter = parsed.center;
             if (parsed.right) root.barRight = parsed.right;
-            if (parsed.opacity !== undefined) root.barOpacity = parsed.opacity;
-            if (parsed.monitors !== undefined) root.barMonitors = parsed.monitors;
+            if (parsed.opacity !== undefined) root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
+            if (parsed.monitors !== undefined) {
+                root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
+            }
             if (parsed.blur !== undefined) root.blurEnabled = parsed.blur;
             if (parsed.notificationsEnabled !== undefined) root.notificationsEnabled = parsed.notificationsEnabled;
         }
@@ -124,11 +124,13 @@ Singleton {
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
             if (parsed.position) root.dockPosition = parsed.position;
-            if (parsed.iconSize !== undefined) root.dockIconSize = parsed.iconSize;
+            if (parsed.iconSize !== undefined) root.dockIconSize = Math.max(20, Math.min(128, parsed.iconSize));
             if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
             if (parsed.hideDelay !== undefined) root.dockHideDelay = Math.max(50, Math.min(2000, parsed.hideDelay));
             if (parsed.revealDelay !== undefined) root.dockRevealDelay = Math.max(0, Math.min(1000, parsed.revealDelay));
-            if (parsed.monitors !== undefined) root.dockMonitors = parsed.monitors;
+            if (parsed.monitors !== undefined) {
+                root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
+            }
             if (parsed.pinned) root.dockPinned = parsed.pinned;
         }
     }
@@ -153,17 +155,21 @@ Singleton {
     }
 
     function setBarHeight(h) {
-        root.barHeight = h;
+        root.barHeight = Math.max(24, Math.min(120, h));
         saveBarConfig();
     }
 
     function setBarOpacity(op) {
-        root.barOpacity = op;
+        root.barOpacity = Math.max(0.1, Math.min(1.0, op));
         saveBarConfig();
     }
 
     function setBarMonitors(m) {
-        root.barMonitors = m;
+        if (!m || m === "primary" || m === "default" || (Array.isArray(m) && m.length === 0)) {
+            root.barMonitors = "all";
+        } else {
+            root.barMonitors = m;
+        }
         saveBarConfig();
     }
 
@@ -183,6 +189,11 @@ Singleton {
 
         const idx = currentList.indexOf(screenName);
         if (idx !== -1) {
+            // Prevent removing the last selected monitor (lockout prevention)
+            if (currentList.length <= 1) {
+                root.setBarMonitors("all");
+                return;
+            }
             currentList.splice(idx, 1);
         } else {
             currentList.push(screenName);
@@ -229,7 +240,7 @@ Singleton {
     }
 
     function setDockIconSize(size) {
-        root.dockIconSize = size;
+        root.dockIconSize = Math.max(20, Math.min(128, size));
         saveDockConfig();
     }
 
@@ -249,7 +260,11 @@ Singleton {
     }
 
     function setDockMonitors(m) {
-        root.dockMonitors = m;
+        if (!m || m === "primary" || m === "default" || (Array.isArray(m) && m.length === 0)) {
+            root.dockMonitors = "all";
+        } else {
+            root.dockMonitors = m;
+        }
         saveDockConfig();
     }
 
@@ -269,6 +284,11 @@ Singleton {
 
         const idx = currentList.indexOf(screenName);
         if (idx !== -1) {
+            // Prevent removing the last selected monitor (lockout prevention)
+            if (currentList.length <= 1) {
+                root.setDockMonitors("all");
+                return;
+            }
             currentList.splice(idx, 1);
         } else {
             currentList.push(screenName);
