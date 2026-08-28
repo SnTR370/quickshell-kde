@@ -12,6 +12,7 @@ Singleton {
 
     property var windows: []
     property var activeWindow: null
+    property string activeAppId: activeWindow ? (activeWindow.appId || "") : ""
     property var runningAppIds: []
     property int windowCount: 0
 
@@ -36,7 +37,7 @@ Singleton {
         }
     }
 
-    // ToplevelManager connection if Wayland toplevels protocol is active
+    // ToplevelManager connection if Wayland toplevels protocol is exposed by compositor
     Connections {
         target: ToplevelManager
         function onActiveToplevelChanged() {
@@ -70,7 +71,7 @@ Singleton {
         }
     }
 
-    // Periodic sync timer for external window changes
+    // Periodic sync timer for external window changes (KWin fallback)
     Timer {
         id: syncTimer
         interval: 2500
@@ -178,19 +179,38 @@ Singleton {
 
     function activateApp(appId) {
         const wins = getWindowsForApp(appId);
-        if (wins.length > 0) {
+        if (wins.length === 1) {
             activateWindow(wins[0].id);
+        } else if (wins.length > 1) {
+            cycleAppWindows(appId);
         } else {
             ApplicationService.launchAppId(appId);
         }
     }
 
-    function closeWindow(windowId) {
-        if (!windowId) return;
-        Log.info("WindowService", "Closing window: " + windowId);
-        activateWindow(windowId);
-        KWinService.triggerGlobalShortcut("Window Close");
-        refreshWindows();
+    function cycleAppWindows(appId) {
+        const wins = getWindowsForApp(appId);
+        if (wins.length === 0) {
+            ApplicationService.launchAppId(appId);
+            return;
+        }
+        if (wins.length === 1) {
+            activateWindow(wins[0].id);
+            return;
+        }
+
+        // Find current index
+        let currentIndex = -1;
+        if (root.activeWindow) {
+            for (let i = 0; i < wins.length; i++) {
+                if (wins[i].id === root.activeWindow.id) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+        }
+        const nextIndex = (currentIndex + 1) % wins.length;
+        activateWindow(wins[nextIndex].id);
     }
 
     Component.onCompleted: {

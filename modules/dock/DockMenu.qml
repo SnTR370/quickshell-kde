@@ -10,10 +10,11 @@ Surface {
     property var app: null
     property bool isRunning: false
     property bool isPinned: false
+    readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
 
     signal actionTriggered()
 
-    implicitWidth: 180
+    implicitWidth: Math.max(200, Math.min(320, menuLayout.implicitWidth + 24))
     implicitHeight: menuLayout.implicitHeight + 16
     radius: Theme.radiusMedium
     color: Theme.alpha(Theme.card, 0.98)
@@ -57,10 +58,65 @@ Surface {
             opacity: 0.5
         }
 
+        // Open Windows List (if multi-window or running)
+        Repeater {
+            model: root.appWindows
+
+            Rectangle {
+                id: winItem
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: 28
+                radius: Theme.radiusSmall
+                color: winMouse.containsMouse ? Theme.hover : "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    spacing: 8
+
+                    SvgIcon {
+                        icon: "window-duplicate"
+                        size: 14
+                        color: Theme.accent
+                    }
+
+                    Text {
+                        text: winItem.modelData.title || (root.app ? root.app.name : root.appId)
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                MouseArea {
+                    id: winMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        WindowService.activateWindow(winItem.modelData.id);
+                        root.actionTriggered();
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.border
+            opacity: 0.5
+            visible: root.appWindows.length > 0
+        }
+
         // Action: Launch / New Window
         Rectangle {
             Layout.fillWidth: true
-            height: 28
+            implicitHeight: 28
             radius: Theme.radiusSmall
             color: launchMouse.containsMouse ? Theme.hover : "transparent"
 
@@ -99,7 +155,7 @@ Surface {
         // Action: Pin / Unpin
         Rectangle {
             Layout.fillWidth: true
-            height: 28
+            implicitHeight: 28
             radius: Theme.radiusSmall
             color: pinMouse.containsMouse ? Theme.hover : "transparent"
 
@@ -130,49 +186,6 @@ Surface {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     ApplicationService.togglePin(root.appId);
-                    root.actionTriggered();
-                }
-            }
-        }
-
-        // Action: Close (if running)
-        Rectangle {
-            Layout.fillWidth: true
-            height: 28
-            radius: Theme.radiusSmall
-            visible: root.isRunning
-            color: closeMouse.containsMouse ? Theme.alpha(Theme.error, 0.2) : "transparent"
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 8
-
-                SvgIcon {
-                    icon: "window-close"
-                    size: 14
-                    color: Theme.error
-                }
-
-                Text {
-                    text: "Close All Windows"
-                    color: Theme.error
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-            }
-
-            MouseArea {
-                id: closeMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    const wins = WindowService.getWindowsForApp(root.appId);
-                    for (let i = 0; i < wins.length; i++) {
-                        WindowService.closeWindow(wins[i].id);
-                    }
                     root.actionTriggered();
                 }
             }
