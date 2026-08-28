@@ -2,6 +2,8 @@
   "enabled": true,
   "position": "bottom",
   "iconSize": 44,
+  "autoHide": false,
+  "monitors": "all",
   "pinned": [
     "org.kde.dolphin",
     "org.kde.konsole",

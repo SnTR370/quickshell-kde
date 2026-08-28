@@ -34,7 +34,9 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Overlay
 
-        BackgroundEffect.blurRegion: ConfigService.blurEnabled ? Region { item: mediaSurface } : null
+        BackgroundEffect.blurRegion: Region {
+            item: mediaSurface
+        }
 
         Surface {
             id: mediaSurface

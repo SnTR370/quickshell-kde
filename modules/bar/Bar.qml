@@ -60,7 +60,9 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Top
 
-        BackgroundEffect.blurRegion: ConfigService.blurEnabled ? Region { item: barSurface } : null
+        BackgroundEffect.blurRegion: Region {
+            item: barSurface
+        }
 
         Surface {
             id: barSurface

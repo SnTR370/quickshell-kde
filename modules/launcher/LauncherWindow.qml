@@ -31,7 +31,9 @@ Variants {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: (visible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-        BackgroundEffect.blurRegion: ConfigService.blurEnabled ? Region { item: mainContainer } : null
+        BackgroundEffect.blurRegion: Region {
+            item: mainContainer
+        }
 
         property string selectedCategory: "all"
         property var searchResults: ApplicationService.search(searchInput.text, selectedCategory)

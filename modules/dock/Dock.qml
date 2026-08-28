@@ -50,7 +50,9 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Top
 
-        BackgroundEffect.blurRegion: ConfigService.blurEnabled ? Region { item: dockSurface } : null
+        BackgroundEffect.blurRegion: Region {
+            item: dockSurface
+        }
 
         Timer {
             id: hideTimer
