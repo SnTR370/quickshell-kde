@@ -26,8 +26,11 @@ Singleton {
     readonly property string trackTitle: activePlayer ? (activePlayer.trackTitle || "Unknown Track") : ""
     readonly property string trackArtist: {
         if (!activePlayer) return "";
-        if (activePlayer.trackArtists && activePlayer.trackArtists.length > 0) {
+        if (Array.isArray(activePlayer.trackArtists)) {
             return activePlayer.trackArtists.join(", ");
+        }
+        if (typeof activePlayer.trackArtists === "string" && activePlayer.trackArtists.length > 0) {
+            return activePlayer.trackArtists;
         }
         return activePlayer.trackArtist || "";
     }

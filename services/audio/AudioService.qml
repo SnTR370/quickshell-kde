@@ -16,27 +16,29 @@ Singleton {
     readonly property var defaultSink: Pipewire.defaultAudioSink
     readonly property var defaultSource: Pipewire.defaultAudioSource
 
-    property real volume: (defaultSink && defaultSink.audio) ? defaultSink.audio.volume : 0.5
-    property bool muted: (defaultSink && defaultSink.audio) ? defaultSink.audio.muted : false
-    property string sinkDescription: (defaultSink && defaultSink.description) ? defaultSink.description : "Default Output"
+    readonly property real volume: (defaultSink && defaultSink.audio) ? defaultSink.audio.volume : 0.0
+    readonly property bool muted: (defaultSink && defaultSink.audio) ? defaultSink.audio.muted : false
+    readonly property string sinkDescription: (defaultSink && defaultSink.description) ? defaultSink.description : "Default Output"
 
-    property real inputVolume: (defaultSource && defaultSource.audio) ? defaultSource.audio.volume : 0.5
-    property bool inputMuted: (defaultSource && defaultSource.audio) ? defaultSource.audio.muted : false
+    readonly property real inputVolume: (defaultSource && defaultSource.audio) ? defaultSource.audio.volume : 0.0
+    readonly property bool inputMuted: (defaultSource && defaultSource.audio) ? defaultSource.audio.muted : false
 
-    property bool isHeadphone: {
+    readonly property bool isHeadphone: {
         const desc = sinkDescription.toLowerCase();
         return desc.includes("headphone") || desc.includes("headset") || desc.includes("earphone");
+    }
+
+    onVolumeChanged: {
+        root.osdPulse();
     }
 
     function setVolume(val) {
         const clamped = Math.max(0.0, Math.min(1.5, val));
         if (defaultSink && defaultSink.audio) {
             defaultSink.audio.volume = clamped;
-            root.volume = clamped;
         } else {
             Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", String(clamped)]);
         }
-        root.osdPulse();
     }
 
     function increaseVolume(step) {
@@ -52,7 +54,6 @@ Singleton {
     function toggleMute() {
         if (defaultSink && defaultSink.audio) {
             defaultSink.audio.muted = !defaultSink.audio.muted;
-            root.muted = defaultSink.audio.muted;
         } else {
             Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
         }
@@ -62,7 +63,6 @@ Singleton {
     function toggleInputMute() {
         if (defaultSource && defaultSource.audio) {
             defaultSource.audio.muted = !defaultSource.audio.muted;
-            root.inputMuted = defaultSource.audio.muted;
         } else {
             Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]);
         }
