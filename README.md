@@ -19,14 +19,14 @@ Designed for Linux desktop enthusiasts who want a fluid, highly customizable, Wa
 * **Integrated Initial Modules**:
   * **Top / Side Bar**: Configurable layout (left/center/right slots), supports top, bottom, left, and right screen edges.
   * **Interactive Virtual Desktops**: Live desktop status, seamless switching, and scroll-to-cycle powered by KWin DBus.
-  * **Application Launcher**: Fullscreen spotlight-style overlay with sub-millisecond search, category filtering, and session control buttons.
-  * **Dynamic Dock**: macOS / Plasma-style dock with smooth hover magnification, pinned apps management, and app launching.
-  * **Audio Mixer & OSD**: Native PipeWire audio volume slider, mute toggling, sink switcher, and animated volume overlay HUD.
+  * **Application Launcher**: Fullscreen spotlight-style overlay with fast in-memory search, category filtering, and session control buttons.
+  * **Dynamic Dock**: Customizable dock with smooth hover magnification, pinned apps management with persistence, and app launching.
+  * **Audio Mixer & OSD**: Native PipeWire audio volume slider, mute toggling, and animated volume overlay HUD.
   * **MPRIS Media Player**: Live playback status, album artwork, track information, and media controls for Spotify, browsers, VLC, etc.
   * **System Tray**: Freedesktop StatusNotifierItem integration with interactive DBus menus.
-  * **Notifications Center**: Native Freedesktop notification server with floating toast popups and action callbacks.
+  * **Desktop Notifications**: Freedesktop notification server with floating toast popups (supports standalone KWin sessions and coexists gracefully when Plasma notifications are active).
   * **Live Theming Engine**: Switch between built-in themes (*Breeze Dark*, *Catppuccin Mocha*, *Nord*, *Tokyo Night*) with real-time UI updates.
-  * **Settings Dashboard**: Graphical UI for live configuration of bar positions, themes, and compositor integration.
+  * **Settings Dashboard**: Graphical UI for live configuration of bar positions, themes, dock settings, and compositor integration.
 
 ---
 
@@ -44,9 +44,9 @@ Designed for Linux desktop enthusiasts who want a fluid, highly customizable, Wa
 | :--- | :--- | :--- |
 | `quickshell` (>= 0.3.0) | Wayland QML shell host and service framework | Required |
 | `plasma-workspace` / `kwin` | KDE Plasma 6 Wayland compositor | Required |
-| `pipewire` / `pipewire-pulse` | Audio server for volume and sink management | Required |
+| `pipewire` / `pipewire-pulse` | Audio server for volume and stream management | Required |
 | `upower` | Battery and power management | Recommended (Laptops) |
-| `networkmanager` / `nmcli` | Network status and connection monitoring | Recommended |
+| `networkmanager` | Network status and connection monitoring via Quickshell.Networking | Recommended |
 | `python` (>= 3.9) | Fast non-blocking XDG desktop entry indexer | Required |
 | `qdbus6` / `qt6-tools` | KWin DBus IPC tool for workspace/session control | Required |
 
@@ -60,7 +60,7 @@ Designed for Linux desktop enthusiasts who want a fluid, highly customizable, Wa
 
 ## Safe Development & Testing
 
-This project is completely isolated and will **never** overwrite or touch existing user configurations (`~/.config/quickshell/sena` or standard Plasma defaults).
+This project is completely isolated and will **never** overwrite or touch existing user configurations (`~/.config/quickshell/` or standard Plasma defaults).
 
 To run and test the development shell safely:
 

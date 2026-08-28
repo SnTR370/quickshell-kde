@@ -14,9 +14,10 @@ This project builds upon architectural concepts and UI inspiration from the Quic
 * **Modifications & KWin Porting**:
   * **Removed compositor lock-in**: Replaced all Hyprland (`hyprctl`), Niri (`niri msg`), and MangoWC (`mmsg`) commands with a clean, decoupled `KWinService` adapter.
   * **Removed unsafe scripts**: Completely discarded root-modifying scripts (`disk_fstab_helper.sh`), custom filter chain injecters (`eq_filter_chain.sh`), and compositor config modifiers.
-  * **Native Quickshell APIs**: Leveraged Quickshell 0.3 native services (`Quickshell.Services.Pipewire`, `Quickshell.Services.Mpris`, `Quickshell.Services.SystemTray`, `Quickshell.Services.UPower`, `Quickshell.Services.Notifications`) instead of ad-hoc subprocess polling.
+  * **Native Quickshell APIs**: Leveraged Quickshell 0.3 native services (`Quickshell.Services.Pipewire`, `Quickshell.Services.Mpris`, `Quickshell.Services.SystemTray`, `Quickshell.Services.UPower`, `Quickshell.Services.Notifications`, and `Quickshell.Networking`) instead of ad-hoc subprocess polling.
+  * **Independent Service Implementations**: Replaced custom daemon scripts with clean Python XDG desktop scanning (`scan_apps.py`) and standard KWin D-Bus integration.
   * **Clean Modular Architecture**: Organized into strictly decoupled `components/`, `modules/`, `services/`, and `themes/` with `qmldir` singleton interfaces.
 
 ## License Compliance Notice
 
-All reused code and design patterns from MIT-licensed repositories preserve original copyright notices in accordance with the terms of the MIT License.
+All reused code, UI inspirations, and design patterns from MIT-licensed repositories preserve original copyright notices in accordance with the terms of the MIT License.

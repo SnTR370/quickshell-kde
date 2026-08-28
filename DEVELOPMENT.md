@@ -48,6 +48,7 @@ All core services export reactive QML properties and signals. UI components decl
   * Manages virtual desktop synchronization via `org.kde.KWin.VirtualDesktopManager`.
   * Handles dynamic monitor output detection via `Quickshell.screens` and `org.kde.KWin.activeOutputName`.
   * Exposes desktop switching (`setCurrentDesktop`, `nextDesktop`, `previousDesktop`), desktop creation, show-desktop toggling, and KDE settings launcher.
+  * Employs an event debounce timer plus a lightweight 3000ms polling fallback to sync desktop changes made outside Quickshell (e.g. compositor shortcuts).
 * **`services/audio/AudioService.qml`**:
   * Interacts with `Quickshell.Services.Pipewire` for default sink/source volume, mute state, and description.
   * Dispatches `osdPulse()` signal on volume changes to trigger the on-screen display overlay.
@@ -58,13 +59,13 @@ All core services export reactive QML properties and signals. UI components decl
 * **`services/applications/ApplicationService.qml`**:
   * Manages indexed applications parsed from XDG desktop directories by `scan_apps.py`.
   * Offers instant in-memory search and category filtering.
-  * Launches applications safely via `gio launch` / `gtk-launch`.
-  * Manages dock pinned applications.
+  * Launches applications safely via `gio launch` / `gtk-launch` or tokenized argument execution without invoking `sh -c`.
+  * Uses `ConfigService` as the single source of truth for dock pinned applications.
 * **`services/notifications/NotificationService.qml`**:
   * Implements `Quickshell.Services.Notifications.NotificationServer`.
-  * Maintains notification history and tracks active toast cards.
+  * Maintains notification history and tracks active toast cards (when running in standalone session mode; yields cleanly to Plasma notification daemon when active).
 * **`services/network/NetworkService.qml`**:
-  * Asynchronously monitors network connection state (Ethernet / Wi-Fi / Disconnected), SSID, and signal strength.
+  * Event-driven network monitoring via native `Quickshell.Networking` (Ethernet / Wi-Fi / Disconnected), SSID, and signal strength.
 * **`services/battery/PowerService.qml`**:
   * Tracks battery charge level and AC power status via `Quickshell.Services.UPower` with sysfs fallback.
 * **`services/theme/Theme.qml` & `ThemeService.qml`**:
@@ -83,8 +84,8 @@ All core services export reactive QML properties and signals. UI components decl
 * `Badge.qml`: Pill count badge.
 
 ### `modules/`
-* `modules/bar/`: Multi-screen top/side bar with slots for Workspaces, Launcher button, Clock, Media, Tray, Network, Battery, and Audio.
-* `modules/dock/`: Magnifying bottom dock with pinned applications and running indicators.
+* `modules/bar/`: Multi-screen top/side bar with dynamic slot rendering for Workspaces, Launcher button, Clock, Media, Tray, Network, Battery, and Audio.
+* `modules/dock/`: Magnifying dock adapting to top/bottom/left/right screen positions with pinned applications and running indicators.
 * `modules/launcher/`: Spotlight application dashboard with category filtering, search input, and power management actions.
 * `modules/notifications/`: Floating toast popup notifications.
 * `modules/osd/`: HUD overlay for volume and brightness adjustments.
@@ -100,7 +101,7 @@ Never install or copy development files directly into your primary `~/.config/qu
 
 Run the shell directly from the repository using:
 ```bash
-quickshell -p /home/sena/Projects/quickshell-kde/shell.qml
+quickshell -p ./shell.qml
 ```
 
 ### Checking Running Instances & Logs
