@@ -1,1 +1,2 @@
 singleton KWinService 1.0 KWinService.qml
+singleton WindowService 1.0 WindowService.qml

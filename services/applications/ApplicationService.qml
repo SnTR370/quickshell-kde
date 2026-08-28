@@ -123,6 +123,35 @@ Singleton {
         return null;
     }
 
+    function findAppByTitleOrIcon(title, iconName) {
+        if (!root.applications || root.applications.length === 0) return null;
+        const lowerTitle = (title || "").toLowerCase();
+        const lowerIcon = (iconName || "").toLowerCase();
+
+        // 1. Direct icon or ID match
+        if (lowerIcon.length > 0) {
+            for (let i = 0; i < root.applications.length; i++) {
+                const a = root.applications[i];
+                if (a.icon && a.icon.toLowerCase() === lowerIcon) return a;
+                if (a.id.toLowerCase() === lowerIcon || a.id.toLowerCase() === lowerIcon + ".desktop") return a;
+            }
+        }
+
+        // 2. Title suffix or containment match (e.g. "quickshell-kde : agy — Konsole" -> "Konsole")
+        if (lowerTitle.length > 0) {
+            // First check exact suffix match after " — " or " - "
+            for (let i = 0; i < root.applications.length; i++) {
+                const a = root.applications[i];
+                const lowerName = (a.name || "").toLowerCase();
+                if (lowerName.length > 2 && lowerTitle.indexOf(lowerName) !== -1) {
+                    return a;
+                }
+            }
+        }
+
+        return null;
+    }
+
     function parseExecArguments(execStr) {
         if (!execStr || execStr.trim().length === 0) return [];
         // Strip freedesktop field codes (%f, %F, %u, %U, %d, %D, %n, %N, %i, %c, %k, %v, %m)
