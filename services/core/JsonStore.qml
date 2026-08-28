@@ -7,10 +7,12 @@ Item {
     id: root
 
     property string path: ""
+    property string fallbackPath: ""
     property var defaultValue: ({})
     property var value: defaultValue
     property string rawContent: ""
     property bool loaded: false
+    property bool readingFallback: false
 
     signal loadedValue(var parsedJson, string rawText)
     signal savedValue(var data)
@@ -18,6 +20,7 @@ Item {
 
     function load() {
         if (!path || path.length === 0) return;
+        root.readingFallback = false;
         readProc.command = ["cat", path];
         readProc.buf = "";
         readProc.running = true;
@@ -51,11 +54,18 @@ Item {
                     root.loaded = true;
                     root.loadedValue(root.value, root.rawContent);
                 } catch (e) {
-                    Log.warn("JsonStore", "Failed to parse JSON from " + root.path + ": " + e);
+                    Log.warn("JsonStore", "Failed to parse JSON from " + (root.readingFallback ? root.fallbackPath : root.path) + ": " + e);
                     root.value = root.defaultValue;
                     root.loaded = true;
                     root.failed("parse", exitCode, String(e));
                 }
+            } else if (!root.readingFallback && root.fallbackPath && root.fallbackPath.length > 0) {
+                // Try fallback default configuration file
+                root.readingFallback = true;
+                readProc.command = ["cat", root.fallbackPath];
+                readProc.buf = "";
+                readProc.running = true;
+                return;
             } else {
                 root.value = root.defaultValue;
                 root.loaded = true;

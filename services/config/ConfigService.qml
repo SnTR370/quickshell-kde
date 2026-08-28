@@ -24,11 +24,10 @@ Singleton {
     property bool dockEnabled: true
     property string dockPosition: "bottom"
     property real dockIconSize: 44
-    property bool dockAutoHide: false
-    property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
+    property var dockPinned: []
 
-    // Notifications configuration
-    property bool notificationsEnabled: true
+    // Notifications configuration (opt-in; false by default to prevent conflict with Plasma notification daemon)
+    property bool notificationsEnabled: false
 
     // UI Overlay States
     property bool launcherVisible: false
@@ -50,6 +49,7 @@ Singleton {
     JsonStore {
         id: barStore
         path: root.barConfigFile
+        fallbackPath: Qt.resolvedUrl("../../config/bar_config.json").toString().replace(/^file:\/\//, "")
         defaultValue: ({
             "position": "top",
             "height": 44,
@@ -66,24 +66,24 @@ Singleton {
             if (parsed.center) root.barCenter = parsed.center;
             if (parsed.right) root.barRight = parsed.right;
             if (parsed.opacity !== undefined) root.barOpacity = parsed.opacity;
+            if (parsed.notificationsEnabled !== undefined) root.notificationsEnabled = parsed.notificationsEnabled;
         }
     }
 
     JsonStore {
         id: dockStore
         path: root.dockConfigFile
+        fallbackPath: Qt.resolvedUrl("../../config/dock_config.json").toString().replace(/^file:\/\//, "")
         defaultValue: ({
             "enabled": true,
             "position": "bottom",
             "iconSize": 44,
-            "autoHide": false,
-            "pinned": ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
+            "pinned": []
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
             if (parsed.position) root.dockPosition = parsed.position;
             if (parsed.iconSize !== undefined) root.dockIconSize = parsed.iconSize;
-            if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
             if (parsed.pinned) root.dockPinned = parsed.pinned;
         }
     }
@@ -95,7 +95,8 @@ Singleton {
             "left": root.barLeft,
             "center": root.barCenter,
             "right": root.barRight,
-            "opacity": root.barOpacity
+            "opacity": root.barOpacity,
+            "notificationsEnabled": root.notificationsEnabled
         });
     }
 
@@ -114,12 +115,16 @@ Singleton {
         saveBarConfig();
     }
 
+    function setNotificationsEnabled(enabled) {
+        root.notificationsEnabled = enabled;
+        saveBarConfig();
+    }
+
     function saveDockConfig() {
         dockStore.save({
             "enabled": root.dockEnabled,
             "position": root.dockPosition,
             "iconSize": root.dockIconSize,
-            "autoHide": root.dockAutoHide,
             "pinned": root.dockPinned
         });
     }
@@ -136,11 +141,6 @@ Singleton {
 
     function setDockIconSize(size) {
         root.dockIconSize = size;
-        saveDockConfig();
-    }
-
-    function setDockAutoHide(autoHide) {
-        root.dockAutoHide = autoHide;
         saveDockConfig();
     }
 

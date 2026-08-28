@@ -30,7 +30,7 @@ Variants {
 
         implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (ConfigService.dockIconSize + 20)
         implicitWidth: isVertical ? (ConfigService.dockIconSize + 20) : (dockSurface.implicitWidth + 24)
-        exclusiveZone: ConfigService.dockAutoHide ? 0 : (ConfigService.dockIconSize + 16)
+        exclusiveZone: ConfigService.dockIconSize + 16
 
         WlrLayershell.layer: WlrLayer.Top
 
