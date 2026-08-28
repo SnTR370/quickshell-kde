@@ -9,10 +9,14 @@ Singleton {
 
     property real brightness: 1.0
     property int percentage: Math.round(brightness * 100)
-    property bool supported: true
     property var displays: []
     property var controlledDisplay: null
     property string controlledDisplayName: controlledDisplay ? (controlledDisplay.label || controlledDisplay.dbusName) : ""
+
+    property bool controllable: controlledDisplay !== null && controlledDisplay.maxBrightness > 0
+    property bool sysfsReadable: false
+    property bool supported: controllable || sysfsReadable
+    property bool isReadOnly: sysfsReadable && !controllable
 
     signal osdPulse()
 
@@ -26,20 +30,18 @@ Singleton {
             onRead: data => { displayDiscoverer.buf += data; }
         }
         onExited: exitCode => {
-            Log.info("BrightnessService", "discover_displays exited with code " + exitCode + " buf length: " + displayDiscoverer.buf.length);
             if (exitCode === 0 && displayDiscoverer.buf.trim().length > 0) {
                 try {
                     const parsed = JSON.parse(displayDiscoverer.buf.trim());
                     if (Array.isArray(parsed) && parsed.length > 0) {
                         root.displays = parsed;
-                        root.supported = true;
                         root.selectControlledDisplay();
                         Log.info("BrightnessService", "Discovered " + parsed.length + " displays: controlled=" + (root.controlledDisplay ? root.controlledDisplay.label : "none"));
                         displayDiscoverer.buf = "";
                         return;
                     }
                 } catch (e) {
-                    Log.warn("BrightnessService", "Failed to parse displays JSON: " + e + " raw: " + displayDiscoverer.buf);
+                    Log.warn("BrightnessService", "Failed to parse displays JSON: " + e);
                 }
             }
             displayDiscoverer.buf = "";
@@ -53,16 +55,21 @@ Singleton {
             return;
         }
 
-        // Policy: Prefer internal display (laptop panel), otherwise first display
+        // Policy: Prefer internal display (laptop panel), otherwise first valid display
         let selected = null;
         for (let i = 0; i < root.displays.length; i++) {
-            if (root.displays[i].isInternal) {
+            if (root.displays[i].isInternal && root.displays[i].maxBrightness > 0) {
                 selected = root.displays[i];
                 break;
             }
         }
         if (!selected) {
-            selected = root.displays[0];
+            for (let i = 0; i < root.displays.length; i++) {
+                if (root.displays[i].maxBrightness > 0) {
+                    selected = root.displays[i];
+                    break;
+                }
+            }
         }
 
         root.controlledDisplay = selected;
@@ -80,22 +87,27 @@ Singleton {
         stdout: SplitParser {
             onRead: data => {
                 dbusSignalListener.signalBuf += data + "\n";
-                if (dbusSignalListener.signalBuf.length > 4096) {
-                    dbusSignalListener.signalBuf = dbusSignalListener.signalBuf.slice(-2048);
-                }
 
-                // Check for BrightnessChanged signals
-                const bcRe = /member=BrightnessChanged\s+string\s+"([^"]+)"\s+int32\s+(\d+)/g;
+                // Parse and consume BrightnessChanged signals
+                const bcRe = /member=BrightnessChanged\s+string\s+"([^"]+)"\s+int32\s+(\d+)/;
                 let match;
                 while ((match = bcRe.exec(dbusSignalListener.signalBuf)) !== null) {
                     const dName = match[1];
                     const bVal = parseInt(match[2], 10);
                     root.handleBrightnessChanged(dName, bVal);
+                    // Slice consumed portion up to end of match
+                    dbusSignalListener.signalBuf = dbusSignalListener.signalBuf.substring(match.index + match[0].length);
                 }
 
                 // Check for display hotplug signals
                 if (dbusSignalListener.signalBuf.indexOf("member=DisplayAdded") !== -1 || dbusSignalListener.signalBuf.indexOf("member=DisplayRemoved") !== -1) {
+                    dbusSignalListener.signalBuf = "";
                     root.refresh();
+                }
+
+                // Prevent unbounded buffer growth
+                if (dbusSignalListener.signalBuf.length > 2048) {
+                    dbusSignalListener.signalBuf = dbusSignalListener.signalBuf.slice(-512);
                 }
             }
         }
@@ -141,11 +153,11 @@ Singleton {
                     const max = parseInt(parts[1], 10);
                     if (!isNaN(cur) && !isNaN(max) && max > 0) {
                         root.brightness = Math.max(0.0, Math.min(1.0, cur / max));
-                        root.supported = true;
+                        root.sysfsReadable = true;
                     }
                 }
             } else {
-                root.supported = false;
+                root.sysfsReadable = false;
             }
             sysfsDiscoverer.buf = "";
         }
@@ -159,23 +171,28 @@ Singleton {
     }
 
     function setBrightness(ratio) {
+        if (!root.controllable) {
+            Log.warn("BrightnessService", "Cannot set brightness: no writable KDE ScreenBrightness display available (backend is read-only).");
+            return;
+        }
+
         const clamped = Math.max(0.0, Math.min(1.0, ratio));
         root.brightness = clamped;
         root.osdPulse();
 
-        if (root.controlledDisplay) {
-            const targetVal = Math.round(clamped * root.controlledDisplay.maxBrightness);
-            Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", root.controlledDisplay.path, "org.kde.ScreenBrightness.Display.SetBrightness", targetVal.toString(), "0"]);
-        }
+        const targetVal = Math.round(clamped * root.controlledDisplay.maxBrightness);
+        Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", root.controlledDisplay.path, "org.kde.ScreenBrightness.Display.SetBrightness", targetVal.toString(), "0"]);
     }
 
     function increaseBrightness(step) {
+        if (!root.controllable) return;
         const delta = step || 0.05;
         const target = Math.min(1.0, root.brightness + delta);
         setBrightness(target);
     }
 
     function decreaseBrightness(step) {
+        if (!root.controllable) return;
         const delta = step || 0.05;
         const target = Math.max(0.0, root.brightness - delta);
         setBrightness(target);

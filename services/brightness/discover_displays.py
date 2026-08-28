@@ -24,12 +24,20 @@ def get_display_info(name):
         m_str = f_m.result()
         i_str = f_i.result()
         label = f_l.result()
-    b = int(b_str) if b_str.isdigit() else 10000
-    m = int(m_str) if m_str.isdigit() else 10000
+
+    # Reject displays where required properties could not be read
+    if not (b_str.isdigit() and m_str.isdigit()):
+        return None
+
+    b = int(b_str)
+    m = int(m_str)
+    if m <= 0:
+        return None
+
     return {
         "dbusName": name,
         "path": path,
-        "label": label,
+        "label": label or name,
         "isInternal": i_str.lower() == "true",
         "brightness": b,
         "maxBrightness": m
@@ -44,8 +52,9 @@ def discover():
         ).strip()
         names = [s.strip() for s in out.splitlines() if s.strip()]
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as ex:
-            displays = list(ex.map(get_display_info, names))
-        print(json.dumps(displays))
+            raw_displays = list(ex.map(get_display_info, names))
+        valid_displays = [d for d in raw_displays if d is not None]
+        print(json.dumps(valid_displays))
     except Exception:
         print("[]")
 
