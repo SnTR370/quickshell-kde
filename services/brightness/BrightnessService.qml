@@ -10,99 +10,122 @@ Singleton {
     property real brightness: 1.0
     property int percentage: Math.round(brightness * 100)
     property bool supported: true
-    property var displayPaths: []
-    property int maxBrightness: 10000
-    property string activeDisplayPath: ""
+    property var displays: []
+    property var controlledDisplay: null
+    property string controlledDisplayName: controlledDisplay ? (controlledDisplay.label || controlledDisplay.dbusName) : ""
 
     signal osdPulse()
 
-    // 1. Discover active displays from KDE ScreenBrightness
+    // 1. Discover all displays and their exact properties from KDE ScreenBrightness
     Process {
         id: displayDiscoverer
-        command: ["qdbus6", "org.kde.ScreenBrightness", "/org/kde/ScreenBrightness", "org.kde.ScreenBrightness.DisplaysDBusNames"]
+        command: ["python3", Qt.resolvedUrl("discover_displays.py").toString().replace(/^file:\/\//, "")]
+        running: true
         property string buf: ""
         stdout: SplitParser {
             onRead: data => { displayDiscoverer.buf += data; }
         }
         onExited: exitCode => {
+            Log.info("BrightnessService", "discover_displays exited with code " + exitCode + " buf length: " + displayDiscoverer.buf.length);
             if (exitCode === 0 && displayDiscoverer.buf.trim().length > 0) {
-                const names = displayDiscoverer.buf.trim().split("\n").map(s => s.trim()).filter(s => s.length > 0);
-                root.displayPaths = names;
-                if (names.length > 0) {
-                    root.activeDisplayPath = "/org/kde/ScreenBrightness/" + names[0];
-                    displayPropsReader.command = ["qdbus6", "org.kde.ScreenBrightness", root.activeDisplayPath, "org.kde.ScreenBrightness.Display.MaxBrightness"];
-                    displayPropsReader.running = true;
+                try {
+                    const parsed = JSON.parse(displayDiscoverer.buf.trim());
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        root.displays = parsed;
+                        root.supported = true;
+                        root.selectControlledDisplay();
+                        Log.info("BrightnessService", "Discovered " + parsed.length + " displays: controlled=" + (root.controlledDisplay ? root.controlledDisplay.label : "none"));
+                        displayDiscoverer.buf = "";
+                        return;
+                    }
+                } catch (e) {
+                    Log.warn("BrightnessService", "Failed to parse displays JSON: " + e + " raw: " + displayDiscoverer.buf);
                 }
-                root.supported = true;
-            } else {
-                sysfsDiscoverer.running = true;
             }
             displayDiscoverer.buf = "";
+            sysfsDiscoverer.running = true;
         }
     }
 
-    // 2. Read MaxBrightness for active display
-    Process {
-        id: displayPropsReader
-        property string buf: ""
-        stdout: SplitParser {
-            onRead: data => { displayPropsReader.buf += data; }
+    function selectControlledDisplay() {
+        if (!root.displays || root.displays.length === 0) {
+            root.controlledDisplay = null;
+            return;
         }
-        onExited: exitCode => {
-            if (exitCode === 0 && displayPropsReader.buf.trim().length > 0) {
-                const maxVal = parseInt(displayPropsReader.buf.trim(), 10);
-                if (!isNaN(maxVal) && maxVal > 0) {
-                    root.maxBrightness = maxVal;
-                }
+
+        // Policy: Prefer internal display (laptop panel), otherwise first display
+        let selected = null;
+        for (let i = 0; i < root.displays.length; i++) {
+            if (root.displays[i].isInternal) {
+                selected = root.displays[i];
+                break;
             }
-            displayPropsReader.buf = "";
-            currentBrightnessReader.command = ["qdbus6", "org.kde.ScreenBrightness", root.activeDisplayPath, "org.kde.ScreenBrightness.Display.Brightness"];
-            currentBrightnessReader.running = true;
+        }
+        if (!selected) {
+            selected = root.displays[0];
+        }
+
+        root.controlledDisplay = selected;
+        if (selected && selected.maxBrightness > 0) {
+            root.brightness = Math.max(0.0, Math.min(1.0, selected.brightness / selected.maxBrightness));
         }
     }
 
-    // 3. Read initial current Brightness
-    Process {
-        id: currentBrightnessReader
-        property string buf: ""
-        stdout: SplitParser {
-            onRead: data => { currentBrightnessReader.buf += data; }
-        }
-        onExited: exitCode => {
-            if (exitCode === 0 && currentBrightnessReader.buf.trim().length > 0) {
-                const curVal = parseInt(currentBrightnessReader.buf.trim(), 10);
-                if (!isNaN(curVal) && root.maxBrightness > 0) {
-                    root.brightness = Math.max(0.0, Math.min(1.0, curVal / root.maxBrightness));
-                }
-            }
-            currentBrightnessReader.buf = "";
-        }
-    }
-
-    // 4. Real-time event-driven listener for brightness changes (hardware keys / Plasma UI)
+    // 2. Real-time event-driven listener for brightness changes & hotplug
     Process {
         id: dbusSignalListener
-        command: ["dbus-monitor", "type='signal',interface='org.kde.ScreenBrightness',member='BrightnessChanged'"]
+        command: ["dbus-monitor", "type='signal',interface='org.kde.ScreenBrightness'"]
         running: true
+        property string signalBuf: ""
         stdout: SplitParser {
-            onRead: line => {
-                // Line format: int32 <value>
-                const match = line.match(/int32\s+(\d+)/);
-                if (match && match[1]) {
-                    const newVal = parseInt(match[1], 10);
-                    if (!isNaN(newVal) && root.maxBrightness > 0) {
-                        const ratio = Math.max(0.0, Math.min(1.0, newVal / root.maxBrightness));
-                        if (Math.abs(root.brightness - ratio) > 0.005) {
-                            root.brightness = ratio;
-                            root.osdPulse();
-                        }
-                    }
+            onRead: data => {
+                dbusSignalListener.signalBuf += data + "\n";
+                if (dbusSignalListener.signalBuf.length > 4096) {
+                    dbusSignalListener.signalBuf = dbusSignalListener.signalBuf.slice(-2048);
+                }
+
+                // Check for BrightnessChanged signals
+                const bcRe = /member=BrightnessChanged\s+string\s+"([^"]+)"\s+int32\s+(\d+)/g;
+                let match;
+                while ((match = bcRe.exec(dbusSignalListener.signalBuf)) !== null) {
+                    const dName = match[1];
+                    const bVal = parseInt(match[2], 10);
+                    root.handleBrightnessChanged(dName, bVal);
+                }
+
+                // Check for display hotplug signals
+                if (dbusSignalListener.signalBuf.indexOf("member=DisplayAdded") !== -1 || dbusSignalListener.signalBuf.indexOf("member=DisplayRemoved") !== -1) {
+                    root.refresh();
                 }
             }
         }
     }
 
-    // 5. Sysfs dynamic fallback if D-Bus service is unavailable
+    function handleBrightnessChanged(displayDbusName, newBrightness) {
+        if (!root.displays) return;
+
+        // Update matching display
+        for (let i = 0; i < root.displays.length; i++) {
+            if (root.displays[i].dbusName === displayDbusName) {
+                root.displays[i].brightness = newBrightness;
+                break;
+            }
+        }
+
+        // Only update primary/OSD state if signal is for the currently controlled display
+        if (root.controlledDisplay && root.controlledDisplay.dbusName === displayDbusName) {
+            const max = root.controlledDisplay.maxBrightness;
+            if (max > 0) {
+                const ratio = Math.max(0.0, Math.min(1.0, newBrightness / max));
+                if (Math.abs(root.brightness - ratio) > 0.005) {
+                    root.brightness = ratio;
+                    root.osdPulse();
+                }
+            }
+        }
+    }
+
+    // 3. Sysfs dynamic read-only fallback if D-Bus service is unavailable
     Process {
         id: sysfsDiscoverer
         command: ["sh", "-c", "for d in /sys/class/backlight/*; do if [ -d \"$d\" ]; then cur=$(cat \"$d/actual_brightness\" 2>/dev/null); max=$(cat \"$d/max_brightness\" 2>/dev/null); echo \"$cur:$max\"; break; fi; done"]
@@ -117,7 +140,6 @@ Singleton {
                     const cur = parseInt(parts[0], 10);
                     const max = parseInt(parts[1], 10);
                     if (!isNaN(cur) && !isNaN(max) && max > 0) {
-                        root.maxBrightness = max;
                         root.brightness = Math.max(0.0, Math.min(1.0, cur / max));
                         root.supported = true;
                     }
@@ -138,32 +160,25 @@ Singleton {
 
     function setBrightness(ratio) {
         const clamped = Math.max(0.0, Math.min(1.0, ratio));
-        const delta = clamped - root.brightness;
         root.brightness = clamped;
         root.osdPulse();
 
-        if (root.displayPaths.length > 0) {
-            // Adjust ratio across KDE displays
-            Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", "/org/kde/ScreenBrightness", "org.kde.ScreenBrightness.AdjustBrightnessRatio", delta.toString(), "0"]);
+        if (root.controlledDisplay) {
+            const targetVal = Math.round(clamped * root.controlledDisplay.maxBrightness);
+            Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", root.controlledDisplay.path, "org.kde.ScreenBrightness.Display.SetBrightness", targetVal.toString(), "0"]);
         }
     }
 
     function increaseBrightness(step) {
         const delta = step || 0.05;
         const target = Math.min(1.0, root.brightness + delta);
-        const actualDelta = target - root.brightness;
-        root.brightness = target;
-        root.osdPulse();
-        Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", "/org/kde/ScreenBrightness", "org.kde.ScreenBrightness.AdjustBrightnessRatio", actualDelta.toString(), "0"]);
+        setBrightness(target);
     }
 
     function decreaseBrightness(step) {
         const delta = step || 0.05;
         const target = Math.max(0.0, root.brightness - delta);
-        const actualDelta = target - root.brightness;
-        root.brightness = target;
-        root.osdPulse();
-        Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", "/org/kde/ScreenBrightness", "org.kde.ScreenBrightness.AdjustBrightnessRatio", actualDelta.toString(), "0"]);
+        setBrightness(target);
     }
 
     Component.onCompleted: {
