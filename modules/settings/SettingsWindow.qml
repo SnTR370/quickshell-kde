@@ -28,7 +28,7 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (visible && (KWinService.activeOutputName === "" || modelData.name === KWinService.activeOutputName || KWinService.screenCount === 1)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         function closeSettings() {
             ConfigService.settingsVisible = false;
@@ -212,6 +212,89 @@ Variants {
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: ConfigService.setBarPosition(posBtn.modelData.id)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Dock Configuration Section
+                        Surface {
+                            Layout.fillWidth: true
+                            implicitHeight: dockCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            ColumnLayout {
+                                id: dockCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Dock Configuration"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.bold: true
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockEnabled ? "Enabled" : "Disabled"
+                                        size: 30
+                                        backgroundColor: ConfigService.dockEnabled ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockEnabled(!ConfigService.dockEnabled)
+                                    }
+                                }
+
+                                Text {
+                                    text: "Dock Position"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Repeater {
+                                        model: [
+                                            { id: "bottom", name: "Bottom" },
+                                            { id: "top", name: "Top" },
+                                            { id: "left", name: "Left" },
+                                            { id: "right", name: "Right" }
+                                        ]
+
+                                        Rectangle {
+                                            id: dPosBtn
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 32
+                                            radius: Theme.radiusSmall
+                                            color: (ConfigService.dockPosition === modelData.id) ? Theme.primary : (dpMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: dPosBtn.modelData.name
+                                                color: (ConfigService.dockPosition === dPosBtn.modelData.id) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: ConfigService.dockPosition === dPosBtn.modelData.id
+                                            }
+
+                                            MouseArea {
+                                                id: dpMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.setDockPosition(dPosBtn.modelData.id)
                                             }
                                         }
                                     }

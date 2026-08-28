@@ -16,7 +16,7 @@ Variants {
 
         screen: modelData
         color: "transparent"
-        visible: NotificationService.activeToasts.length > 0
+        visible: ConfigService.notificationsEnabled && NotificationService.activeToasts.length > 0
 
         anchors {
             top: true

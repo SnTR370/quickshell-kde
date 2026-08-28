@@ -12,6 +12,31 @@ Variants {
     // Multi-monitor variant discovery
     model: Quickshell.screens
 
+    Component { id: modLauncher; LauncherButton {} }
+    Component { id: modWorkspaces; WorkspacesModule {} }
+    Component { id: modClock; ClockModule {} }
+    Component { id: modMedia; MediaModule {} }
+    Component { id: modTray; TrayModule {} }
+    Component { id: modNetwork; NetworkModule {} }
+    Component { id: modBattery; BatteryModule {} }
+    Component { id: modAudio; AudioModule {} }
+    Component { id: modPower; PowerButton {} }
+
+    function getModuleComponent(name) {
+        switch (name) {
+            case "launcher": return modLauncher;
+            case "workspaces": return modWorkspaces;
+            case "clock": return modClock;
+            case "media": return modMedia;
+            case "tray": return modTray;
+            case "network": return modNetwork;
+            case "battery": return modBattery;
+            case "audio": return modAudio;
+            case "power": return modPower;
+            default: return null;
+        }
+    }
+
     PanelWindow {
         id: barWindow
         required property var modelData
@@ -19,14 +44,15 @@ Variants {
         screen: modelData
         color: "transparent"
 
+        readonly property bool isVertical: ConfigService.barPosition === "left" || ConfigService.barPosition === "right"
+
         anchors {
-            top: ConfigService.barPosition === "top"
-            bottom: ConfigService.barPosition === "bottom"
-            left: ConfigService.barPosition !== "right"
-            right: ConfigService.barPosition !== "left"
+            top: barWindow.isVertical || ConfigService.barPosition === "top"
+            bottom: barWindow.isVertical || ConfigService.barPosition === "bottom"
+            left: !barWindow.isVertical || ConfigService.barPosition === "left"
+            right: !barWindow.isVertical || ConfigService.barPosition === "right"
         }
 
-        readonly property bool isVertical: ConfigService.barPosition === "left" || ConfigService.barPosition === "right"
         implicitHeight: isVertical ? -1 : ConfigService.barHeight
         implicitWidth: isVertical ? ConfigService.barHeight : -1
         exclusiveZone: ConfigService.barHeight
@@ -53,17 +79,33 @@ Variants {
                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                     spacing: 8
 
-                    LauncherButton {}
-                    WorkspacesModule {}
+                    Repeater {
+                        model: ConfigService.barLeft
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
 
-                // Center Section (Expanding space to center the clock)
+                // Center Spacer
                 Item { Layout.fillWidth: true }
 
-                ClockModule {
+                // Center Section
+                RowLayout {
                     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                    spacing: 8
+
+                    Repeater {
+                        model: ConfigService.barCenter
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
 
+                // Right Spacer
                 Item { Layout.fillWidth: true }
 
                 // Right Section
@@ -71,12 +113,13 @@ Variants {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     spacing: 8
 
-                    MediaModule {}
-                    TrayModule {}
-                    NetworkModule {}
-                    BatteryModule {}
-                    AudioModule {}
-                    PowerButton {}
+                    Repeater {
+                        model: ConfigService.barRight
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
             }
 
@@ -88,28 +131,52 @@ Variants {
                 anchors.bottomMargin: 8
                 spacing: 8
 
-                LauncherButton {
-                    Layout.alignment: Qt.AlignHCenter
+                // Top Section
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                    spacing: 8
+
+                    Repeater {
+                        model: ConfigService.barLeft
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
 
-                WorkspacesModule {
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
+                // Center Spacer
                 Item { Layout.fillHeight: true }
 
-                ClockModule {
-                    Layout.alignment: Qt.AlignHCenter
+                // Center Section
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+                    spacing: 8
+
+                    Repeater {
+                        model: ConfigService.barCenter
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
 
+                // Bottom Spacer
                 Item { Layout.fillHeight: true }
 
-                AudioModule {
-                    Layout.alignment: Qt.AlignHCenter
-                }
+                // Bottom Section
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
+                    spacing: 8
 
-                PowerButton {
-                    Layout.alignment: Qt.AlignHCenter
+                    Repeater {
+                        model: ConfigService.barRight
+                        Loader {
+                            required property var modelData
+                            sourceComponent: root.getModuleComponent(modelData)
+                        }
+                    }
                 }
             }
         }
