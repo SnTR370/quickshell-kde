@@ -17,6 +17,16 @@ Surface {
         return "network-wireless";
     }
 
+    readonly property string tooltipText: {
+        if (!NetworkService.connected) return "Network: Disconnected";
+        if (NetworkService.connectionType === "ethernet") return "Wired Connection (" + (NetworkService.activeDeviceName || "Ethernet") + ")";
+        let text = "Wi-Fi: " + (NetworkService.ssid || "Connected");
+        if (NetworkService.signalStrength >= 0) {
+            text += " (" + NetworkService.signalStrength + "%)";
+        }
+        return text;
+    }
+
     RowLayout {
         id: layout
         anchors.centerIn: parent
@@ -36,6 +46,11 @@ Surface {
             elide: Text.ElideRight
             Layout.maximumWidth: 100
         }
+    }
+
+    Tooltip {
+        text: root.tooltipText
+        show: netMouse.containsMouse
     }
 
     MouseArea {

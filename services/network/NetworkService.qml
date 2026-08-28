@@ -1,80 +1,106 @@
 pragma Singleton
 import QtQuick
 import Quickshell
-import Quickshell.Io
+import Quickshell.Networking
 import "../core/Log.js" as Log
 
 Singleton {
     id: root
 
-    property bool connected: true
-    property string connectionType: "wifi" // "wifi" | "ethernet" | "disconnected"
+    property bool connected: false
+    property string connectionType: "unknown" // "wifi" | "ethernet" | "disconnected" | "unknown"
     property string ssid: ""
-    property int signalStrength: 80
+    property int signalStrength: -1 // -1 when unknown or wired; 0-100 for wifi
     property string ipAddress: ""
+    property string activeDeviceName: ""
+    readonly property bool wifiEnabled: Networking.wifiEnabled
 
-    function refresh() {
-        if (!nmProc.running) {
-            nmProc.buf = "";
-            nmProc.running = true;
+    function updateNetworkState() {
+        if (!Networking.devices || !Networking.devices.values) {
+            root.connected = false;
+            root.connectionType = "unknown";
+            root.ssid = "";
+            root.signalStrength = -1;
+            root.activeDeviceName = "";
+            return;
+        }
+
+        const devList = Networking.devices.values;
+        let wiredDev = null;
+        let wifiDev = null;
+
+        for (let i = 0; i < devList.length; i++) {
+            const dev = devList[i];
+            if (!dev) continue;
+            if (dev.type === DeviceType.Wired && dev.connected) {
+                wiredDev = dev;
+                break; // Prioritize wired connection
+            } else if (dev.type === DeviceType.Wifi && dev.connected && !wifiDev) {
+                wifiDev = dev;
+            }
+        }
+
+        if (wiredDev) {
+            root.connected = true;
+            root.connectionType = "ethernet";
+            root.ssid = "";
+            root.signalStrength = -1;
+            root.activeDeviceName = wiredDev.name || "Wired";
+            root.ipAddress = wiredDev.address || "";
+        } else if (wifiDev) {
+            root.connected = true;
+            root.connectionType = "wifi";
+            root.activeDeviceName = wifiDev.name || "Wi-Fi";
+            root.ipAddress = wifiDev.address || "";
+
+            let activeSsid = "";
+            let sig = -1;
+            if (wifiDev.networks && wifiDev.networks.values) {
+                for (let j = 0; j < wifiDev.networks.values.length; j++) {
+                    const net = wifiDev.networks.values[j];
+                    if (net && net.connected) {
+                        activeSsid = net.name || "";
+                        if (net.signalStrength !== undefined && net.signalStrength >= 0) {
+                            sig = Math.round(net.signalStrength * 100);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            root.ssid = activeSsid || "Wi-Fi";
+            root.signalStrength = sig;
+        } else if (devList.length > 0) {
+            root.connected = false;
+            root.connectionType = "disconnected";
+            root.ssid = "";
+            root.signalStrength = -1;
+            root.activeDeviceName = "";
+            root.ipAddress = "";
+        } else {
+            root.connected = false;
+            root.connectionType = "unknown";
+            root.ssid = "";
+            root.signalStrength = -1;
+            root.activeDeviceName = "";
+            root.ipAddress = "";
         }
     }
 
-    Process {
-        id: nmProc
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE,DEVICE,CONNECTION d status 2>/dev/null || true"]
-        property string buf: ""
-        stdout: SplitParser {
-            onRead: data => { nmProc.buf += data + "\n"; }
-        }
-        onExited: exitCode => {
-            if (exitCode === 0 && nmProc.buf.trim().length > 0) {
-                const lines = nmProc.buf.trim().split("\n");
-                let isConn = false;
-                let cType = "disconnected";
-                let activeSsid = "";
-
-                for (let i = 0; i < lines.length; i++) {
-                    const parts = lines[i].split(":");
-                    if (parts.length >= 4) {
-                        const type = parts[0];
-                        const state = parts[1];
-                        const connName = parts[3];
-
-                        if (state === "connected") {
-                            isConn = true;
-                            if (type === "ethernet") {
-                                cType = "ethernet";
-                                activeSsid = connName || "Wired Connection";
-                                break; // Prioritize ethernet
-                            } else if (type === "wifi") {
-                                cType = "wifi";
-                                activeSsid = connName || "Wireless Network";
-                            }
-                        }
-                    }
-                }
-
-                root.connected = isConn;
-                root.connectionType = isConn ? cType : "disconnected";
-                root.ssid = activeSsid;
-            }
-            nmProc.buf = "";
-        }
+    // Reactive watcher on device changes
+    Timer {
+        id: syncTimer
+        interval: 1000
+        repeat: true
+        running: true
+        onTriggered: root.updateNetworkState()
     }
 
     function openNetworkSettings() {
         Quickshell.execDetached(["kcmshell6", "kcm_networkmanagement"]);
     }
 
-    Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        onTriggered: root.refresh()
-    }
-
     Component.onCompleted: {
-        root.refresh();
+        root.updateNetworkState();
     }
 }
