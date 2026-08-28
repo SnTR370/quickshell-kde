@@ -7,100 +7,45 @@ import "../core/Log.js" as Log
 Singleton {
     id: root
 
-    property bool connected: false
-    property string connectionType: "unknown" // "wifi" | "ethernet" | "disconnected" | "unknown"
-    property string ssid: ""
-    property int signalStrength: -1 // -1 when unknown or wired; 0-100 for wifi
-    property string ipAddress: ""
-    property string activeDeviceName: ""
+    readonly property var devices: (Networking.devices && Networking.devices.values) ? Networking.devices.values : []
+    readonly property int connectivity: Networking.connectivity
     readonly property bool wifiEnabled: Networking.wifiEnabled
 
-    function updateNetworkState() {
-        if (!Networking.devices || !Networking.devices.values) {
-            root.connected = false;
-            root.connectionType = "unknown";
-            root.ssid = "";
-            root.signalStrength = -1;
-            root.activeDeviceName = "";
-            return;
+    // Active connected device discovery via declarative property bindings
+    readonly property var activeWired: {
+        for (let i = 0; i < devices.length; i++) {
+            const dev = devices[i];
+            if (dev && dev.type === DeviceType.Wired && dev.connected) return dev;
         }
-
-        const devList = Networking.devices.values;
-        let wiredDev = null;
-        let wifiDev = null;
-
-        for (let i = 0; i < devList.length; i++) {
-            const dev = devList[i];
-            if (!dev) continue;
-            if (dev.type === DeviceType.Wired && dev.connected) {
-                wiredDev = dev;
-                break; // Prioritize wired connection
-            } else if (dev.type === DeviceType.Wifi && dev.connected && !wifiDev) {
-                wifiDev = dev;
-            }
-        }
-
-        if (wiredDev) {
-            root.connected = true;
-            root.connectionType = "ethernet";
-            root.ssid = "";
-            root.signalStrength = -1;
-            root.activeDeviceName = wiredDev.name || "Wired";
-            root.ipAddress = wiredDev.address || "";
-        } else if (wifiDev) {
-            root.connected = true;
-            root.connectionType = "wifi";
-            root.activeDeviceName = wifiDev.name || "Wi-Fi";
-            root.ipAddress = wifiDev.address || "";
-
-            let activeSsid = "";
-            let sig = -1;
-            if (wifiDev.networks && wifiDev.networks.values) {
-                for (let j = 0; j < wifiDev.networks.values.length; j++) {
-                    const net = wifiDev.networks.values[j];
-                    if (net && net.connected) {
-                        activeSsid = net.name || "";
-                        if (net.signalStrength !== undefined && net.signalStrength >= 0) {
-                            sig = Math.round(net.signalStrength * 100);
-                        }
-                        break;
-                    }
-                }
-            }
-
-            root.ssid = activeSsid || "Wi-Fi";
-            root.signalStrength = sig;
-        } else if (devList.length > 0) {
-            root.connected = false;
-            root.connectionType = "disconnected";
-            root.ssid = "";
-            root.signalStrength = -1;
-            root.activeDeviceName = "";
-            root.ipAddress = "";
-        } else {
-            root.connected = false;
-            root.connectionType = "unknown";
-            root.ssid = "";
-            root.signalStrength = -1;
-            root.activeDeviceName = "";
-            root.ipAddress = "";
-        }
+        return null;
     }
 
-    // Reactive watcher on device changes
-    Timer {
-        id: syncTimer
-        interval: 1000
-        repeat: true
-        running: true
-        onTriggered: root.updateNetworkState()
+    readonly property var activeWifi: {
+        for (let i = 0; i < devices.length; i++) {
+            const dev = devices[i];
+            if (dev && dev.type === DeviceType.Wifi && dev.connected) return dev;
+        }
+        return null;
     }
+
+    readonly property var activeWifiNetwork: {
+        if (!activeWifi || !activeWifi.networks || !activeWifi.networks.values) return null;
+        const nets = activeWifi.networks.values;
+        for (let j = 0; j < nets.length; j++) {
+            if (nets[j] && nets[j].connected) return nets[j];
+        }
+        return null;
+    }
+
+    // Reactive status properties
+    readonly property bool connected: activeWired !== null || activeWifi !== null
+    readonly property string connectionType: activeWired !== null ? "ethernet" : (activeWifi !== null ? "wifi" : (devices.length > 0 ? "disconnected" : "unknown"))
+    readonly property string activeDeviceName: activeWired ? (activeWired.name || "Wired") : (activeWifi ? (activeWifi.name || "Wi-Fi") : "")
+    readonly property string hardwareAddress: activeWired ? (activeWired.address || "") : (activeWifi ? (activeWifi.address || "") : "")
+    readonly property string ssid: activeWifiNetwork ? (activeWifiNetwork.name || "") : (activeWifi ? "Wi-Fi" : "")
+    readonly property int signalStrength: (activeWifiNetwork && activeWifiNetwork.signalStrength !== undefined && activeWifiNetwork.signalStrength >= 0) ? Math.round(activeWifiNetwork.signalStrength * 100) : -1
 
     function openNetworkSettings() {
         Quickshell.execDetached(["kcmshell6", "kcm_networkmanagement"]);
-    }
-
-    Component.onCompleted: {
-        root.updateNetworkState();
     }
 }
