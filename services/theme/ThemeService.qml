@@ -32,8 +32,9 @@ Singleton {
     }
 
     function selectTheme(themeId) {
-        // Load theme file
-        themeReader.command = ["cat", Quickshell.env("PWD") + "/themes/" + themeId + ".json"];
+        // Load theme file safely using resolved path
+        const themePath = Qt.resolvedUrl("../../themes/" + themeId + ".json").toString().replace(/^file:\/\//, "");
+        themeReader.command = ["cat", themePath];
         themeReader.targetThemeId = themeId;
         themeReader.buf = "";
         themeReader.running = true;

@@ -27,7 +27,10 @@ Singleton {
     property bool dockAutoHide: false
     property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
 
-    // Launcher UI State
+    // Notifications configuration
+    property bool notificationsEnabled: true
+
+    // UI Overlay States
     property bool launcherVisible: false
     property bool settingsVisible: false
     property bool mediaPopupVisible: false
@@ -53,14 +56,16 @@ Singleton {
             "monitors": "all",
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
-            "right": ["media", "tray", "network", "battery", "audio", "power"]
+            "right": ["media", "tray", "network", "battery", "audio", "power"],
+            "opacity": 0.92
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.position) root.barPosition = parsed.position;
-            if (parsed.height) root.barHeight = parsed.height;
+            if (parsed.height !== undefined) root.barHeight = parsed.height;
             if (parsed.left) root.barLeft = parsed.left;
             if (parsed.center) root.barCenter = parsed.center;
             if (parsed.right) root.barRight = parsed.right;
+            if (parsed.opacity !== undefined) root.barOpacity = parsed.opacity;
         }
     }
 
@@ -77,20 +82,83 @@ Singleton {
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
             if (parsed.position) root.dockPosition = parsed.position;
-            if (parsed.iconSize) root.dockIconSize = parsed.iconSize;
+            if (parsed.iconSize !== undefined) root.dockIconSize = parsed.iconSize;
             if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
             if (parsed.pinned) root.dockPinned = parsed.pinned;
         }
     }
 
-    function setBarPosition(pos) {
-        root.barPosition = pos;
+    function saveBarConfig() {
         barStore.save({
-            "position": pos,
+            "position": root.barPosition,
             "height": root.barHeight,
             "left": root.barLeft,
             "center": root.barCenter,
-            "right": root.barRight
+            "right": root.barRight,
+            "opacity": root.barOpacity
         });
+    }
+
+    function setBarPosition(pos) {
+        root.barPosition = pos;
+        saveBarConfig();
+    }
+
+    function setBarHeight(h) {
+        root.barHeight = h;
+        saveBarConfig();
+    }
+
+    function setBarOpacity(op) {
+        root.barOpacity = op;
+        saveBarConfig();
+    }
+
+    function saveDockConfig() {
+        dockStore.save({
+            "enabled": root.dockEnabled,
+            "position": root.dockPosition,
+            "iconSize": root.dockIconSize,
+            "autoHide": root.dockAutoHide,
+            "pinned": root.dockPinned
+        });
+    }
+
+    function setDockEnabled(enabled) {
+        root.dockEnabled = enabled;
+        saveDockConfig();
+    }
+
+    function setDockPosition(pos) {
+        root.dockPosition = pos;
+        saveDockConfig();
+    }
+
+    function setDockIconSize(size) {
+        root.dockIconSize = size;
+        saveDockConfig();
+    }
+
+    function setDockAutoHide(autoHide) {
+        root.dockAutoHide = autoHide;
+        saveDockConfig();
+    }
+
+    function isDockPinned(appId) {
+        if (!appId || !root.dockPinned) return false;
+        return root.dockPinned.indexOf(appId) !== -1;
+    }
+
+    function toggleDockPinned(appId) {
+        if (!appId) return;
+        const current = root.dockPinned ? root.dockPinned.slice() : [];
+        const idx = current.indexOf(appId);
+        if (idx !== -1) {
+            current.splice(idx, 1);
+        } else {
+            current.push(appId);
+        }
+        root.dockPinned = current;
+        saveDockConfig();
     }
 }

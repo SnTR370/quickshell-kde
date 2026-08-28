@@ -2,21 +2,14 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../config"
 import "../core/Log.js" as Log
 
 Singleton {
     id: root
 
     property var applications: []
-    property var pinnedApps: [
-        "org.kde.dolphin",
-        "org.kde.konsole",
-        "firefox",
-        "chromium",
-        "code",
-        "org.kde.kate",
-        "systemsettings"
-    ]
+    readonly property var pinnedApps: ConfigService.dockPinned
     property bool loading: true
 
     readonly property var categories: [
@@ -34,7 +27,8 @@ Singleton {
     function scanApplications() {
         root.loading = true;
         scanProc.buf = "";
-        scanProc.command = ["python3", Quickshell.env("PWD") + "/services/applications/scan_apps.py"];
+        const scriptPath = Qt.resolvedUrl("scan_apps.py").toString().replace(/^file:\/\//, "");
+        scanProc.command = ["python3", scriptPath];
         scanProc.running = true;
     }
 
@@ -129,13 +123,50 @@ Singleton {
         return null;
     }
 
+    function parseExecArguments(execStr) {
+        if (!execStr || execStr.trim().length === 0) return [];
+        // Strip freedesktop field codes (%f, %F, %u, %U, %d, %D, %n, %N, %i, %c, %k, %v, %m)
+        const sanitized = execStr.replace(/%[a-zA-Z]/g, "").trim();
+        const args = [];
+        let current = "";
+        let inQuote = false;
+        let quoteChar = "";
+
+        for (let i = 0; i < sanitized.length; i++) {
+            const ch = sanitized[i];
+            if ((ch === '"' || ch === "'") && !inQuote) {
+                inQuote = true;
+                quoteChar = ch;
+            } else if (ch === quoteChar && inQuote) {
+                inQuote = false;
+                quoteChar = "";
+            } else if (ch === ' ' && !inQuote) {
+                if (current.length > 0) {
+                    args.push(current);
+                    current = "";
+                }
+            } else {
+                current += ch;
+            }
+        }
+        if (current.length > 0) {
+            args.push(current);
+        }
+        return args;
+    }
+
     function launch(app) {
         if (!app) return;
-        Log.info("ApplicationService", "Launching app: " + app.name);
+        Log.info("ApplicationService", "Launching app: " + (app.name || app.id));
         if (app.desktopFile && app.desktopFile.length > 0) {
             Quickshell.execDetached(["gio", "launch", app.desktopFile]);
+        } else if (app.id && app.id.length > 0) {
+            Quickshell.execDetached(["gtk-launch", app.id]);
         } else if (app.exec && app.exec.length > 0) {
-            Quickshell.execDetached(["sh", "-c", app.exec + " &"]);
+            const args = parseExecArguments(app.exec);
+            if (args.length > 0) {
+                Quickshell.execDetached(args);
+            }
         }
     }
 
@@ -149,18 +180,11 @@ Singleton {
     }
 
     function isPinned(appId) {
-        return root.pinnedApps.indexOf(appId) !== -1;
+        return ConfigService.isDockPinned(appId);
     }
 
     function togglePin(appId) {
-        const idx = root.pinnedApps.indexOf(appId);
-        const next = root.pinnedApps.slice();
-        if (idx !== -1) {
-            next.splice(idx, 1);
-        } else {
-            next.push(appId);
-        }
-        root.pinnedApps = next;
+        ConfigService.toggleDockPinned(appId);
     }
 
     Component.onCompleted: {
