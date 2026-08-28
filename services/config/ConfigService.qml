@@ -19,12 +19,18 @@ Singleton {
     property var barCenter: ["clock"]
     property var barRight: ["media", "tray", "network", "battery", "audio", "power"]
     property real barOpacity: 0.92
+    property var barMonitors: "all"
 
     // Dock properties
     property bool dockEnabled: true
     property string dockPosition: "bottom"
     property real dockIconSize: 44
+    property bool dockAutoHide: false
     property var dockPinned: []
+    property var dockMonitors: "all"
+
+    // Visual effects
+    property bool blurEnabled: true
 
     // Notifications configuration (opt-in; false by default to prevent conflict with Plasma notification daemon)
     property bool notificationsEnabled: false
@@ -33,6 +39,25 @@ Singleton {
     property bool launcherVisible: false
     property bool settingsVisible: false
     property bool mediaPopupVisible: false
+
+    function isScreenAllowed(screenObj, filter) {
+        if (!screenObj) return true;
+        if (!filter || filter === "all") return true;
+        if (filter === "primary") {
+            const screens = Quickshell.screens;
+            if (screens && screens.length > 0) {
+                return screenObj === screens[0] || (screens[0] && screenObj.name === screens[0].name);
+            }
+            return true;
+        }
+        if (Array.isArray(filter)) {
+            return filter.indexOf(screenObj.name) !== -1;
+        }
+        if (typeof filter === "string") {
+            return filter === screenObj.name;
+        }
+        return true;
+    }
 
     function toggleLauncher() {
         root.launcherVisible = !root.launcherVisible;
@@ -57,6 +82,8 @@ Singleton {
             "center": ["clock"],
             "right": ["media", "tray", "network", "battery", "audio", "power"],
             "opacity": 0.92,
+            "monitors": "all",
+            "blur": true,
             "notificationsEnabled": false
         })
         onLoadedValue: (parsed, _) => {
@@ -66,6 +93,8 @@ Singleton {
             if (parsed.center) root.barCenter = parsed.center;
             if (parsed.right) root.barRight = parsed.right;
             if (parsed.opacity !== undefined) root.barOpacity = parsed.opacity;
+            if (parsed.monitors !== undefined) root.barMonitors = parsed.monitors;
+            if (parsed.blur !== undefined) root.blurEnabled = parsed.blur;
             if (parsed.notificationsEnabled !== undefined) root.notificationsEnabled = parsed.notificationsEnabled;
         }
     }
@@ -78,12 +107,16 @@ Singleton {
             "enabled": true,
             "position": "bottom",
             "iconSize": 44,
+            "autoHide": false,
+            "monitors": "all",
             "pinned": []
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
             if (parsed.position) root.dockPosition = parsed.position;
             if (parsed.iconSize !== undefined) root.dockIconSize = parsed.iconSize;
+            if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
+            if (parsed.monitors !== undefined) root.dockMonitors = parsed.monitors;
             if (parsed.pinned) root.dockPinned = parsed.pinned;
         }
     }
@@ -96,6 +129,8 @@ Singleton {
             "center": root.barCenter,
             "right": root.barRight,
             "opacity": root.barOpacity,
+            "monitors": root.barMonitors,
+            "blur": root.blurEnabled,
             "notificationsEnabled": root.notificationsEnabled
         });
     }
@@ -115,6 +150,16 @@ Singleton {
         saveBarConfig();
     }
 
+    function setBarMonitors(m) {
+        root.barMonitors = m;
+        saveBarConfig();
+    }
+
+    function setBlurEnabled(enabled) {
+        root.blurEnabled = enabled;
+        saveBarConfig();
+    }
+
     function setNotificationsEnabled(enabled) {
         root.notificationsEnabled = enabled;
         saveBarConfig();
@@ -125,6 +170,8 @@ Singleton {
             "enabled": root.dockEnabled,
             "position": root.dockPosition,
             "iconSize": root.dockIconSize,
+            "autoHide": root.dockAutoHide,
+            "monitors": root.dockMonitors,
             "pinned": root.dockPinned
         });
     }
@@ -141,6 +188,16 @@ Singleton {
 
     function setDockIconSize(size) {
         root.dockIconSize = size;
+        saveDockConfig();
+    }
+
+    function setDockAutoHide(autoHide) {
+        root.dockAutoHide = autoHide;
+        saveDockConfig();
+    }
+
+    function setDockMonitors(m) {
+        root.dockMonitors = m;
         saveDockConfig();
     }
 
