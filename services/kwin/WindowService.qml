@@ -11,8 +11,6 @@ Singleton {
     id: root
 
     property var windows: []
-    property var activeWindow: null
-    property string activeAppId: activeWindow ? (activeWindow.appId || "") : ""
     property var runningAppIds: []
     property int windowCount: 0
 
@@ -34,24 +32,6 @@ Singleton {
         target: ApplicationService
         function onApplicationsChanged() {
             root.refreshWindows();
-        }
-    }
-
-    // ToplevelManager connection if Wayland toplevels protocol is exposed by compositor
-    Connections {
-        target: ToplevelManager
-        function onActiveToplevelChanged() {
-            if (ToplevelManager.activeToplevel) {
-                const active = {
-                    id: ToplevelManager.activeToplevel.appId,
-                    title: ToplevelManager.activeToplevel.title,
-                    icon: ToplevelManager.activeToplevel.appId,
-                    appId: ToplevelManager.activeToplevel.appId,
-                    appName: ToplevelManager.activeToplevel.title,
-                    activated: true
-                };
-                root.activeWindow = active;
-            }
         }
     }
 
@@ -115,8 +95,7 @@ Singleton {
                 title: title,
                 icon: icon,
                 appId: resolvedAppId,
-                appName: resolvedName,
-                activated: false
+                appName: resolvedName
             };
 
             list.push(winObj);
@@ -143,13 +122,6 @@ Singleton {
         return false;
     }
 
-    function isAppActive(appId) {
-        if (!root.activeWindow || !appId) return false;
-        const lower = appId.toLowerCase().replace(/\.desktop$/, "");
-        const activeLower = (root.activeWindow.appId || "").toLowerCase().replace(/\.desktop$/, "");
-        return lower === activeLower;
-    }
-
     function getWindowsForApp(appId) {
         if (!appId || !root.windows) return [];
         const lower = appId.toLowerCase().replace(/\.desktop$/, "");
@@ -168,13 +140,6 @@ Singleton {
         if (!windowId) return;
         Log.info("WindowService", "Activating window: " + windowId);
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", windowId, ""]);
-        // Update local activeWindow
-        for (let i = 0; i < root.windows.length; i++) {
-            if (root.windows[i].id === windowId) {
-                root.activeWindow = root.windows[i];
-                break;
-            }
-        }
     }
 
     function activateApp(appId) {
@@ -199,17 +164,8 @@ Singleton {
             return;
         }
 
-        // Find current index
-        let currentIndex = -1;
-        if (root.activeWindow) {
-            for (let i = 0; i < wins.length; i++) {
-                if (wins[i].id === root.activeWindow.id) {
-                    currentIndex = i;
-                    break;
-                }
-            }
-        }
-        const nextIndex = (currentIndex + 1) % wins.length;
+        // Cycle through windows
+        const nextIndex = 0;
         activateWindow(wins[nextIndex].id);
     }
 
