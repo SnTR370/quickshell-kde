@@ -11,8 +11,8 @@ Singleton {
     // Compositor detection
     readonly property string xdgDesktop: Quickshell.env("XDG_CURRENT_DESKTOP") || ""
     readonly property string kdeSession: Quickshell.env("KDE_FULL_SESSION") || ""
-    readonly property bool isKWin: xdgDesktop.toLowerCase().indexOf("kde") !== -1 || kdeSession === "true" || true
-    readonly property bool isWayland: true
+    readonly property bool isKWin: xdgDesktop.toLowerCase().indexOf("kde") !== -1 || kdeSession === "true"
+    readonly property bool isWayland: (Quickshell.env("WAYLAND_DISPLAY") !== "") || (Quickshell.env("XDG_SESSION_TYPE") === "wayland")
 
     // Outputs / Monitors (Dynamic discovery, never hardcoded)
     property string activeOutputName: ""
@@ -39,6 +39,7 @@ Singleton {
     signal activeOutputChanged(string outputName)
 
     function refreshActiveOutput() {
+        if (!root.isKWin || activeOutputProc.running) return;
         activeOutputProc.buf = "";
         activeOutputProc.running = true;
     }
@@ -64,10 +65,15 @@ Singleton {
 
     // --- Virtual Desktops Implementation ---
     function refreshDesktops() {
-        desktopsListProc.buf = "";
-        desktopsListProc.running = true;
-        currentDesktopProc.buf = "";
-        currentDesktopProc.running = true;
+        if (!root.isKWin) return;
+        if (!desktopsListProc.running) {
+            desktopsListProc.buf = "";
+            desktopsListProc.running = true;
+        }
+        if (!currentDesktopProc.running) {
+            currentDesktopProc.buf = "";
+            currentDesktopProc.running = true;
+        }
     }
 
     Process {
@@ -105,10 +111,11 @@ Singleton {
     }
 
     function parseDesktopsLiteral(raw) {
-        // Raw looks like: [Variant: [Argument: a(uss) {[Argument: (uss) 0, "guid-1", "Desktop 1"], [Argument: (uss) 1, "guid-2", "Desktop 2"]}]]
+        // Raw matches: [Variant: [Argument: a(uss) {[Argument: (uss) 0, "guid-1", "Desktop 1"], ...}]]
+        // or a(iss) signatures depending on KWin version
         try {
             const list = [];
-            const regex = /\[Argument:\s*\(uss\)\s*(\d+),\s*"([^"]+)",\s*"([^"]+)"\]/g;
+            const regex = /\[Argument:\s*\([ui]ss\)\s*(\d+),\s*"([^"]+)",\s*"([^"]+)"\]/g;
             let match;
             while ((match = regex.exec(raw)) !== null) {
                 const idx = parseInt(match[1]);
@@ -163,6 +170,7 @@ Singleton {
     }
 
     function setCurrentDesktop(idOrIndex) {
+        if (!root.isKWin) return;
         if (typeof idOrIndex === "number") {
             Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.setCurrentDesktop", String(idOrIndex + 1)]);
         } else if (typeof idOrIndex === "string") {
@@ -174,22 +182,26 @@ Singleton {
     }
 
     function nextDesktop() {
+        if (!root.isKWin) return;
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.nextDesktop"]);
         desktopRefreshTimer.restart();
     }
 
     function previousDesktop() {
+        if (!root.isKWin) return;
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.previousDesktop"]);
         desktopRefreshTimer.restart();
     }
 
     function createDesktop(name) {
+        if (!root.isKWin) return;
         const nextPos = root.desktops.length;
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager.createDesktop", String(nextPos), name || ("Desktop " + (nextPos + 1))]);
         desktopRefreshTimer.restart();
     }
 
     function toggleShowDesktop() {
+        if (!root.isKWin) return;
         root.showingDesktop = !root.showingDesktop;
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.showDesktop", root.showingDesktop ? "true" : "false"]);
     }
@@ -206,7 +218,7 @@ Singleton {
         Quickshell.execDetached(["loginctl", "lock-session"]);
     }
 
-    // Periodic refresh and event debouncer
+    // Debounce timer for immediate user-invoked desktop transitions
     Timer {
         id: desktopRefreshTimer
         interval: 150
@@ -214,9 +226,13 @@ Singleton {
         onTriggered: root.refreshDesktops()
     }
 
+    // Documented Polling:
+    // A lightweight 3000ms periodic refresh timer is maintained as an event fallback
+    // to synchronize virtual desktop changes triggered externally (e.g. KWin global shortcuts,
+    // edge gestures, or trackpad multi-finger swipes) that do not route through Quickshell.
     Timer {
         interval: 3000
-        running: true
+        running: root.isKWin
         repeat: true
         onTriggered: {
             root.refreshDesktops();
@@ -226,7 +242,9 @@ Singleton {
 
     Component.onCompleted: {
         Log.info("KWinService", "Initialized KWin Adapter (Wayland: " + root.isWayland + ", Detected: " + root.isKWin + ")");
-        root.refreshDesktops();
-        root.refreshActiveOutput();
+        if (root.isKWin) {
+            root.refreshDesktops();
+            root.refreshActiveOutput();
+        }
     }
 }
