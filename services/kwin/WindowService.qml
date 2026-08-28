@@ -16,7 +16,6 @@ Singleton {
     property int windowCount: 0
 
     signal windowsUpdated()
-    signal activeWindowChanged(var window)
 
     // Watch desktop changes from KWinService to refresh window state
     Connections {
@@ -25,6 +24,14 @@ Singleton {
             root.refreshWindows();
         }
         function onDesktopsUpdated() {
+            root.refreshWindows();
+        }
+    }
+
+    // Refresh window resolution when application scanner finishes
+    Connections {
+        target: ApplicationService
+        function onApplicationsChanged() {
             root.refreshWindows();
         }
     }
@@ -43,7 +50,6 @@ Singleton {
                     activated: true
                 };
                 root.activeWindow = active;
-                root.activeWindowChanged(active);
             }
         }
     }
@@ -165,7 +171,6 @@ Singleton {
         for (let i = 0; i < root.windows.length; i++) {
             if (root.windows[i].id === windowId) {
                 root.activeWindow = root.windows[i];
-                root.activeWindowChanged(root.windows[i]);
                 break;
             }
         }

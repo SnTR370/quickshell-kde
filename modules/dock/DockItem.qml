@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import "../../services"
 import "../../components"
+import "."
 
 Item {
     id: root
