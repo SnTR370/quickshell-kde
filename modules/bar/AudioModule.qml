@@ -6,7 +6,7 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: parent ? parent.height : 26
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: (audioMouse.containsMouse || root.popupOpen) ? Theme.hover : "transparent"

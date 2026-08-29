@@ -8,7 +8,7 @@ Surface {
 
     readonly property var activeDisplay: BrightnessService.lastChangedDisplay || BrightnessService.controlledDisplay
     readonly property string displayLabel: activeDisplay ? activeDisplay.label : "Brightness"
-    readonly property real displayRatio: activeDisplay ? activeDisplay.ratio : BrightnessService.brightness
+    readonly property real displayRatio: (activeDisplay && activeDisplay.ratio !== undefined) ? activeDisplay.ratio : (BrightnessService.brightness || 0.0)
     readonly property int displayPercentage: Math.round(displayRatio * 100)
     readonly property bool isInternal: activeDisplay ? activeDisplay.isInternal : true
 

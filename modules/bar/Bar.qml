@@ -98,6 +98,7 @@ Variants {
                 // Left Section
                 RowLayout {
                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                    Layout.fillHeight: true
                     spacing: 4
 
                     Repeater {
@@ -105,6 +106,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
@@ -119,6 +122,7 @@ Variants {
                 // Center Section
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                    Layout.fillHeight: true
                     spacing: 4
 
                     Repeater {
@@ -126,6 +130,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
@@ -140,6 +146,7 @@ Variants {
                 // Right Section
                 RowLayout {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    Layout.fillHeight: true
                     spacing: 4
 
                     Repeater {
@@ -147,6 +154,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
@@ -167,6 +176,7 @@ Variants {
                 // Top Section
                 ColumnLayout {
                     Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                    Layout.fillWidth: true
                     spacing: 8
 
                     Repeater {
@@ -174,6 +184,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
@@ -188,6 +200,7 @@ Variants {
                 // Center Section
                 ColumnLayout {
                     Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+                    Layout.fillWidth: true
                     spacing: 8
 
                     Repeater {
@@ -195,6 +208,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
@@ -209,6 +224,7 @@ Variants {
                 // Bottom Section
                 ColumnLayout {
                     Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
+                    Layout.fillWidth: true
                     spacing: 8
 
                     Repeater {
@@ -216,6 +232,8 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
                                 if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;

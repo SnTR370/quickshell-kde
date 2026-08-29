@@ -11,10 +11,18 @@ Surface {
     property string surfaceEdge: "top"
 
     visible: MprisService.hasPlayers
-    implicitHeight: parent ? parent.height : 26
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: (mediaMouse.containsMouse || ConfigService.mediaPopupVisible) ? Theme.hover : "transparent"
+
+    MouseArea {
+        id: mediaMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: ConfigService.toggleMediaPopup()
+    }
 
     RowLayout {
         id: layout
@@ -36,15 +44,6 @@ Surface {
             elide: Text.ElideRight
             Layout.maximumWidth: 160
         }
-    }
-
-    MouseArea {
-        id: mediaMouse
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        z: -1
-        onClicked: ConfigService.toggleMediaPopup()
     }
 
     // Lazy-loaded Media Popup

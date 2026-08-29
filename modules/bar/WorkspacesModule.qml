@@ -6,7 +6,10 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: parent ? parent.height : 26
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: rowLayout.implicitWidth + 4
     radius: Theme.radiusSmall
     color: "transparent"

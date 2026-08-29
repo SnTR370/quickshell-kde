@@ -6,7 +6,10 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: parent ? parent.height : 26
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: netMouse.containsMouse ? Theme.hover : "transparent"

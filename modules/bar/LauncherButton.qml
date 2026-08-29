@@ -5,17 +5,21 @@ import "../../components"
 Item {
     id: root
 
-    implicitWidth: parent ? parent.height : 26
-    implicitHeight: parent ? parent.height : 26
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+
+    implicitWidth: Math.max(20, ConfigService.barHeight - 6)
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
 
     IconButton {
         anchors.centerIn: parent
-        size: Math.min(root.implicitHeight - 2, 26)
+        size: Math.min(root.implicitHeight, 26)
         icon: "start-here-kde"
         iconColor: Theme.primary
-        backgroundColor: (mouseArea.containsMouse || ConfigService.launcherVisible) ? Theme.alpha(Theme.primary, 0.2) : "transparent"
-        tooltip: "Application Launcher"
         active: ConfigService.launcherVisible
-        onClicked: ConfigService.toggleLauncher()
+        activeColor: Theme.alpha(Theme.primary, 0.2)
+        hoverColor: Theme.alpha(Theme.primary, 0.12)
+        tooltip: "Application Launcher"
+        onClicked: ConfigService.toggleLauncher(root.barWindowRef ? root.barWindowRef.screen : null)
     }
 }

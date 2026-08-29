@@ -79,10 +79,10 @@ AnchoredPopup {
                 Layout.fillWidth: true
                 value: AudioService.volume
                 minimumValue: 0.0
-                maximumValue: 1.0
+                maximumValue: 1.5
                 stepSize: 0.02
                 progressColor: AudioService.muted ? Theme.error : Theme.primary
-                onValueModified: val => AudioService.setVolume(val)
+                onValueModified: val => AudioService.setVolume(val, false)
             }
 
             Text {

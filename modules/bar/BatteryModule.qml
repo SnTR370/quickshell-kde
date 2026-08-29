@@ -6,8 +6,11 @@ import "../../components"
 Surface {
     id: root
 
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+
     visible: PowerService.isPresent
-    implicitHeight: parent ? parent.height : 26
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: batMouse.containsMouse ? Theme.hover : "transparent"

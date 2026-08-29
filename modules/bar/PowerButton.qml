@@ -10,16 +10,18 @@ Item {
     property string surfaceEdge: "top"
     property bool popupOpen: false
 
-    implicitWidth: parent ? parent.height : 26
-    implicitHeight: parent ? parent.height : 26
+    implicitWidth: Math.max(20, ConfigService.barHeight - 6)
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
 
     IconButton {
         id: powerIcon
         anchors.centerIn: parent
-        size: Math.min(root.implicitHeight - 2, 26)
+        size: Math.min(root.implicitHeight, 26)
         icon: "system-shutdown"
         iconColor: root.popupOpen ? Theme.contrastColor(Theme.error) : Theme.error
-        backgroundColor: root.popupOpen ? Theme.error : (mouseArea.containsMouse ? Theme.alpha(Theme.error, 0.15) : "transparent")
+        active: root.popupOpen
+        activeColor: Theme.error
+        hoverColor: Theme.alpha(Theme.error, 0.15)
         tooltip: "Power / Session"
         onClicked: root.popupOpen = !root.popupOpen
     }

@@ -11,7 +11,7 @@ Surface {
     property string surfaceEdge: "top"
     property bool popupOpen: false
 
-    implicitHeight: parent ? parent.height : 26
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: (brightMouse.containsMouse || root.popupOpen) ? Theme.hover : "transparent"
