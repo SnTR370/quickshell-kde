@@ -19,6 +19,7 @@ Variants {
     Component { id: modNetwork; NetworkModule {} }
     Component { id: modBattery; BatteryModule {} }
     Component { id: modAudio; AudioModule {} }
+    Component { id: modBrightness; BrightnessModule {} }
     Component { id: modPower; PowerButton {} }
 
     function getModuleComponent(name) {
@@ -31,6 +32,7 @@ Variants {
             case "network": return modNetwork;
             case "battery": return modBattery;
             case "audio": return modAudio;
+            case "brightness": return modBrightness;
             case "power": return modPower;
             default: return null;
         }
@@ -65,7 +67,7 @@ Variants {
 
         implicitHeight: isVertical ? -1 : ConfigService.barHeight
         implicitWidth: isVertical ? ConfigService.barHeight : -1
-        exclusiveZone: ConfigService.barReserveSpace ? (ConfigService.barHeight + (isFloating ? offset * 2 : 0)) : 0
+        exclusiveZone: ConfigService.barReserveSpace ? (ConfigService.barHeight + (isFloating ? offset : 0)) : 0
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:bar"

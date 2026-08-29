@@ -33,8 +33,19 @@ Variants {
             const res = [];
             for (let i = 0; i < running.length; i++) {
                 const r = running[i];
-                if (pinned.indexOf(r) === -1) {
-                    res.push(r);
+                const app = ApplicationService.getAppById(r);
+                const canonId = app ? app.id : r;
+                let isPinned = false;
+                for (let p = 0; p < pinned.length; p++) {
+                    const pApp = ApplicationService.getAppById(pinned[p]);
+                    const pCanon = pApp ? pApp.id : pinned[p];
+                    if (pCanon === canonId || pinned[p] === r || pinned[p] === canonId) {
+                        isPinned = true;
+                        break;
+                    }
+                }
+                if (!isPinned && res.indexOf(canonId) === -1) {
+                    res.push(canonId);
                 }
             }
             return res;
@@ -56,7 +67,7 @@ Variants {
 
         implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (ConfigService.dockIconSize + 20)
         implicitWidth: isVertical ? (ConfigService.dockIconSize + 20) : (dockSurface.implicitWidth + 24)
-        exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (ConfigService.dockIconSize + 16 + (isFloating ? offset * 2 : 0))
+        exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (ConfigService.dockIconSize + 16 + (isFloating ? offset : 0))
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:dock"

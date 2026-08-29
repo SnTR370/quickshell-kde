@@ -45,7 +45,7 @@ Every desktop surface (Bar, Dock, future sidebars) is governed by a unified surf
   * Maximized windows take full screen dimensions ($W \times H$).
   * The floating Bar and Dock float on `WlrLayer.Top` over maximized windows.
 * **Tiling / Reserved Mode (`reserveSpace: true`)**:
-  * `exclusiveZone: thickness + (floating ? edgeOffset * 2 : 0)`
+  * `exclusiveZone: thickness + (floating ? edgeOffset : 0)`
   * KWin shrinks the usable work area for maximized applications so they do not overlap the surface.
 
 ### 2.2 Four-Edge Geometry & Orientation Matrix
