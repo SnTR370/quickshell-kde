@@ -7,10 +7,10 @@ Surface {
     id: root
 
     visible: PowerService.isPresent
-    implicitHeight: 34
-    implicitWidth: layout.implicitWidth + 12
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: batMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: batMouse.containsMouse ? Theme.hover : "transparent"
 
     readonly property string iconName: {
         if (PowerService.isCharging) return "battery-charging";
@@ -31,11 +31,11 @@ Surface {
     RowLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 6
+        spacing: 4
 
         SvgIcon {
             icon: root.iconName
-            size: 16
+            size: 14
             color: root.iconColor
         }
 

@@ -11,18 +11,18 @@ Surface {
     property string surfaceEdge: "top"
 
     visible: MprisService.hasPlayers
-    implicitHeight: 34
-    implicitWidth: layout.implicitWidth + 12
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: (mediaMouse.containsMouse || ConfigService.mediaPopupVisible) ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: (mediaMouse.containsMouse || ConfigService.mediaPopupVisible) ? Theme.hover : "transparent"
 
     RowLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 6
+        spacing: 4
 
         IconButton {
-            size: 24
+            size: Math.min(root.implicitHeight - 4, 20)
             icon: MprisService.isPlaying ? "media-playback-pause" : "media-playback-start"
             iconColor: Theme.accent
             onClicked: MprisService.playPause()

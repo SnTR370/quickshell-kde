@@ -19,7 +19,7 @@ Singleton {
     property alias barPosition: root.barEdge // Backward compatibility alias
     property int barEdgeOffset: 8
     property bool barReserveSpace: false
-    property int barHeight: 44
+    property int barHeight: 30
     property var barLeft: ["launcher", "workspaces"]
     property var barCenter: ["clock"]
     property var barRight: ["media", "tray", "network", "battery", "audio", "brightness", "power"]

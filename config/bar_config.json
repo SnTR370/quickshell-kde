@@ -5,7 +5,7 @@
   "position": "top",
   "edgeOffset": 8,
   "reserveSpace": false,
-  "height": 44,
+  "height": 30,
   "left": ["launcher", "workspaces"],
   "center": ["clock"],
   "right": ["media", "tray", "network", "battery", "audio", "brightness", "power"],

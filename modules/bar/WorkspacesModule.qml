@@ -6,15 +6,15 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: 34
-    implicitWidth: rowLayout.implicitWidth + 8
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: rowLayout.implicitWidth + 4
     radius: Theme.radiusSmall
-    color: Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: "transparent"
 
     RowLayout {
         id: rowLayout
         anchors.centerIn: parent
-        spacing: 4
+        spacing: 3
 
         Repeater {
             model: KWinService.desktops
@@ -24,8 +24,8 @@ Surface {
                 required property var modelData
                 required property int index
 
-                implicitWidth: modelData.active ? 28 : 22
-                implicitHeight: 22
+                implicitWidth: modelData.active ? 24 : 18
+                implicitHeight: Math.min(root.implicitHeight - 6, 20)
                 radius: Theme.radiusSmall
                 color: modelData.active ? Theme.primary : (wsMouse.containsMouse ? Theme.hover : "transparent")
 

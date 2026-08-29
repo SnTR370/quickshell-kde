@@ -5,16 +5,15 @@ import "../../components"
 Item {
     id: root
 
-    implicitWidth: 36
-    implicitHeight: 36
+    implicitWidth: parent ? parent.height : 26
+    implicitHeight: parent ? parent.height : 26
 
     IconButton {
         anchors.centerIn: parent
-        size: 34
+        size: Math.min(root.implicitHeight - 2, 26)
         icon: "start-here-kde"
         iconColor: Theme.primary
-        backgroundColor: Theme.alpha(Theme.primary, 0.15)
-        hoverColor: Theme.alpha(Theme.primary, 0.25)
+        backgroundColor: (mouseArea.containsMouse || ConfigService.launcherVisible) ? Theme.alpha(Theme.primary, 0.2) : "transparent"
         tooltip: "Application Launcher"
         active: ConfigService.launcherVisible
         onClicked: ConfigService.toggleLauncher()

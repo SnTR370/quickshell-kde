@@ -11,10 +11,10 @@ Surface {
     property string surfaceEdge: "top"
     property bool popupOpen: false
 
-    implicitHeight: 34
-    implicitWidth: layout.implicitWidth + 14
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: brightMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: (brightMouse.containsMouse || root.popupOpen) ? Theme.hover : "transparent"
     visible: BrightnessService.supported
 
     readonly property string iconName: {
@@ -27,11 +27,11 @@ Surface {
     RowLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 6
+        spacing: 4
 
         SvgIcon {
             icon: root.iconName
-            size: 16
+            size: 14
             color: Theme.warning
         }
 
@@ -39,7 +39,7 @@ Surface {
             text: BrightnessService.percentage + "%"
             color: Theme.foreground
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeMedium
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
         }
     }

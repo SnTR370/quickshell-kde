@@ -6,10 +6,10 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: 34
-    implicitWidth: layout.implicitWidth + 12
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: netMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: netMouse.containsMouse ? Theme.hover : "transparent"
 
     readonly property string iconName: {
         if (!NetworkService.connected) return "network-disconnect";
@@ -30,11 +30,11 @@ Surface {
     RowLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 6
+        spacing: 4
 
         SvgIcon {
             icon: root.iconName
-            size: 16
+            size: 14
             color: NetworkService.connected ? Theme.primary : Theme.error
         }
 

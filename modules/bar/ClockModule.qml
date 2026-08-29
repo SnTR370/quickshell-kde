@@ -6,10 +6,10 @@ import "../../components"
 Surface {
     id: root
 
-    implicitHeight: 34
-    implicitWidth: layout.implicitWidth + 16
+    implicitHeight: parent ? parent.height : 26
+    implicitWidth: layout.implicitWidth + 10
     radius: Theme.radiusSmall
-    color: clockMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: clockMouse.containsMouse ? Theme.hover : "transparent"
 
     property string currentTime: ""
     property string currentDate: ""
@@ -32,11 +32,11 @@ Surface {
     RowLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 8
+        spacing: 6
 
         SvgIcon {
             icon: "preferences-system-time"
-            size: 16
+            size: 14
             color: Theme.accent
         }
 
@@ -44,7 +44,7 @@ Surface {
             text: root.currentTime
             color: Theme.foreground
             font.family: Theme.fontFamilyMono
-            font.pixelSize: Theme.fontSizeMedium
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
         }
 
@@ -52,7 +52,7 @@ Surface {
             text: root.currentDate
             color: Theme.foregroundMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
+            font.pixelSize: Theme.fontSizeSmall - 1
         }
     }
 

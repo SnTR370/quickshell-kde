@@ -91,14 +91,14 @@ Variants {
             RowLayout {
                 visible: !barWindow.isVertical
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 8
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 4
 
                 // Left Section
                 RowLayout {
                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                    spacing: 8
+                    spacing: 4
 
                     Repeater {
                         model: ConfigService.barLeft
@@ -119,7 +119,7 @@ Variants {
                 // Center Section
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                    spacing: 8
+                    spacing: 4
 
                     Repeater {
                         model: ConfigService.barCenter
@@ -140,7 +140,7 @@ Variants {
                 // Right Section
                 RowLayout {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                    spacing: 8
+                    spacing: 4
 
                     Repeater {
                         model: ConfigService.barRight
