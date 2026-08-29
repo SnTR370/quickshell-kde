@@ -28,7 +28,7 @@ Variants {
         }
 
         exclusiveZone: 0
-        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:launcher"
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 

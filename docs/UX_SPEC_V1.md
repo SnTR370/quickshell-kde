@@ -142,12 +142,13 @@ KWin Wayland organizes surfaces into well-defined layers (`zwlr_layer_shell_v1`)
 ```
 ┌────────────────────────────────────────────────────────┐
 │ WlrLayer.Overlay                                       │
-│ - Full-screen Launcher Overlay                         │
 │ - On-Screen Display HUD (OSDHost)                      │
 │ - Toast Notifications (ToastHost)                      │
 │ - Spectacle Interactive Region Screenshot Overlay      │
 ├────────────────────────────────────────────────────────┤
 │ WlrLayer.Top                                           │
+│ - Settings Dashboard (SettingsWindow)                  │
+│ - Full-screen Application Launcher (LauncherWindow)    │
 │ - Floating Top/Side Bar                                │
 │ - Floating Bottom/Side Dock                            │
 │ - Anchored Contextual Popups & Flyouts                 │
@@ -161,9 +162,12 @@ KWin Wayland organizes surfaces into well-defined layers (`zwlr_layer_shell_v1`)
 ```
 
 * **Screenshot Overlay Stacking**:
-  * Bar and Dock live in `WlrLayer.Top`.
+  * Bar, Dock, SettingsWindow, and LauncherWindow live in `WlrLayer.Top`.
   * Spectacle and system screen grabbers operate on `WlrLayer.Overlay`.
-  * As a result, screenshot selection UI cleanly overlays all shell panels without visual glitches or focus hijacking.
+  * As a result, Spectacle's interactive rectangular selection UI cleanly renders above all shell surfaces and settings dashboards without focus collision or occlusion.
+* **Verification Status**:
+  * Layer Shell protocol hierarchy (`WlrLayer.Top` < `WlrLayer.Overlay`) verified structurally in engine definitions.
+  * Interactive user drag-rectangle over live settings window: marked **MANUAL** verification requirement for end-to-end human evaluation.
 * **Fullscreen Application Handling**:
   * When an application goes fullscreen, KWin displays the fullscreen toplevel above `WlrLayer.Top`, cleanly hiding floating panels without manual visibility polling.
 
