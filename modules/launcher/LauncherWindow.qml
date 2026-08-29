@@ -29,6 +29,7 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "quickshell:launcher"
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         BackgroundEffect.blurRegion: Region {

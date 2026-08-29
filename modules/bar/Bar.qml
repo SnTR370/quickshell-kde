@@ -9,7 +9,6 @@ import "."
 Variants {
     id: root
 
-    // Multi-monitor variant discovery
     model: Quickshell.screens
 
     Component { id: modLauncher; LauncherButton {} }
@@ -43,32 +42,47 @@ Variants {
 
         screen: modelData
         color: "transparent"
-        visible: ConfigService.isScreenAllowed(modelData, ConfigService.barMonitors)
+        visible: ConfigService.barEnabled && ConfigService.isScreenAllowed(modelData, ConfigService.barMonitors)
 
-        readonly property bool isVertical: ConfigService.barPosition === "left" || ConfigService.barPosition === "right"
+        readonly property string edge: ConfigService.barEdge
+        readonly property bool isVertical: edge === "left" || edge === "right"
+        readonly property bool isFloating: ConfigService.barFloating
+        readonly property int offset: isFloating ? ConfigService.barEdgeOffset : 0
 
         anchors {
-            top: barWindow.isVertical || ConfigService.barPosition === "top"
-            bottom: barWindow.isVertical || ConfigService.barPosition === "bottom"
-            left: !barWindow.isVertical || ConfigService.barPosition === "left"
-            right: !barWindow.isVertical || ConfigService.barPosition === "right"
+            top: barWindow.isVertical || barWindow.edge === "top"
+            bottom: barWindow.isVertical || barWindow.edge === "bottom"
+            left: !barWindow.isVertical || barWindow.edge === "left"
+            right: !barWindow.isVertical || barWindow.edge === "right"
+        }
+
+        margins {
+            top: (!barWindow.isFloating) ? 0 : ((barWindow.edge === "top" || barWindow.isVertical) ? barWindow.offset : 0)
+            bottom: (!barWindow.isFloating) ? 0 : ((barWindow.edge === "bottom" || barWindow.isVertical) ? barWindow.offset : 0)
+            left: (!barWindow.isFloating) ? 0 : ((barWindow.edge === "left" || !barWindow.isVertical) ? barWindow.offset : 0)
+            right: (!barWindow.isFloating) ? 0 : ((barWindow.edge === "right" || !barWindow.isVertical) ? barWindow.offset : 0)
         }
 
         implicitHeight: isVertical ? -1 : ConfigService.barHeight
         implicitWidth: isVertical ? ConfigService.barHeight : -1
-        exclusiveZone: ConfigService.barHeight
+        exclusiveZone: ConfigService.barReserveSpace ? (ConfigService.barHeight + (isFloating ? offset * 2 : 0)) : 0
 
         WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell:bar"
 
         BackgroundEffect.blurRegion: Region {
             item: ConfigService.blurEnabled ? barSurface : null
         }
 
+        mask: Region {
+            item: barSurface
+        }
+
         Surface {
             id: barSurface
             anchors.fill: parent
-            anchors.margins: 4
-            radius: Theme.radiusMedium
+            radius: barWindow.isFloating ? Theme.radiusMedium : 0
+            borderVisible: barWindow.isFloating
             color: Theme.alpha(Theme.background, ConfigService.barOpacity)
 
             // Horizontal Bar Layout
@@ -89,6 +103,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }
@@ -106,6 +124,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }
@@ -123,6 +145,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }
@@ -146,6 +172,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }
@@ -163,6 +193,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }
@@ -180,6 +214,10 @@ Variants {
                         Loader {
                             required property var modelData
                             sourceComponent: root.getModuleComponent(modelData)
+                            onLoaded: {
+                                if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                            }
                         }
                     }
                 }

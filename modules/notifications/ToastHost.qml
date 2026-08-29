@@ -33,6 +33,7 @@ Variants {
         exclusiveZone: 0
 
         WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "quickshell:notifications"
 
         ColumnLayout {
             id: toastColumn

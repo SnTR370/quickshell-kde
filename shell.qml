@@ -9,7 +9,6 @@ import "./modules/dock"
 import "./modules/launcher"
 import "./modules/notifications"
 import "./modules/osd"
-import "./modules/media"
 import "./modules/settings"
 
 ShellRoot {
@@ -18,7 +17,7 @@ ShellRoot {
     // Top / Side Bar
     Bar {}
 
-    // Bottom Dock
+    // Bottom / Side Dock
     Dock {}
 
     // Application Launcher Window
@@ -29,9 +28,6 @@ ShellRoot {
 
     // Volume / Brightness OSD Host
     OSDHost {}
-
-    // Floating Media Popup
-    MediaPopup {}
 
     // Settings Dashboard
     SettingsWindow {}

@@ -28,6 +28,7 @@ Variants {
 
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "quickshell:settings"
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
         BackgroundEffect.blurRegion: Region {
@@ -46,8 +47,8 @@ Variants {
         Surface {
             id: mainContainer
             anchors.centerIn: parent
-            width: Math.min(680, parent.width - 40)
-            height: Math.min(620, parent.height - 60)
+            width: Math.min(700, parent.width - 40)
+            height: Math.min(640, parent.height - 60)
             radius: Theme.radiusLarge
             color: Theme.alpha(Theme.background, Theme.popupOpacity)
             border.color: Theme.border
@@ -193,16 +194,49 @@ Variants {
                                 anchors.margins: 12
                                 spacing: 10
 
-                                Text {
-                                    text: "Panel Bar"
-                                    color: Theme.foreground
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeMedium
-                                    font.bold: true
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Panel Bar"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.bold: true
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.barEnabled ? "Bar Enabled" : "Bar Disabled"
+                                        size: 28
+                                        backgroundColor: ConfigService.barEnabled ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.barEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setBarEnabled(!ConfigService.barEnabled)
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Surface Mode"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.barFloating ? "Floating Island" : "Attached Panel"
+                                        size: 28
+                                        backgroundColor: ConfigService.barFloating ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.barFloating ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setBarFloating(!ConfigService.barFloating)
+                                    }
                                 }
 
                                 Text {
-                                    text: "Bar Edge Position"
+                                    text: "Bar Edge Placement"
                                     color: Theme.foregroundMuted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
@@ -226,15 +260,15 @@ Variants {
                                             Layout.fillWidth: true
                                             implicitHeight: 32
                                             radius: Theme.radiusSmall
-                                            color: (ConfigService.barPosition === modelData.id) ? Theme.primary : (pMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+                                            color: (ConfigService.barEdge === modelData.id) ? Theme.primary : (pMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
 
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: posBtn.modelData.name
-                                                color: (ConfigService.barPosition === posBtn.modelData.id) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                color: (ConfigService.barEdge === posBtn.modelData.id) ? Theme.contrastColor(Theme.primary) : Theme.foreground
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: Theme.fontSizeSmall
-                                                font.bold: ConfigService.barPosition === posBtn.modelData.id
+                                                font.bold: ConfigService.barEdge === posBtn.modelData.id
                                             }
 
                                             MouseArea {
@@ -242,16 +276,56 @@ Variants {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                onClicked: ConfigService.setBarPosition(posBtn.modelData.id)
+                                                onClicked: ConfigService.setBarEdge(posBtn.modelData.id)
                                             }
                                         }
                                     }
                                 }
 
                                 RowLayout {
+                                    visible: ConfigService.barFloating
                                     Layout.fillWidth: true
                                     Text {
-                                        text: "Bar Height (" + ConfigService.barHeight + " px)"
+                                        text: "Floating Edge Offset (" + ConfigService.barEdgeOffset + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 0
+                                        maximumValue: 32
+                                        stepSize: 1
+                                        value: ConfigService.barEdgeOffset
+                                        onValueModified: val => ConfigService.setBarEdgeOffset(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Reserve Screen Space (Struts)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.barReserveSpace ? "Reserved (Shrinks Apps)" : "Zero Strut (Maximized Apps Fill Screen)"
+                                        size: 28
+                                        backgroundColor: ConfigService.barReserveSpace ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.barReserveSpace ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setBarReserveSpace(!ConfigService.barReserveSpace)
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Bar Thickness (" + ConfigService.barHeight + " px)"
                                         color: Theme.foregroundMuted
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeSmall
@@ -384,7 +458,7 @@ Variants {
                                     }
 
                                     IconButton {
-                                        text: ConfigService.dockEnabled ? "Enabled" : "Disabled"
+                                        text: ConfigService.dockEnabled ? "Dock Enabled" : "Dock Disabled"
                                         size: 28
                                         backgroundColor: ConfigService.dockEnabled ? Theme.primary : Theme.surfaceVariant
                                         iconColor: ConfigService.dockEnabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
@@ -392,8 +466,28 @@ Variants {
                                     }
                                 }
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Surface Mode"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockFloating ? "Floating Island" : "Attached Dock"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockFloating ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockFloating ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockFloating(!ConfigService.dockFloating)
+                                    }
+                                }
+
                                 Text {
-                                    text: "Dock Edge Position"
+                                    text: "Dock Edge Placement"
                                     color: Theme.foregroundMuted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
@@ -417,15 +511,15 @@ Variants {
                                             Layout.fillWidth: true
                                             implicitHeight: 32
                                             radius: Theme.radiusSmall
-                                            color: (ConfigService.dockPosition === modelData.id) ? Theme.primary : (dpMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+                                            color: (ConfigService.dockEdge === modelData.id) ? Theme.primary : (dpMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
 
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: dPosBtn.modelData.name
-                                                color: (ConfigService.dockPosition === dPosBtn.modelData.id) ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                color: (ConfigService.dockEdge === dPosBtn.modelData.id) ? Theme.contrastColor(Theme.primary) : Theme.foreground
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: Theme.fontSizeSmall
-                                                font.bold: ConfigService.dockPosition === dPosBtn.modelData.id
+                                                font.bold: ConfigService.dockEdge === dPosBtn.modelData.id
                                             }
 
                                             MouseArea {
@@ -433,9 +527,49 @@ Variants {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                onClicked: ConfigService.setDockPosition(dPosBtn.modelData.id)
+                                                onClicked: ConfigService.setDockEdge(dPosBtn.modelData.id)
                                             }
                                         }
+                                    }
+                                }
+
+                                RowLayout {
+                                    visible: ConfigService.dockFloating
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Floating Edge Offset (" + ConfigService.dockEdgeOffset + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 0
+                                        maximumValue: 32
+                                        stepSize: 1
+                                        value: ConfigService.dockEdgeOffset
+                                        onValueModified: val => ConfigService.setDockEdgeOffset(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        text: "Reserve Screen Space (Struts)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockReserveSpace ? "Reserved (Shrinks Apps)" : "Zero Strut (Maximized Apps Fill Screen)"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockReserveSpace ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockReserveSpace ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockReserveSpace(!ConfigService.dockReserveSpace)
                                     }
                                 }
 

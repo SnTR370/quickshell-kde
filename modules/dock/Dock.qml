@@ -19,7 +19,10 @@ Variants {
         color: "transparent"
         visible: ConfigService.dockEnabled && ConfigService.isScreenAllowed(modelData, ConfigService.dockMonitors)
 
-        readonly property bool isVertical: ConfigService.dockPosition === "left" || ConfigService.dockPosition === "right"
+        readonly property string edge: ConfigService.dockEdge
+        readonly property bool isVertical: edge === "left" || edge === "right"
+        readonly property bool isFloating: ConfigService.dockFloating
+        readonly property int offset: isFloating ? ConfigService.dockEdgeOffset : 0
         readonly property bool autoHide: ConfigService.dockAutoHide
         property bool hoverRevealed: false
         readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverArea.containsMouse
@@ -38,23 +41,31 @@ Variants {
         }
 
         anchors {
-            bottom: ConfigService.dockPosition === "bottom"
-            top: ConfigService.dockPosition === "top"
-            left: ConfigService.dockPosition === "left"
-            right: ConfigService.dockPosition === "right"
+            bottom: dockWindow.edge === "bottom"
+            top: dockWindow.edge === "top"
+            left: dockWindow.edge === "left"
+            right: dockWindow.edge === "right"
+        }
+
+        margins {
+            bottom: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "bottom" ? dockWindow.offset : 0)
+            top: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "top" ? dockWindow.offset : 0)
+            left: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "left" ? dockWindow.offset : 0)
+            right: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "right" ? dockWindow.offset : 0)
         }
 
         implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (ConfigService.dockIconSize + 20)
         implicitWidth: isVertical ? (ConfigService.dockIconSize + 20) : (dockSurface.implicitWidth + 24)
-        exclusiveZone: autoHide ? 0 : (ConfigService.dockIconSize + 16)
+        exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (ConfigService.dockIconSize + 16 + (isFloating ? offset * 2 : 0))
 
         WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell:dock"
 
         BackgroundEffect.blurRegion: Region {
             item: ConfigService.blurEnabled ? dockSurface : null
         }
 
-        // Mask region for click-through when hidden
+        // Mask region for click-through when hidden or hovering around island
         mask: Region {
             item: dockWindow.isRevealed ? dockSurface : edgeTrigger
         }
@@ -82,13 +93,15 @@ Variants {
             id: edgeTrigger
             visible: dockWindow.autoHide
             anchors {
-                bottom: ConfigService.dockPosition === "bottom" ? parent.bottom : undefined
-                top: ConfigService.dockPosition === "top" ? parent.top : undefined
-                left: ConfigService.dockPosition === "left" ? parent.left : (dockWindow.isVertical ? undefined : parent.left)
-                right: ConfigService.dockPosition === "right" ? parent.right : (dockWindow.isVertical ? undefined : parent.right)
+                bottom: dockWindow.edge === "bottom" ? parent.bottom : undefined
+                top: dockWindow.edge === "top" ? parent.top : undefined
+                left: dockWindow.edge === "left" ? parent.left : undefined
+                right: dockWindow.edge === "right" ? parent.right : undefined
+                horizontalCenter: !dockWindow.isVertical ? parent.horizontalCenter : undefined
+                verticalCenter: dockWindow.isVertical ? parent.verticalCenter : undefined
             }
-            height: dockWindow.isVertical ? parent.height : 6
-            width: dockWindow.isVertical ? 6 : parent.width
+            height: dockWindow.isVertical ? Math.max(160, dockSurface.implicitHeight) : 6
+            width: dockWindow.isVertical ? 6 : Math.max(160, dockSurface.implicitWidth)
 
             MouseArea {
                 id: edgeTriggerMouse
@@ -112,20 +125,21 @@ Variants {
             anchors.centerIn: parent
             implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16) : (ConfigService.dockIconSize + 16)
             implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16)
-            radius: Theme.radiusLarge
+            radius: dockWindow.isFloating ? Theme.radiusLarge : 0
+            borderVisible: dockWindow.isFloating
             color: Theme.alpha(Theme.background, ConfigService.barOpacity)
 
             // Autohide Sliding Offset
             y: {
                 if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
-                if (ConfigService.dockPosition === "bottom") return dockSurface.implicitHeight - 2;
-                if (ConfigService.dockPosition === "top") return -dockSurface.implicitHeight + 2;
+                if (dockWindow.edge === "bottom") return dockSurface.implicitHeight + dockWindow.offset + 12;
+                if (dockWindow.edge === "top") return -(dockSurface.implicitHeight + dockWindow.offset + 12);
                 return 0;
             }
             x: {
                 if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
-                if (ConfigService.dockPosition === "left") return -dockSurface.implicitWidth + 2;
-                if (ConfigService.dockPosition === "right") return dockSurface.implicitWidth - 2;
+                if (dockWindow.edge === "left") return -(dockSurface.implicitWidth + dockWindow.offset + 12);
+                if (dockWindow.edge === "right") return dockSurface.implicitWidth + dockWindow.offset + 12;
                 return 0;
             }
 
@@ -171,6 +185,7 @@ Variants {
 
                     DockItem {
                         required property var modelData
+                        parentWindowRef: dockWindow
                         appId: modelData
                         app: ApplicationService.getAppById(modelData)
                     }
@@ -188,6 +203,7 @@ Variants {
 
                     DockItem {
                         required property var modelData
+                        parentWindowRef: dockWindow
                         appId: modelData
                         app: ApplicationService.getAppById(modelData)
                     }
@@ -230,6 +246,7 @@ Variants {
 
                     DockItem {
                         required property var modelData
+                        parentWindowRef: dockWindow
                         appId: modelData
                         app: ApplicationService.getAppById(modelData)
                     }
@@ -247,6 +264,7 @@ Variants {
 
                     DockItem {
                         required property var modelData
+                        parentWindowRef: dockWindow
                         appId: modelData
                         app: ApplicationService.getAppById(modelData)
                     }

@@ -30,6 +30,7 @@ Variants {
         exclusiveZone: 0
 
         WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "quickshell:osd"
 
         property string osdType: "volume"
 
