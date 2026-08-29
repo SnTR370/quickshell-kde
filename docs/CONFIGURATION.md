@@ -11,7 +11,12 @@ If user configuration files do not exist, the shell automatically uses defaults 
 
 ```json
 {
+  "enabled": true,
+  "floating": true,
+  "edge": "top",
   "position": "top",
+  "edgeOffset": 8,
+  "reserveSpace": false,
   "height": 44,
   "left": ["launcher", "workspaces"],
   "center": ["clock"],
@@ -23,13 +28,17 @@ If user configuration files do not exist, the shell automatically uses defaults 
 }
 ```
 
-* `position`: `"top"`, `"bottom"`, `"left"`, or `"right"` (screen edge placement)
-* `height`: Thickness in pixels (panel height in horizontal mode, panel width in vertical mode)
-* `left`: List of module identifiers to render on the start side (`launcher`, `workspaces`, `clock`, `media`, `tray`, `network`, `battery`, `audio`, `power`)
-* `center`: List of module identifiers to render in the center
-* `right`: List of module identifiers to render on the end side
-* `opacity`: Background opacity value between `0.0` and `1.0`
-* `monitors`: `"all"`, `"primary"`, or array of display names (e.g. `["eDP-1"]`)
+* `enabled`: `true` or `false` (Bar can be independently enabled or disabled)
+* `floating`: `true` or `false` (floating island vs attached panel)
+* `edge` / `position`: `"top"`, `"bottom"`, `"left"`, or `"right"` (screen edge placement)
+* `edgeOffset`: Distance in pixels from screen edge when floating (default: `8`)
+* `reserveSpace`: `false` (default: zero exclusive zone so maximized apps fill screen) or `true` (reserves struts)
+* `height`: Panel thickness in pixels
+* `left`: List of module identifiers for start slot (`launcher`, `workspaces`, `clock`, `media`, `tray`, `network`, `battery`, `audio`, `power`)
+* `center`: List of module identifiers for center slot
+* `right`: List of module identifiers for end slot
+* `opacity`: Background opacity value between `0.1` and `1.0`
+* `monitors`: `"all"` or array of display names (e.g. `["eDP-1"]`)
 * `blur`: `true` or `false` (enables KWin hardware background blur via `ext_background_effect_manager_v1`)
 * `notificationsEnabled`: `false` (default; enables built-in notification server for standalone compositor sessions)
 
@@ -40,7 +49,11 @@ If user configuration files do not exist, the shell automatically uses defaults 
 ```json
 {
   "enabled": true,
+  "floating": true,
+  "edge": "bottom",
   "position": "bottom",
+  "edgeOffset": 8,
+  "reserveSpace": false,
   "iconSize": 44,
   "autoHide": false,
   "hideDelay": 350,
@@ -56,13 +69,16 @@ If user configuration files do not exist, the shell automatically uses defaults 
 }
 ```
 
-* `enabled`: `true` or `false`
-* `position`: `"bottom"`, `"top"`, `"left"`, or `"right"`
-* `iconSize`: Pixel size of dock icons (36, 44, 52, 64)
+* `enabled`: `true` or `false` (Dock can be independently enabled or disabled)
+* `floating`: `true` or `false` (floating island vs attached dock)
+* `edge` / `position`: `"bottom"`, `"top"`, `"left"`, or `"right"`
+* `edgeOffset`: Distance in pixels from screen edge when floating (default: `8`)
+* `reserveSpace`: `false` (default: zero exclusive zone) or `true` (reserves struts when not autohidden)
+* `iconSize`: Pixel size of dock icons (20 to 128 px)
 * `autoHide`: `true` or `false` (smooth pointer edge reveal and slide-out)
 * `hideDelay`: Inactivity delay in milliseconds before sliding out (default: `350`)
 * `revealDelay`: Edge hotspot hover delay in milliseconds before sliding in (default: `120`)
-* `monitors`: `"all"`, `"primary"`, or array of display names
+* `monitors`: `"all"` or array of display names
 * `pinned`: List of desktop application IDs displayed in the dock
 
 ---
@@ -80,3 +96,12 @@ Available theme presets:
 * `catppuccin-mocha`
 * `nord`
 * `tokyo-night`
+
+---
+
+## 4. Milestone 2 to Milestone 3A Migration
+
+The shell includes automatic backward compatibility:
+* Legacy `position` fields are seamlessly mapped to `edge`.
+* Missing `enabled`, `floating`, `reserveSpace`, and `edgeOffset` fields automatically receive their safe defaults (`enabled: true`, `floating: true`, `reserveSpace: false`, `edgeOffset: 8`).
+* Legacy `"primary"` or `"default"` monitor strings are automatically converted to `"all"`.
