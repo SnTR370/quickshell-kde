@@ -233,22 +233,30 @@ class TestDesktopUX(unittest.TestCase):
 
     # --- 4. Structural Tests: Audio Components ---
 
-    def test_07_audio_single_persistent_and_transient_osd(self):
-        """Structural test: Verify single persistent audio module, detail popup, and transient OSD."""
+    def test_07_audio_persistent_module_and_kde_native_osd_dispatch(self):
+        """Structural test: Verify single persistent audio module, detail popup, and KDE native OSD dispatch."""
         with open(os.path.join(REPO_DIR, "modules/bar/AudioModule.qml")) as f:
             audio_mod = f.read()
         with open(os.path.join(REPO_DIR, "modules/bar/AudioPopup.qml")) as f:
             audio_popup = f.read()
-        with open(os.path.join(REPO_DIR, "modules/osd/VolumeOSD.qml")) as f:
-            volume_osd = f.read()
+        with open(os.path.join(REPO_DIR, "services/audio/AudioService.qml")) as f:
+            audio_service = f.read()
+        with open(os.path.join(REPO_DIR, "modules/osd/OSDHost.qml")) as f:
+            osd_host = f.read()
 
+        # Audio module anchors popup
         self.assertIn("AudioPopup", audio_mod)
+        # AudioPopup controls volume & mute
         self.assertIn("AudioService.setVolume", audio_popup)
         self.assertIn("AudioService.setInputVolume", audio_popup)
         self.assertIn("AudioService.toggleMute", audio_popup)
         self.assertIn("AudioService.toggleInputMute", audio_popup)
-        self.assertIn("AudioService.volume", volume_osd)
-        self.assertIn("AudioService.muted", volume_osd)
+        # AudioService triggers KDE's native osdService D-Bus endpoint
+        self.assertIn("org.kde.osdService", audio_service)
+        self.assertIn("volumeChanged", audio_service)
+        self.assertIn("microphoneVolumeChanged", audio_service)
+        # OSDHost does not contain a duplicate custom VolumeOSD
+        self.assertNotIn("VolumeOSD", osd_host)
 
     # --- 5. Live D-Bus & Brightness Safety Tests ---
 

@@ -165,11 +165,9 @@ KWin Wayland organizes surfaces into well-defined layers (`zwlr_layer_shell_v1`)
   * Bar, Dock, SettingsWindow, and LauncherWindow live in `WlrLayer.Top`.
   * Spectacle and system screen grabbers operate on `WlrLayer.Overlay`.
   * As a result, Spectacle's interactive rectangular selection UI cleanly renders above all shell surfaces and settings dashboards without focus collision or occlusion.
-* **Verification Status**:
-  * Layer Shell protocol hierarchy (`WlrLayer.Top` < `WlrLayer.Overlay`) verified structurally in engine definitions.
-  * Interactive user drag-rectangle over live settings window: marked **MANUAL** verification requirement for end-to-end human evaluation.
-* **Fullscreen Application Handling**:
-  * When an application goes fullscreen, KWin displays the fullscreen toplevel above `WlrLayer.Top`, cleanly hiding floating panels without manual visibility polling.
+* **System Feedback & Native OSD Delegation**:
+  * In alignment with the native feedback principle, when Plasma provides reliable native system feedback (such as master volume changes), Quickshell triggers KDE's native OSD (`org.kde.osdService.volumeChanged`) instead of drawing a duplicate custom volume HUD.
+  * Quickshell's `OSDHost` is reserved for specialized capabilities not covered natively by Plasma, such as independent per-display monitor identification and external screen backlight feedback.
 
 ---
 

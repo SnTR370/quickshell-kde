@@ -7,8 +7,6 @@ import "../core/Log.js" as Log
 Singleton {
     id: root
 
-    signal osdPulse()
-
     PwObjectTracker {
         objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
     }
@@ -28,8 +26,12 @@ Singleton {
         return desc.includes("headphone") || desc.includes("headset") || desc.includes("earphone");
     }
 
-    onVolumeChanged: {
-        root.osdPulse();
+    function triggerNativeVolumeOSD(percent) {
+        Quickshell.execDetached(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService.volumeChanged", String(percent)]);
+    }
+
+    function triggerNativeMicOSD(percent) {
+        Quickshell.execDetached(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService.microphoneVolumeChanged", String(percent)]);
     }
 
     function setVolume(val) {
@@ -39,6 +41,7 @@ Singleton {
         } else {
             Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", String(clamped)]);
         }
+        triggerNativeVolumeOSD(Math.round(clamped * 100));
     }
 
     function increaseVolume(step) {
@@ -52,20 +55,27 @@ Singleton {
     }
 
     function toggleMute() {
+        let isMuted = false;
         if (defaultSink && defaultSink.audio) {
             defaultSink.audio.muted = !defaultSink.audio.muted;
+            isMuted = defaultSink.audio.muted;
         } else {
             Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
+            isMuted = !root.muted;
         }
-        root.osdPulse();
+        triggerNativeVolumeOSD(isMuted ? 0 : Math.round(root.volume * 100));
     }
 
     function toggleInputMute() {
+        let isMuted = false;
         if (defaultSource && defaultSource.audio) {
             defaultSource.audio.muted = !defaultSource.audio.muted;
+            isMuted = defaultSource.audio.muted;
         } else {
             Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]);
+            isMuted = !root.inputMuted;
         }
+        triggerNativeMicOSD(isMuted ? 0 : Math.round(root.inputVolume * 100));
     }
 
     function setInputVolume(val) {
@@ -75,6 +85,7 @@ Singleton {
         } else {
             Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(clamped)]);
         }
+        triggerNativeMicOSD(Math.round(clamped * 100));
     }
 
     function openVolumeControl() {

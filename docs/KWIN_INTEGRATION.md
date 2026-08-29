@@ -47,6 +47,15 @@
 * **Plasma Architecture**: In KDE Plasma 6, window live thumbnails are provided via internal compositor-private bindings (`KWin::ThumbnailItem` texture sharing inside the compositor process) and PipeWire portal screencasting per window (which requires user permission prompts).
 * **Truthful Capabilities Tenet**: In alignment with Core Principle 8 (*Truthful Capabilities: Never fake unsupported KWin or Wayland protocols*), the multi-window chooser popup truthfully displays actual window titles, icons, and activation controls without generating faked mockups or unreliable preview boxes.
 
+### Native OSD Feedback Service
+* **Service**: `org.kde.plasmashell`
+* **Path**: `/org/kde/osdService`
+* **Interface**: `org.kde.osdService`
+* **Methods**:
+  * `volumeChanged(int percent)` (Triggers KDE Plasma native transient volume OSD)
+  * `microphoneVolumeChanged(int percent)` (Triggers KDE Plasma native microphone volume OSD)
+  * `mediaPlayerVolumeChanged(int percent, QString playerName, QString playerIconName)`
+
 ### PowerDevil / Session Management
 * **Service**: `org.kde.Shutdown`
 * **Path**: `/Shutdown`
