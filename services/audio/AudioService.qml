@@ -26,56 +26,43 @@ Singleton {
         return desc.includes("headphone") || desc.includes("headset") || desc.includes("earphone");
     }
 
-    function triggerNativeVolumeOSD(percent) {
-        Quickshell.execDetached(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService.volumeChanged", String(percent)]);
+    function triggerNativeVolumeOSD(percent, maxPercent) {
+        const max = maxPercent !== undefined ? maxPercent : 150;
+        Quickshell.execDetached(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService.volumeChanged", String(percent), String(max)]);
     }
 
     function triggerNativeMicOSD(percent) {
         Quickshell.execDetached(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService.microphoneVolumeChanged", String(percent)]);
     }
 
-    function setVolume(val) {
+    function setVolume(val, showOsd) {
         const clamped = Math.max(0.0, Math.min(1.5, val));
         if (defaultSink && defaultSink.audio) {
             defaultSink.audio.volume = clamped;
         } else {
             Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", String(clamped)]);
         }
-        triggerNativeVolumeOSD(Math.round(clamped * 100));
+        if (showOsd) {
+            triggerNativeVolumeOSD(Math.round(clamped * 100), 150);
+        }
     }
 
     function increaseVolume(step) {
-        const delta = step !== undefined ? step : 0.05;
-        setVolume(root.volume + delta);
+        // Invoke KDE native KMix shortcut for system volume stepping and native 0..150 OSD feedback
+        Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kmix", "org.kde.kglobalaccel.Component.invokeShortcut", "increase_volume"]);
     }
 
     function decreaseVolume(step) {
-        const delta = step !== undefined ? step : 0.05;
-        setVolume(root.volume - delta);
+        // Invoke KDE native KMix shortcut for system volume stepping and native 0..150 OSD feedback
+        Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kmix", "org.kde.kglobalaccel.Component.invokeShortcut", "decrease_volume"]);
     }
 
     function toggleMute() {
-        let isMuted = false;
-        if (defaultSink && defaultSink.audio) {
-            defaultSink.audio.muted = !defaultSink.audio.muted;
-            isMuted = defaultSink.audio.muted;
-        } else {
-            Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
-            isMuted = !root.muted;
-        }
-        triggerNativeVolumeOSD(isMuted ? 0 : Math.round(root.volume * 100));
+        Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kmix", "org.kde.kglobalaccel.Component.invokeShortcut", "mute"]);
     }
 
     function toggleInputMute() {
-        let isMuted = false;
-        if (defaultSource && defaultSource.audio) {
-            defaultSource.audio.muted = !defaultSource.audio.muted;
-            isMuted = defaultSource.audio.muted;
-        } else {
-            Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]);
-            isMuted = !root.inputMuted;
-        }
-        triggerNativeMicOSD(isMuted ? 0 : Math.round(root.inputVolume * 100));
+        Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kmix", "org.kde.kglobalaccel.Component.invokeShortcut", "mic_mute"]);
     }
 
     function setInputVolume(val) {
