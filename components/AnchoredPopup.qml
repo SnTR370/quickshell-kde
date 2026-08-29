@@ -11,6 +11,8 @@ PopupWindow {
     property string edge: "top"
     property int offset: 8
 
+    visible: true
+
     anchor.window: root.parentWindow
     anchor.item: root.anchorItem
 

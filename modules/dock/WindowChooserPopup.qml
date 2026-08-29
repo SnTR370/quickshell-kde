@@ -13,8 +13,8 @@ AnchoredPopup {
 
     signal windowSelected()
 
-    implicitWidth: Math.max(240, Math.min(380, chooserLayout.implicitWidth + 24))
-    implicitHeight: chooserLayout.implicitHeight + 16
+    implicitWidth: 260
+    implicitHeight: chooserLayout.implicitHeight + 20
 
     ColumnLayout {
         id: chooserLayout

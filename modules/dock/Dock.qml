@@ -133,29 +133,42 @@ Variants {
 
         Surface {
             id: dockSurface
-            anchors.centerIn: parent
+            anchors {
+                horizontalCenter: !dockWindow.isVertical ? parent.horizontalCenter : undefined
+                verticalCenter: dockWindow.isVertical ? parent.verticalCenter : undefined
+                bottom: dockWindow.edge === "bottom" ? parent.bottom : undefined
+                top: dockWindow.edge === "top" ? parent.top : undefined
+                left: dockWindow.edge === "left" ? parent.left : undefined
+                right: dockWindow.edge === "right" ? parent.right : undefined
+            }
             implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16) : (ConfigService.dockIconSize + 16)
             implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16)
             radius: dockWindow.isFloating ? Theme.radiusLarge : 0
             borderVisible: dockWindow.isFloating
             color: Theme.alpha(Theme.background, ConfigService.barOpacity)
 
-            // Autohide Sliding Offset
-            y: {
-                if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
-                if (dockWindow.edge === "bottom") return dockSurface.implicitHeight + dockWindow.offset + 12;
-                if (dockWindow.edge === "top") return -(dockSurface.implicitHeight + dockWindow.offset + 12);
-                return 0;
-            }
-            x: {
-                if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
-                if (dockWindow.edge === "left") return -(dockSurface.implicitWidth + dockWindow.offset + 12);
-                if (dockWindow.edge === "right") return dockSurface.implicitWidth + dockWindow.offset + 12;
-                return 0;
+            // Autohide Sliding Offset via Translate to avoid anchor conflicts
+            transform: Translate {
+                id: slideTrans
+                y: {
+                    if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
+                    if (dockWindow.edge === "bottom") return dockSurface.height + dockWindow.offset + 24;
+                    if (dockWindow.edge === "top") return -(dockSurface.height + dockWindow.offset + 24);
+                    return 0;
+                }
+                x: {
+                    if (!dockWindow.autoHide || dockWindow.isRevealed) return 0;
+                    if (dockWindow.edge === "left") return -(dockSurface.width + dockWindow.offset + 24);
+                    if (dockWindow.edge === "right") return dockSurface.width + dockWindow.offset + 24;
+                    return 0;
+                }
+
+                Behavior on y { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
+                Behavior on x { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
             }
 
-            Behavior on y { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
-            Behavior on x { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
+            opacity: (!dockWindow.autoHide || dockWindow.isRevealed) ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: Theme.animDurationNormal } }
 
             MouseArea {
                 id: dockHoverArea
