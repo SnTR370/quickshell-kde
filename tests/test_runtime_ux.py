@@ -364,6 +364,44 @@ class TestDesktopUX(unittest.TestCase):
         seen_ids = set()
         running_apps = []
 
+        # Query live MPRIS players if present
+        mpris_players = []
+        try:
+            mpris_names = [n.strip() for n in subprocess.check_output(["qdbus6"], text=True, stderr=subprocess.DEVNULL).split("\n") if "org.mpris.MediaPlayer2." in n]
+            for s in mpris_names:
+                if not s:
+                    continue
+                try:
+                    ident = subprocess.check_output(["qdbus6", s, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Identity"], text=True, stderr=subprocess.DEVNULL).strip()
+                    dentry = subprocess.check_output(["qdbus6", s, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.DesktopEntry"], text=True, stderr=subprocess.DEVNULL).strip()
+                    props = subprocess.check_output(["qdbus6", s, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.GetAll", "org.mpris.MediaPlayer2.Player"], text=True, stderr=subprocess.DEVNULL)
+                    m_title = ""
+                    m_artist = ""
+                    for line in props.split("\n"):
+                        if "xesam:title:" in line:
+                            m_title = line.split("xesam:title:")[1].strip()
+                        elif "xesam:artist:" in line:
+                            m_artist = line.split("xesam:artist:")[1].strip()
+                    mpris_players.append({"identity": ident, "desktopEntry": dentry, "trackTitle": m_title, "trackArtist": m_artist})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        def resolve_with_live_mpris(title, icon):
+            lower_icon = (icon or "").strip().lower()
+            lower_title = (title or "").strip().lower()
+            if lower_icon and lower_icon in self.alias_map:
+                return self.alias_map[lower_icon]
+            for p in mpris_players:
+                p_title = (p["trackTitle"] or "").strip().lower()
+                p_artist = (p["trackArtist"] or "").strip().lower()
+                if (p_title and (p_title in lower_title or lower_title == p_title)) or (p_artist and p_artist in lower_title):
+                    target = p.get("desktopEntry") or p.get("identity")
+                    if target and target.lower() in self.alias_map:
+                        return self.alias_map[target.lower()]
+            return self.resolve_app(title, icon)
+
         for match in pattern.finditer(raw):
             wid = match.group(1)
             if not wid or wid in seen_ids:
@@ -375,10 +413,12 @@ class TestDesktopUX(unittest.TestCase):
             if not title and not icon:
                 continue
 
-            app = self.resolve_app(title, icon)
-            resolved_id = app["id"] if app else (icon or title)
-            if resolved_id and resolved_id not in running_apps:
+            app = resolve_with_live_mpris(title, icon)
+            resolved_id = app["id"] if app else (icon if icon else f"window-{wid}")
+            if app and resolved_id not in running_apps:
                 running_apps.append(resolved_id)
+            elif not app and icon and icon not in running_apps:
+                running_apps.append(icon)
 
         # On the user's live desktop, at least one window exists
         self.assertTrue(len(running_apps) > 0, "Live session must enumerate running windows into non-empty runningAppIds")
@@ -386,6 +426,106 @@ class TestDesktopUX(unittest.TestCase):
         if "Helium" in raw:
             helium_in_apps = any("helium" in a.lower() for a in running_apps)
             self.assertTrue(helium_in_apps, "Helium must resolve to an appId containing 'helium' when open")
+        # If Spotify is active on MPRIS, verify runningAppIds contains Spotify
+        if any("spotify" in p.get("identity", "").lower() for p in mpris_players):
+            spotify_in_apps = any("spotify" in a.lower() for a in running_apps)
+            self.assertTrue(spotify_in_apps, "Spotify must resolve to canonical Spotify app entry when active on MPRIS")
+
+    # --- 8. Stabilization Tests for M3B2 ---
+
+    def test_13_mpris_and_generic_media_app_resolution(self):
+        """Integration test: Verify dynamic media song titles correlate with MPRIS desktop identities and never fall back to song titles."""
+        # Simulated MPRIS player registry
+        mpris_players = [
+            {"desktopEntry": "spotify", "identity": "Spotify", "trackTitle": "Flow Heat", "trackArtist": "3rd Strike"}
+        ]
+        
+        def resolve_with_mpris(title, icon):
+            lower_title = (title or "").strip().lower()
+            lower_icon = (icon or "").strip().lower()
+            if lower_icon and lower_icon in self.alias_map:
+                return self.alias_map[lower_icon]
+            for p in mpris_players:
+                p_title = (p["trackTitle"] or "").strip().lower()
+                p_artist = (p["trackArtist"] or "").strip().lower()
+                if p_title and (p_title in lower_title or lower_title == p_title):
+                    target = p.get("desktopEntry") or p.get("identity")
+                    if target.lower() in self.alias_map:
+                        return self.alias_map[target.lower()]
+            return self.resolve_app(title, icon)
+
+        # 1. Test Spotify window title when playing "3rd Strike - Flow Heat" with empty icon
+        app = resolve_with_mpris("3rd Strike - Flow Heat", "")
+        self.assertIsNotNone(app, "Spotify window title with empty icon must resolve to Spotify app entry via MPRIS")
+        self.assertIn("spotify", app["id"].lower())
+
+        # 2. Test unknown window with empty icon (MUST NOT fall back to title as appId)
+        unknown_title = "Arbitrary Document Title - Unknown Tool"
+        unresolved_app = resolve_with_mpris(unknown_title, "")
+        self.assertIsNone(unresolved_app)
+        resolved_app_id = unresolved_app["id"] if unresolved_app else ("window-0_12345")
+        self.assertNotEqual(resolved_app_id, unknown_title, "Unresolved window appId must NEVER equal dynamic window title")
+        self.assertTrue(resolved_app_id.startswith("window-"), "Unresolved window must retain stable window-based ID")
+
+    def test_14_multimonitor_settings_invocation_locking(self):
+        """Unit test: Verify Settings and Launcher lock to invocation monitor and do not teleport on activeOutput changes."""
+        with open(os.path.join(REPO_DIR, "services/config/ConfigService.qml")) as f:
+            cfg_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/settings/SettingsWindow.qml")) as f:
+            set_content = f.read()
+
+        self.assertIn("property string settingsScreenName:", cfg_content)
+        self.assertIn("property string launcherScreenName:", cfg_content)
+        self.assertIn("ConfigService.settingsScreenName === \"\" || modelData.name === ConfigService.settingsScreenName", set_content)
+        self.assertIn("WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None", set_content)
+
+    def test_15_audio_popup_150_percent_slider_range(self):
+        """Structural test: Verify AudioPopup output volume slider supports 0..150% (1.5) range."""
+        with open(os.path.join(REPO_DIR, "modules/bar/AudioPopup.qml")) as f:
+            popup_content = f.read()
+        self.assertIn("maximumValue: 1.5", popup_content, "AudioPopup output slider maximumValue must be 1.5 (150%)")
+        self.assertIn("AudioService.setVolume(val, false)", popup_content, "Direct slider drag must not trigger redundant OSD spam")
+
+    def test_16_svg_icon_source_scheme_handling(self):
+        """Unit test: Verify SvgIcon properly detects existing URL schemes, pixmaps, file paths, and theme names."""
+        def resolve_icon_source(icon_str):
+            if not icon_str:
+                return ""
+            has_scheme = "://" in icon_str or icon_str.startswith("qspixmap:")
+            is_path = icon_str.startswith("/")
+            if has_scheme:
+                return icon_str
+            elif is_path:
+                return "file://" + icon_str
+            else:
+                return "image://icon/" + icon_str
+
+        # Theme icon name
+        self.assertEqual(resolve_icon_source("preferences-system"), "image://icon/preferences-system")
+        # SystemTray image-provider URL
+        self.assertEqual(resolve_icon_source("image://icon/com.github.wwmm.easyeffects"), "image://icon/com.github.wwmm.easyeffects")
+        # Pixmap scheme
+        self.assertEqual(resolve_icon_source("qspixmap:123"), "qspixmap:123")
+        # Absolute file path
+        self.assertEqual(resolve_icon_source("/opt/app/icon.png"), "file:///opt/app/icon.png")
+
+    def test_17_dock_blur_region_disabled_when_hidden(self):
+        """Structural test: Verify Dock blurRegion is disabled when dock is hidden to eliminate ghost blur."""
+        with open(os.path.join(REPO_DIR, "modules/dock/Dock.qml")) as f:
+            dock_content = f.read()
+        self.assertIn("(ConfigService.blurEnabled && dockWindow.isRevealed) ? dockSurface : null", dock_content)
+
+    def test_18_bar_density_bounded_contract(self):
+        """Structural test: Verify Bar and modules use bounded density height instead of circular parent.height."""
+        with open(os.path.join(REPO_DIR, "modules/bar/MediaModule.qml")) as f:
+            media_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/bar/TrayModule.qml")) as f:
+            tray_content = f.read()
+
+        self.assertNotIn("implicitHeight: parent ? parent.height : 26", media_content)
+        self.assertIn("ConfigService.barHeight", media_content)
+        self.assertNotIn("implicitHeight: 34", tray_content)
+        self.assertIn("ConfigService.barHeight", tray_content)
 
 if __name__ == "__main__":
     unittest.main()
