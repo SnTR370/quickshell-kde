@@ -16,7 +16,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.settingsVisible && KWinService.isTargetOverlayScreen(modelData)
+        visible: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || modelData.name === ConfigService.settingsScreenName)
         color: "transparent"
 
         anchors {
@@ -29,14 +29,15 @@ Variants {
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:settings"
-        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         BackgroundEffect.blurRegion: Region {
-            item: ConfigService.blurEnabled ? mainContainer : null
+            item: (ConfigService.blurEnabled && settingsWin.visible) ? mainContainer : null
         }
 
         function closeSettings() {
             ConfigService.settingsVisible = false;
+            ConfigService.settingsScreenName = "";
         }
 
         MouseArea {
@@ -333,7 +334,7 @@ Variants {
                                     }
                                     Slider {
                                         implicitWidth: 180
-                                        minimumValue: 32
+                                        minimumValue: 24
                                         maximumValue: 72
                                         stepSize: 2
                                         value: ConfigService.barHeight

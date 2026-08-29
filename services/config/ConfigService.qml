@@ -46,20 +46,47 @@ Singleton {
     property bool launcherVisible: false
     property bool settingsVisible: false
     property bool mediaPopupVisible: false
+    property string launcherScreenName: ""
+    property string settingsScreenName: ""
 
-    function toggleLauncher() {
-        root.launcherVisible = !root.launcherVisible;
+    function resolveScreenName(screenObjOrName) {
+        if (typeof screenObjOrName === "object" && screenObjOrName && screenObjOrName.name) {
+            return screenObjOrName.name;
+        }
+        if (typeof screenObjOrName === "string" && screenObjOrName.length > 0) {
+            return screenObjOrName;
+        }
+        if (KWinService.activeOutputName && KWinService.activeOutputName.length > 0) {
+            return KWinService.activeOutputName;
+        }
+        const s = Quickshell.screens;
+        if (s && s.length > 0) {
+            return s[0].name;
+        }
+        return "";
+    }
+
+    function toggleLauncher(screenObjOrName) {
         if (root.launcherVisible) {
+            root.launcherVisible = false;
+            root.launcherScreenName = "";
+        } else {
             root.settingsVisible = false;
             root.mediaPopupVisible = false;
+            root.launcherScreenName = root.resolveScreenName(screenObjOrName);
+            root.launcherVisible = true;
         }
     }
 
-    function toggleSettings() {
-        root.settingsVisible = !root.settingsVisible;
+    function toggleSettings(screenObjOrName) {
         if (root.settingsVisible) {
+            root.settingsVisible = false;
+            root.settingsScreenName = "";
+        } else {
             root.launcherVisible = false;
             root.mediaPopupVisible = false;
+            root.settingsScreenName = root.resolveScreenName(screenObjOrName);
+            root.settingsVisible = true;
         }
     }
 

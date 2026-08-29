@@ -17,7 +17,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.launcherVisible && KWinService.isTargetOverlayScreen(modelData)
+        visible: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || modelData.name === ConfigService.launcherScreenName)
         color: "transparent"
 
         anchors {
@@ -30,10 +30,10 @@ Variants {
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:launcher"
-        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         BackgroundEffect.blurRegion: Region {
-            item: ConfigService.blurEnabled ? mainContainer : null
+            item: (ConfigService.blurEnabled && launcherWin.visible) ? mainContainer : null
         }
 
         property string selectedCategory: "all"
@@ -41,6 +41,7 @@ Variants {
 
         function closeLauncher() {
             ConfigService.launcherVisible = false;
+            ConfigService.launcherScreenName = "";
             searchInput.text = "";
         }
 
