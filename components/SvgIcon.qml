@@ -14,12 +14,13 @@ Item {
     width: size
     height: size
 
-    readonly property bool isPath: icon.startsWith("/") || icon.startsWith("file://")
+    readonly property bool hasScheme: icon.indexOf("://") !== -1 || icon.startsWith("qspixmap:")
+    readonly property bool isPath: icon.startsWith("/")
 
     IconImage {
         id: iconImg
         anchors.fill: parent
-        source: root.icon ? (root.isPath ? (root.icon.startsWith("file://") ? root.icon : "file://" + root.icon) : ("image://icon/" + root.icon)) : ""
+        source: root.icon ? (root.hasScheme ? root.icon : (root.isPath ? ("file://" + root.icon) : ("image://icon/" + root.icon))) : ""
         visible: status === Image.Ready
     }
 

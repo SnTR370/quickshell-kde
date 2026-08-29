@@ -7,8 +7,11 @@ import "../../components"
 Surface {
     id: root
 
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+
     visible: SystemTray.items && SystemTray.items.values.length > 0
-    implicitHeight: 34
+    implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: trayLayout.implicitWidth + 8
     radius: Theme.radiusSmall
     color: Theme.alpha(Theme.surfaceVariant, 0.6)
@@ -25,8 +28,8 @@ Surface {
                 id: trayDelegate
                 required property var modelData
 
-                implicitWidth: 26
-                implicitHeight: 26
+                implicitWidth: Math.max(16, ConfigService.barHeight - 8)
+                implicitHeight: Math.max(16, ConfigService.barHeight - 8)
 
                 Rectangle {
                     anchors.fill: parent
@@ -35,8 +38,8 @@ Surface {
 
                     SvgIcon {
                         anchors.centerIn: parent
-                        icon: modelData.icon || "application-x-executable"
-                        size: 18
+                        icon: (trayDelegate.modelData.icon && String(trayDelegate.modelData.icon).length > 0) ? String(trayDelegate.modelData.icon) : (trayDelegate.modelData.iconName || "application-x-executable")
+                        size: Math.max(14, ConfigService.barHeight - 12)
                     }
 
                     MouseArea {
@@ -48,20 +51,20 @@ Surface {
 
                         onClicked: mouse => {
                             if (mouse.button === Qt.RightButton) {
-                                if (modelData.hasMenu) {
-                                    modelData.display(barWindow, mouse.x, mouse.y);
+                                if (trayDelegate.modelData.hasMenu) {
+                                    trayDelegate.modelData.display(root.barWindowRef || root.Window.window, mouse.x, mouse.y);
                                 } else {
-                                    modelData.secondaryActivate();
+                                    trayDelegate.modelData.secondaryActivate();
                                 }
                             } else if (mouse.button === Qt.MiddleButton) {
-                                modelData.secondaryActivate();
+                                trayDelegate.modelData.secondaryActivate();
                             } else {
-                                modelData.activate();
+                                trayDelegate.modelData.activate();
                             }
                         }
 
                         onWheel: wheel => {
-                            modelData.scroll(wheel.angleDelta.y, false);
+                            trayDelegate.modelData.scroll(wheel.angleDelta.y, false);
                         }
                     }
                 }
