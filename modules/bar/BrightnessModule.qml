@@ -55,6 +55,11 @@ Surface {
         }
     }
 
+    Tooltip {
+        text: BrightnessService.isReadOnly ? "Backlight Telemetry (Read-Only)" : (BrightnessService.controlledDisplayName ? (BrightnessService.controlledDisplayName + ": " + BrightnessService.percentage + "%") : "Display Brightness")
+        show: brightMouse.containsMouse && !root.popupOpen
+    }
+
     MouseArea {
         id: brightMouse
         anchors.fill: parent
@@ -71,6 +76,7 @@ Surface {
         }
 
         onWheel: wheel => {
+            if (!BrightnessService.controllable) return;
             if (wheel.angleDelta.y > 0) {
                 BrightnessService.increaseBrightness(0.05);
             } else {

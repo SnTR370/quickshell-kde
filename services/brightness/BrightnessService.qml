@@ -125,6 +125,8 @@ Singleton {
         }
     }
 
+    property var lastSentAction: ({ dbusName: "", targetVal: -1, timestamp: 0 })
+
     function handleBrightnessChanged(displayDbusName, newBrightness) {
         if (!root.displays) return;
 
@@ -152,7 +154,16 @@ Singleton {
             if (root.controlledDisplay && root.controlledDisplay.dbusName === displayDbusName) {
                 root.brightness = ratio;
             }
-            root.osdPulse();
+
+            // Suppress duplicate OSD pulse if this D-Bus signal is an echo of our own user action
+            const now = Date.now();
+            const isEcho = (root.lastSentAction.dbusName === displayDbusName &&
+                            Math.abs(root.lastSentAction.targetVal - newBrightness) <= 1 &&
+                            (now - root.lastSentAction.timestamp) < 1200);
+
+            if (!isEcho) {
+                root.osdPulse();
+            }
         }
     }
 
@@ -199,7 +210,9 @@ Singleton {
     }
 
     function setBrightnessForDisplay(dbusName, ratio) {
-        if (!root.displays || root.displays.length === 0) return;
+        if (!root.displays || root.displays.length === 0 || !dbusName) return;
+
+        // Strict display lookup: Never fall back to another/controlled display if dbusName is unknown or stale
         let targetDisp = null;
         for (let i = 0; i < root.displays.length; i++) {
             if (root.displays[i].dbusName === dbusName || root.displays[i].path === dbusName) {
@@ -207,14 +220,17 @@ Singleton {
                 break;
             }
         }
-        if (!targetDisp) {
-            targetDisp = root.controlledDisplay;
-        }
         if (!targetDisp || targetDisp.maxBrightness <= 0) return;
 
         const clamped = Math.max(0.0, Math.min(1.0, ratio));
         const targetVal = Math.round(clamped * targetDisp.maxBrightness);
         targetDisp.brightness = targetVal;
+
+        root.lastSentAction = {
+            dbusName: targetDisp.dbusName,
+            targetVal: targetVal,
+            timestamp: Date.now()
+        };
 
         root.lastChangedDisplay = {
             dbusName: targetDisp.dbusName,
@@ -237,10 +253,6 @@ Singleton {
     function setBrightness(ratio) {
         if (root.controlledDisplay) {
             setBrightnessForDisplay(root.controlledDisplay.dbusName, ratio);
-        } else if (root.controllable) {
-            const clamped = Math.max(0.0, Math.min(1.0, ratio));
-            root.brightness = clamped;
-            root.osdPulse();
         }
     }
 
@@ -254,8 +266,12 @@ Singleton {
                     return;
                 }
             }
+            // If explicit dbusName provided but not found, NO-OP
+            return;
         }
-        setBrightness(root.brightness + delta);
+        if (root.controlledDisplay) {
+            setBrightnessForDisplay(root.controlledDisplay.dbusName, root.brightness + delta);
+        }
     }
 
     function decreaseBrightness(step, dbusName) {
@@ -268,8 +284,12 @@ Singleton {
                     return;
                 }
             }
+            // If explicit dbusName provided but not found, NO-OP
+            return;
         }
-        setBrightness(root.brightness - delta);
+        if (root.controlledDisplay) {
+            setBrightnessForDisplay(root.controlledDisplay.dbusName, root.brightness - delta);
+        }
     }
 
     Component.onCompleted: {
