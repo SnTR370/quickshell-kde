@@ -58,27 +58,29 @@ Variants {
             right: dockWindow.edge === "right"
         }
 
+        // PanelWindow spans to physical screen edge so autohide trigger is always on screen border
         margins {
-            bottom: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "bottom" ? dockWindow.offset : 0)
-            top: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "top" ? dockWindow.offset : 0)
-            left: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "left" ? dockWindow.offset : 0)
-            right: (!dockWindow.isFloating) ? 0 : (dockWindow.edge === "right" ? dockWindow.offset : 0)
+            top: 0
+            bottom: 0
+            left: 0
+            right: 0
         }
 
-        implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (ConfigService.dockIconSize + 20)
-        implicitWidth: isVertical ? (ConfigService.dockIconSize + 20) : (dockSurface.implicitWidth + 24)
+        implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (dockSurface.implicitHeight + (isFloating ? offset : 0))
+        implicitWidth: isVertical ? (dockSurface.implicitWidth + (isFloating ? offset : 0)) : (dockSurface.implicitWidth + 24)
         exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (ConfigService.dockIconSize + 16 + (isFloating ? offset : 0))
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:dock"
 
+        // Disable blur region completely when dock is hidden to prevent ghost blur artifacts
         BackgroundEffect.blurRegion: Region {
-            item: ConfigService.blurEnabled ? dockSurface : null
+            item: (ConfigService.blurEnabled && dockWindow.isRevealed) ? dockSurface : null
         }
 
-        // Mask region for click-through when hidden or hovering around island
+        // Mask region for click-through: when hidden, ONLY physical edge trigger intercepts pointer
         mask: Region {
-            item: dockWindow.isRevealed ? dockSurface : edgeTrigger
+            item: dockWindow.isRevealed ? dockSurface : (dockWindow.autoHide ? edgeTrigger : null)
         }
 
         Timer {
@@ -99,7 +101,7 @@ Variants {
             }
         }
 
-        // Screen Edge Hotspot Trigger for Autohide Reveal
+        // Screen Edge Hotspot Trigger for Autohide Reveal - sits at physical display boundary
         Item {
             id: edgeTrigger
             visible: dockWindow.autoHide
@@ -140,6 +142,10 @@ Variants {
                 top: dockWindow.edge === "top" ? parent.top : undefined
                 left: dockWindow.edge === "left" ? parent.left : undefined
                 right: dockWindow.edge === "right" ? parent.right : undefined
+                bottomMargin: (dockWindow.isFloating && dockWindow.edge === "bottom") ? dockWindow.offset : 0
+                topMargin: (dockWindow.isFloating && dockWindow.edge === "top") ? dockWindow.offset : 0
+                leftMargin: (dockWindow.isFloating && dockWindow.edge === "left") ? dockWindow.offset : 0
+                rightMargin: (dockWindow.isFloating && dockWindow.edge === "right") ? dockWindow.offset : 0
             }
             implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16) : (ConfigService.dockIconSize + 16)
             implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16)
@@ -198,7 +204,7 @@ Variants {
                     iconColor: Theme.primary
                     backgroundColor: Theme.alpha(Theme.primary, 0.12)
                     tooltip: "Applications"
-                    onClicked: ConfigService.toggleLauncher()
+                    onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
                 }
 
                 DockSeparator { isVertical: false }
@@ -241,7 +247,7 @@ Variants {
                     icon: "preferences-system"
                     iconColor: Theme.foreground
                     tooltip: "Settings"
-                    onClicked: ConfigService.toggleSettings()
+                    onClicked: ConfigService.toggleSettings(dockWindow.modelData)
                 }
             }
 
@@ -259,7 +265,7 @@ Variants {
                     iconColor: Theme.primary
                     backgroundColor: Theme.alpha(Theme.primary, 0.12)
                     tooltip: "Applications"
-                    onClicked: ConfigService.toggleLauncher()
+                    onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
                 }
 
                 DockSeparator { isVertical: true }
@@ -302,7 +308,7 @@ Variants {
                     icon: "preferences-system"
                     iconColor: Theme.foreground
                     tooltip: "Settings"
-                    onClicked: ConfigService.toggleSettings()
+                    onClicked: ConfigService.toggleSettings(dockWindow.modelData)
                 }
             }
         }
