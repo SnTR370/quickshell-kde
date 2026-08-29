@@ -8,3 +8,4 @@ BatteryModule 1.0 BatteryModule.qml
 NetworkModule 1.0 NetworkModule.qml
 TrayModule 1.0 TrayModule.qml
 PowerButton 1.0 PowerButton.qml
+PowerPopup 1.0 PowerPopup.qml

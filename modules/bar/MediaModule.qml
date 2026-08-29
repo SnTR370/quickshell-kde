@@ -2,15 +2,19 @@ import QtQuick
 import QtQuick.Layouts
 import "../../services"
 import "../../components"
+import "../media"
 
 Surface {
     id: root
+
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
 
     visible: MprisService.hasPlayers
     implicitHeight: 34
     implicitWidth: layout.implicitWidth + 12
     radius: Theme.radiusSmall
-    color: mediaMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
+    color: (mediaMouse.containsMouse || ConfigService.mediaPopupVisible) ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
 
     RowLayout {
         id: layout
@@ -41,5 +45,17 @@ Surface {
         cursorShape: Qt.PointingHandCursor
         z: -1
         onClicked: ConfigService.toggleMediaPopup()
+    }
+
+    // Lazy-loaded Media Popup
+    Loader {
+        id: mediaPopupLoader
+        active: ConfigService.mediaPopupVisible && MprisService.hasPlayers
+        sourceComponent: MediaPopup {
+            parentWindow: root.barWindowRef || root.Window.window
+            anchorItem: root
+            edge: root.surfaceEdge
+            onClosed: ConfigService.mediaPopupVisible = false
+        }
     }
 }

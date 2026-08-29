@@ -7,6 +7,7 @@ import "."
 Item {
     id: root
 
+    property var parentWindowRef: null
     property var app: null
     property string appId: ""
     property string appName: app ? app.name : appId
@@ -57,23 +58,20 @@ Item {
         show: dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.menuOpen
     }
 
-    // Context Menu Loader
+    // Lazy-loaded Context Menu Popup
     Loader {
-        id: contextMenuLoader
+        id: menuLoader
         active: root.menuOpen
-        anchors.bottom: parent.top
-        anchors.bottomMargin: 8
-        anchors.horizontalCenter: parent.horizontalCenter
-        sourceComponent: Component {
-            DockMenu {
-                appId: root.appId
-                app: root.app
-                isRunning: root.isRunning
-                isPinned: root.isPinned
-                onActionTriggered: {
-                    root.menuOpen = false;
-                }
-            }
+        sourceComponent: DockMenu {
+            parentWindow: root.parentWindowRef || root.Window.window
+            anchorItem: iconContainer
+            edge: ConfigService.dockEdge
+            appId: root.appId
+            app: root.app
+            isRunning: root.isRunning
+            isPinned: root.isPinned
+            onActionTriggered: root.menuOpen = false
+            onClosed: root.menuOpen = false
         }
     }
 

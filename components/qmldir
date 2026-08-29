@@ -5,3 +5,4 @@ Card 1.0 Card.qml
 Slider 1.0 Slider.qml
 Tooltip 1.0 Tooltip.qml
 Badge 1.0 Badge.qml
+AnchoredPopup 1.0 AnchoredPopup.qml

@@ -1,9 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "../../services"
 import "../../components"
 
-Surface {
+AnchoredPopup {
     id: root
 
     property string appId: ""
@@ -16,10 +17,6 @@ Surface {
 
     implicitWidth: Math.max(200, Math.min(320, menuLayout.implicitWidth + 24))
     implicitHeight: menuLayout.implicitHeight + 16
-    radius: Theme.radiusMedium
-    color: Theme.alpha(Theme.card, 0.98)
-    border.color: Theme.border
-    border.width: 1
 
     ColumnLayout {
         id: menuLayout
