@@ -185,10 +185,6 @@ class TestMilestone3A(unittest.TestCase):
         self.assertIn('WlrLayershell.namespace: "quickshell:dock"', dock_content)
 
         # Overlays must be on Overlay layer with exclusiveZone 0
-        self.assertIn("WlrLayershell.layer: WlrLayer.Overlay", launcher_content)
-        self.assertIn('WlrLayershell.namespace: "quickshell:launcher"', launcher_content)
-        self.assertIn("exclusiveZone: 0", launcher_content)
-
         self.assertIn("WlrLayershell.layer: WlrLayer.Overlay", osd_content)
         self.assertIn('WlrLayershell.namespace: "quickshell:osd"', osd_content)
         self.assertIn("exclusiveZone: 0", osd_content)
@@ -197,7 +193,12 @@ class TestMilestone3A(unittest.TestCase):
         self.assertIn('WlrLayershell.namespace: "quickshell:notifications"', toast_content)
         self.assertIn("exclusiveZone: 0", toast_content)
 
-        self.assertIn("WlrLayershell.layer: WlrLayer.Overlay", settings_content)
+        # Settings and Launcher must be on Top layer with exclusiveZone 0 so Spectacle (Overlay) sits above them
+        self.assertIn("WlrLayershell.layer: WlrLayer.Top", launcher_content)
+        self.assertIn('WlrLayershell.namespace: "quickshell:launcher"', launcher_content)
+        self.assertIn("exclusiveZone: 0", launcher_content)
+
+        self.assertIn("WlrLayershell.layer: WlrLayer.Top", settings_content)
         self.assertIn('WlrLayershell.namespace: "quickshell:settings"', settings_content)
         self.assertIn("exclusiveZone: 0", settings_content)
 
@@ -254,8 +255,8 @@ class TestMilestone3A(unittest.TestCase):
         self.assertTrue(is_allowed("DP-2", ["eDP-1", "DP-2"]))
         self.assertTrue(is_allowed("eDP-1", "primary")) # legacy fallback
 
-    def test_09_quickshell_runtime_initialization(self):
-        """Execute quickshell against the root shell.qml to verify complete live startup."""
+    def test_09_quickshell_startup_smoke_test(self):
+        """Startup smoke test: execute quickshell against root shell.qml to verify syntax/QML engine startup."""
         proc = subprocess.Popen(
             ["quickshell", "-p", "./shell.qml"],
             cwd=REPO_DIR,
