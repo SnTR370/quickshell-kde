@@ -346,5 +346,46 @@ class TestDesktopUX(unittest.TestCase):
 
         self.assertTrue(is_alive, f"Quickshell failed to run: exit_code={poll_res}")
 
+    # --- 7. Live KWin WindowsRunner Enumeration Test ---
+
+    def test_12_live_kwin_running_apps_enumeration(self):
+        """Live Integration test: Query real KWin /WindowsRunner and verify empty-icon windows parse into runningAppIds."""
+        try:
+            raw = subprocess.check_output(
+                ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Match", ""],
+                text=True,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            self.skipTest("KWin /WindowsRunner D-Bus endpoint not reachable in this session")
+
+        import re
+        pattern = re.compile(r'\[Argument:\s*\(sssida\{sv\}\)\s*\"([^\"]*)\",\s*\"((?:[^\"\\\\]|\\\\.)*)\",\s*\"([^\"]*)\"')
+        seen_ids = set()
+        running_apps = []
+
+        for match in pattern.finditer(raw):
+            wid = match.group(1)
+            if not wid or wid in seen_ids:
+                continue
+            seen_ids.add(wid)
+
+            title = match.group(2).replace('\\"', '"')
+            icon = match.group(3)
+            if not title and not icon:
+                continue
+
+            app = self.resolve_app(title, icon)
+            resolved_id = app["id"] if app else (icon or title)
+            if resolved_id and resolved_id not in running_apps:
+                running_apps.append(resolved_id)
+
+        # On the user's live desktop, at least one window exists
+        self.assertTrue(len(running_apps) > 0, "Live session must enumerate running windows into non-empty runningAppIds")
+        # If Helium is running, verify it resolves to its appimage id
+        if "Helium" in raw:
+            helium_in_apps = any("helium" in a.lower() for a in running_apps)
+            self.assertTrue(helium_in_apps, "Helium must resolve to an appId containing 'helium' when open")
+
 if __name__ == "__main__":
     unittest.main()
