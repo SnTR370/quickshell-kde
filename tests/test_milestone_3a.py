@@ -206,7 +206,7 @@ class TestMilestone3A(unittest.TestCase):
         with open(os.path.join(REPO_DIR, "services/core/ModuleRegistry.qml")) as f:
             mod_content = f.read()
 
-        required_modules = ["launcher", "workspaces", "clock", "media", "tray", "network", "battery", "audio", "power"]
+        required_modules = ["launcher", "workspaces", "clock", "media", "tray", "network", "battery", "audio", "brightness", "power"]
         for mod in required_modules:
             self.assertIn(f'id: "{mod}"', mod_content)
 
