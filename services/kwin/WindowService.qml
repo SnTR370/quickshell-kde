@@ -72,7 +72,7 @@ Singleton {
 
     function parseWindowsOutput(text) {
         if (!text) return;
-        const re = /\[Argument: \(sssida\{sv\}\) "([^"]+)", "([^"]+)", "([^"]+)"/g;
+        const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)",\s*"((?:[^"\\]|\\.)*)",\s*"([^"]*)"/g;
         let match;
         const list = [];
         const seenIds = {};
@@ -81,20 +81,22 @@ Singleton {
 
         while ((match = re.exec(text)) !== null) {
             const wid = match[1];
-            if (seenIds[wid]) continue;
+            if (!wid || seenIds[wid]) continue;
             seenIds[wid] = true;
 
-            const title = match[2];
+            const title = match[2].replace(/\\"/g, '"');
             const icon = match[3];
+            if (!title && !icon) continue;
+
             const app = ApplicationService.findAppByTitleOrIcon(title, icon);
-            const resolvedAppId = app ? app.id : icon;
-            const resolvedName = app ? app.name : title;
-            const resolvedIcon = app ? app.icon : icon;
+            const resolvedAppId = app ? app.id : (icon || title);
+            const resolvedName = app ? app.name : (title || icon);
+            const resolvedIcon = app ? app.icon : (icon || "application-x-executable");
 
             const winObj = {
                 id: wid,
                 title: title,
-                icon: resolvedIcon || icon,
+                icon: resolvedIcon,
                 rawIcon: icon,
                 appId: resolvedAppId,
                 appName: resolvedName,
@@ -103,7 +105,7 @@ Singleton {
 
             list.push(winObj);
 
-            if (!appIdsSet[resolvedAppId]) {
+            if (resolvedAppId && !appIdsSet[resolvedAppId]) {
                 appIdsSet[resolvedAppId] = true;
                 appIdsList.push(resolvedAppId);
             }
