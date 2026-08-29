@@ -64,6 +64,13 @@ Singleton {
             defaultSlot: "right"
         },
         {
+            id: "brightness",
+            name: "Display Brightness",
+            icon: "display-brightness-high",
+            description: "Display backlight level indicator and per-display adjuster",
+            defaultSlot: "right"
+        },
+        {
             id: "power",
             name: "Power Menu",
             icon: "system-shutdown",

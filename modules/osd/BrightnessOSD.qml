@@ -6,7 +6,13 @@ import "../../components"
 Surface {
     id: root
 
-    implicitWidth: 220
+    readonly property var activeDisplay: BrightnessService.lastChangedDisplay || BrightnessService.controlledDisplay
+    readonly property string displayLabel: activeDisplay ? activeDisplay.label : "Brightness"
+    readonly property real displayRatio: activeDisplay ? activeDisplay.ratio : BrightnessService.brightness
+    readonly property int displayPercentage: Math.round(displayRatio * 100)
+    readonly property bool isInternal: activeDisplay ? activeDisplay.isInternal : true
+
+    implicitWidth: Math.max(220, Math.min(340, 140 + displayLabel.length * 7))
     implicitHeight: 64
     radius: Theme.radiusLarge
     color: Theme.alpha(Theme.card, 0.95)
@@ -14,9 +20,9 @@ Surface {
     border.width: 1
 
     readonly property string iconName: {
-        if (BrightnessService.brightness > 0.66) return "display-brightness-high";
-        if (BrightnessService.brightness > 0.33) return "display-brightness-medium";
-        if (BrightnessService.brightness > 0.0) return "display-brightness-low";
+        if (displayRatio > 0.66) return "display-brightness-high";
+        if (displayRatio > 0.33) return "display-brightness-medium";
+        if (displayRatio > 0.0) return "display-brightness-low";
         return "display-brightness-off";
     }
 
@@ -37,19 +43,20 @@ Surface {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
 
                 Text {
-                    text: "Brightness"
+                    text: root.displayLabel
                     color: Theme.foreground
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     font.bold: true
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
                 }
 
-                Item { Layout.fillWidth: true }
-
                 Text {
-                    text: BrightnessService.percentage + "%"
+                    text: root.displayPercentage + "%"
                     color: Theme.foregroundMuted
                     font.family: Theme.fontFamilyMono
                     font.pixelSize: Theme.fontSizeSmall
@@ -66,7 +73,7 @@ Surface {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: Math.min(parent.width, parent.width * BrightnessService.brightness)
+                    width: Math.min(parent.width, parent.width * root.displayRatio)
                     radius: 3
                     color: Theme.warning
                 }

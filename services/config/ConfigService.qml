@@ -22,7 +22,7 @@ Singleton {
     property int barHeight: 44
     property var barLeft: ["launcher", "workspaces"]
     property var barCenter: ["clock"]
-    property var barRight: ["media", "tray", "network", "battery", "audio", "power"]
+    property var barRight: ["media", "tray", "network", "battery", "audio", "brightness", "power"]
     property real barOpacity: 0.92
     property var barMonitors: "all"
     property bool blurEnabled: true
@@ -100,7 +100,7 @@ Singleton {
             "height": 44,
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
-            "right": ["media", "tray", "network", "battery", "audio", "power"],
+            "right": ["media", "tray", "network", "battery", "audio", "brightness", "power"],
             "opacity": 0.92,
             "monitors": "all",
             "blur": true,

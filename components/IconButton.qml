@@ -12,6 +12,7 @@ Item {
     property color hoverColor: Theme.hover
     property color activeColor: Theme.active
     property real size: 34
+    property real iconSize: 0
     property real radius: Theme.radiusSmall
     property string tooltip: ""
     property int badgeCount: 0
@@ -44,7 +45,7 @@ Item {
 
             SvgIcon {
                 icon: root.icon
-                size: root.size * 0.55
+                size: root.iconSize > 0 ? root.iconSize : (root.size * 0.55)
                 color: root.active ? Theme.contrastColor(root.activeColor) : (mouseArea.containsMouse ? Qt.lighter(root.iconColor, 1.1) : root.iconColor)
                 visible: root.icon.length > 0
                 anchors.verticalCenter: parent.verticalCenter

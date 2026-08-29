@@ -12,6 +12,7 @@ Singleton {
     property var displays: []
     property var controlledDisplay: null
     property string controlledDisplayName: controlledDisplay ? (controlledDisplay.label || controlledDisplay.dbusName) : ""
+    property var lastChangedDisplay: null
 
     property bool controllable: controlledDisplay !== null && controlledDisplay.maxBrightness > 0
     property bool sysfsReadable: false
@@ -52,6 +53,7 @@ Singleton {
     function selectControlledDisplay() {
         if (!root.displays || root.displays.length === 0) {
             root.controlledDisplay = null;
+            root.lastChangedDisplay = null;
             return;
         }
 
@@ -74,7 +76,17 @@ Singleton {
 
         root.controlledDisplay = selected;
         if (selected && selected.maxBrightness > 0) {
-            root.brightness = Math.max(0.0, Math.min(1.0, selected.brightness / selected.maxBrightness));
+            const ratio = Math.max(0.0, Math.min(1.0, selected.brightness / selected.maxBrightness));
+            root.brightness = ratio;
+            root.lastChangedDisplay = {
+                dbusName: selected.dbusName,
+                path: selected.path,
+                label: selected.label,
+                isInternal: selected.isInternal,
+                brightness: selected.brightness,
+                maxBrightness: selected.maxBrightness,
+                ratio: ratio
+            };
         }
     }
 
@@ -116,24 +128,31 @@ Singleton {
     function handleBrightnessChanged(displayDbusName, newBrightness) {
         if (!root.displays) return;
 
-        // Update matching display
+        let matched = null;
         for (let i = 0; i < root.displays.length; i++) {
             if (root.displays[i].dbusName === displayDbusName) {
                 root.displays[i].brightness = newBrightness;
+                matched = root.displays[i];
                 break;
             }
         }
 
-        // Only update primary/OSD state if signal is for the currently controlled display
-        if (root.controlledDisplay && root.controlledDisplay.dbusName === displayDbusName) {
-            const max = root.controlledDisplay.maxBrightness;
-            if (max > 0) {
-                const ratio = Math.max(0.0, Math.min(1.0, newBrightness / max));
-                if (Math.abs(root.brightness - ratio) > 0.005) {
-                    root.brightness = ratio;
-                    root.osdPulse();
-                }
+        if (matched && matched.maxBrightness > 0) {
+            const ratio = Math.max(0.0, Math.min(1.0, newBrightness / matched.maxBrightness));
+            root.lastChangedDisplay = {
+                dbusName: matched.dbusName,
+                path: matched.path,
+                label: matched.label,
+                isInternal: matched.isInternal,
+                brightness: newBrightness,
+                maxBrightness: matched.maxBrightness,
+                ratio: ratio
+            };
+
+            if (root.controlledDisplay && root.controlledDisplay.dbusName === displayDbusName) {
+                root.brightness = ratio;
             }
+            root.osdPulse();
         }
     }
 
@@ -152,8 +171,17 @@ Singleton {
                     const cur = parseInt(parts[0], 10);
                     const max = parseInt(parts[1], 10);
                     if (!isNaN(cur) && !isNaN(max) && max > 0) {
-                        root.brightness = Math.max(0.0, Math.min(1.0, cur / max));
+                        const ratio = Math.max(0.0, Math.min(1.0, cur / max));
+                        root.brightness = ratio;
                         root.sysfsReadable = true;
+                        root.lastChangedDisplay = {
+                            dbusName: "sysfs",
+                            label: "Internal Display",
+                            isInternal: true,
+                            brightness: cur,
+                            maxBrightness: max,
+                            ratio: ratio
+                        };
                     }
                 }
             } else {
@@ -170,32 +198,78 @@ Singleton {
         }
     }
 
-    function setBrightness(ratio) {
-        if (!root.controllable) {
-            Log.warn("BrightnessService", "Cannot set brightness: no writable KDE ScreenBrightness display available (backend is read-only).");
-            return;
+    function setBrightnessForDisplay(dbusName, ratio) {
+        if (!root.displays || root.displays.length === 0) return;
+        let targetDisp = null;
+        for (let i = 0; i < root.displays.length; i++) {
+            if (root.displays[i].dbusName === dbusName || root.displays[i].path === dbusName) {
+                targetDisp = root.displays[i];
+                break;
+            }
         }
+        if (!targetDisp) {
+            targetDisp = root.controlledDisplay;
+        }
+        if (!targetDisp || targetDisp.maxBrightness <= 0) return;
 
         const clamped = Math.max(0.0, Math.min(1.0, ratio));
-        root.brightness = clamped;
+        const targetVal = Math.round(clamped * targetDisp.maxBrightness);
+        targetDisp.brightness = targetVal;
+
+        root.lastChangedDisplay = {
+            dbusName: targetDisp.dbusName,
+            path: targetDisp.path,
+            label: targetDisp.label,
+            isInternal: targetDisp.isInternal,
+            brightness: targetVal,
+            maxBrightness: targetDisp.maxBrightness,
+            ratio: clamped
+        };
+
+        if (root.controlledDisplay && root.controlledDisplay.dbusName === targetDisp.dbusName) {
+            root.brightness = clamped;
+        }
+
         root.osdPulse();
-
-        const targetVal = Math.round(clamped * root.controlledDisplay.maxBrightness);
-        Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", root.controlledDisplay.path, "org.kde.ScreenBrightness.Display.SetBrightness", targetVal.toString(), "0"]);
+        Quickshell.execDetached(["qdbus6", "org.kde.ScreenBrightness", targetDisp.path, "org.kde.ScreenBrightness.Display.SetBrightness", targetVal.toString(), "0"]);
     }
 
-    function increaseBrightness(step) {
-        if (!root.controllable) return;
-        const delta = step || 0.05;
-        const target = Math.min(1.0, root.brightness + delta);
-        setBrightness(target);
+    function setBrightness(ratio) {
+        if (root.controlledDisplay) {
+            setBrightnessForDisplay(root.controlledDisplay.dbusName, ratio);
+        } else if (root.controllable) {
+            const clamped = Math.max(0.0, Math.min(1.0, ratio));
+            root.brightness = clamped;
+            root.osdPulse();
+        }
     }
 
-    function decreaseBrightness(step) {
-        if (!root.controllable) return;
+    function increaseBrightness(step, dbusName) {
         const delta = step || 0.05;
-        const target = Math.max(0.0, root.brightness - delta);
-        setBrightness(target);
+        if (dbusName) {
+            for (let i = 0; i < root.displays.length; i++) {
+                if (root.displays[i].dbusName === dbusName) {
+                    const curRatio = root.displays[i].brightness / root.displays[i].maxBrightness;
+                    setBrightnessForDisplay(dbusName, curRatio + delta);
+                    return;
+                }
+            }
+        }
+        setBrightness(root.brightness + delta);
+    }
+
+    function decreaseBrightness(step, dbusName) {
+        const delta = step || 0.05;
+        if (dbusName) {
+            for (let i = 0; i < root.displays.length; i++) {
+                if (root.displays[i].dbusName === dbusName) {
+                    const curRatio = root.displays[i].brightness / root.displays[i].maxBrightness;
+                    setBrightnessForDisplay(dbusName, curRatio - delta);
+                    return;
+                }
+            }
+        }
+        setBrightness(root.brightness - delta);
     }
 
     Component.onCompleted: {
