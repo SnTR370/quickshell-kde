@@ -32,6 +32,62 @@ Singleton {
         scanProc.running = true;
     }
 
+    property var aliasMap: ({})
+
+    function rebuildAliasMap() {
+        const map = {};
+        if (!root.applications) return;
+
+        // Pass 1: Primary identifiers (ID, StartupWMClass, Clean Name, Icon)
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app) continue;
+            if (app.id) {
+                const cleanId = app.id.toLowerCase().replace(/\.desktop$/, "");
+                map[cleanId] = app;
+                map[app.id.toLowerCase()] = app;
+                if (cleanId.indexOf("appimagekit_") === 0) {
+                    const cleanAppImage = cleanId.replace(/^appimagekit_[0-9a-f]+-/, "");
+                    map[cleanAppImage] = app;
+                }
+            }
+            if (app.startupWMClass) {
+                map[app.startupWMClass.toLowerCase()] = app;
+            }
+            if (app.name) {
+                const cleanName = app.name.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
+                if (cleanName.length > 1) {
+                    map[cleanName] = app;
+                }
+            }
+            if (app.icon) {
+                const cleanIcon = app.icon.toLowerCase().replace(/\.desktop$/, "");
+                map[cleanIcon] = app;
+            }
+        }
+
+        // Pass 2: Secondary / generic fallback aliases (exec binary, generic categories)
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app) continue;
+            if (app.execBinary) {
+                const eb = app.execBinary.toLowerCase();
+                if (!map[eb]) {
+                    map[eb] = app;
+                }
+            }
+            if (app.aliases && Array.isArray(app.aliases)) {
+                for (let a = 0; a < app.aliases.length; a++) {
+                    const alias = app.aliases[a].toLowerCase();
+                    if (!map[alias]) {
+                        map[alias] = app;
+                    }
+                }
+            }
+        }
+        root.aliasMap = map;
+    }
+
     Process {
         id: scanProc
         property string buf: ""
@@ -42,6 +98,7 @@ Singleton {
             if (exitCode === 0 && scanProc.buf.trim().length > 0) {
                 try {
                     root.applications = JSON.parse(scanProc.buf);
+                    root.rebuildAliasMap();
                     Log.info("ApplicationService", "Loaded " + root.applications.length + " applications");
                 } catch (e) {
                     Log.error("ApplicationService", "Failed to parse application list: " + e);
@@ -113,37 +170,60 @@ Singleton {
 
     function getAppById(appId) {
         if (!appId || !root.applications) return null;
-        const needle = appId.toLowerCase();
+        const needle = String(appId).trim().toLowerCase();
+        const cleanNeedle = needle.replace(/\.desktop$/, "");
+
+        // 1. Direct aliasMap index lookup (O(1))
+        if (root.aliasMap) {
+            if (root.aliasMap[needle]) return root.aliasMap[needle];
+            if (root.aliasMap[cleanNeedle]) return root.aliasMap[cleanNeedle];
+        }
+
+        // 2. Linear scan of applications
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
-            if (app.id.toLowerCase() === needle || app.id.toLowerCase() === needle + ".desktop") {
-                return app;
-            }
+            const aid = app.id.toLowerCase();
+            const aClean = aid.replace(/\.desktop$/, "");
+            if (aid === needle || aClean === cleanNeedle) return app;
+            if (app.startupWMClass && app.startupWMClass.toLowerCase() === cleanNeedle) return app;
+            if (app.execBinary && app.execBinary.toLowerCase() === cleanNeedle) return app;
+            if (app.aliases && app.aliases.indexOf(cleanNeedle) !== -1) return app;
         }
         return null;
     }
 
     function findAppByTitleOrIcon(title, iconName) {
         if (!root.applications || root.applications.length === 0) return null;
-        const lowerTitle = (title || "").toLowerCase();
-        const lowerIcon = (iconName || "").toLowerCase();
+        const lowerTitle = (title || "").trim().toLowerCase();
+        const lowerIcon = (iconName || "").trim().toLowerCase();
 
-        // 1. Direct icon or ID match
+        // 1. Check icon name first
         if (lowerIcon.length > 0) {
-            for (let i = 0; i < root.applications.length; i++) {
-                const a = root.applications[i];
-                if (a.icon && a.icon.toLowerCase() === lowerIcon) return a;
-                if (a.id.toLowerCase() === lowerIcon || a.id.toLowerCase() === lowerIcon + ".desktop") return a;
-            }
+            const appByIcon = getAppById(lowerIcon);
+            if (appByIcon) return appByIcon;
         }
 
-        // 2. Title suffix or containment match (e.g. "quickshell-kde : agy — Konsole" -> "Konsole")
+        // 2. Check title separators (common in Wayland / X11 window titles)
         if (lowerTitle.length > 0) {
-            // First check exact suffix match after " — " or " - "
+            // Split title by common suffixes / separators: " — ", " - ", " : ", " | "
+            const segments = lowerTitle.split(/\s+[—–\-:|]\s+/);
+            // Iterate from end to beginning (apps usually suffix their name, e.g. "quickshell-kde : agy — Konsole")
+            for (let s = segments.length - 1; s >= 0; s--) {
+                const seg = segments[s].trim();
+                if (seg.length > 1) {
+                    const matchedApp = getAppById(seg);
+                    if (matchedApp) return matchedApp;
+                }
+            }
+
+            // Direct substring / name match
             for (let i = 0; i < root.applications.length; i++) {
                 const a = root.applications[i];
-                const lowerName = (a.name || "").toLowerCase();
-                if (lowerName.length > 2 && lowerTitle.indexOf(lowerName) !== -1) {
+                const cleanName = (a.name || "").replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
+                if (cleanName.length > 2 && lowerTitle.indexOf(cleanName) !== -1) {
+                    return a;
+                }
+                if (a.startupWMClass && a.startupWMClass.length > 2 && lowerTitle.indexOf(a.startupWMClass.toLowerCase()) !== -1) {
                     return a;
                 }
             }

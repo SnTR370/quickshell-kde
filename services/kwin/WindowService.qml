@@ -89,13 +89,16 @@ Singleton {
             const app = ApplicationService.findAppByTitleOrIcon(title, icon);
             const resolvedAppId = app ? app.id : icon;
             const resolvedName = app ? app.name : title;
+            const resolvedIcon = app ? app.icon : icon;
 
             const winObj = {
                 id: wid,
                 title: title,
-                icon: icon,
+                icon: resolvedIcon || icon,
+                rawIcon: icon,
                 appId: resolvedAppId,
-                appName: resolvedName
+                appName: resolvedName,
+                app: app
             };
 
             list.push(winObj);
@@ -113,23 +116,33 @@ Singleton {
     }
 
     function isAppRunning(appId) {
-        if (!appId || !root.runningAppIds) return false;
-        const lower = appId.toLowerCase().replace(/\.desktop$/, "");
-        for (let i = 0; i < root.runningAppIds.length; i++) {
-            const r = root.runningAppIds[i].toLowerCase().replace(/\.desktop$/, "");
-            if (r === lower) return true;
+        if (!appId || !root.windows || root.windows.length === 0) return false;
+        const app = ApplicationService.getAppById(appId);
+        const targetId = app ? app.id.toLowerCase() : String(appId).toLowerCase().replace(/\.desktop$/, "");
+        const aliases = app && app.aliases ? app.aliases : [targetId];
+
+        for (let i = 0; i < root.windows.length; i++) {
+            const w = root.windows[i];
+            const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
+            const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
+            if (wAppId === targetId || w.appId === (app ? app.id : appId)) return true;
+            if (aliases.indexOf(wAppId) !== -1 || aliases.indexOf(wIcon) !== -1) return true;
         }
         return false;
     }
 
     function getWindowsForApp(appId) {
-        if (!appId || !root.windows) return [];
-        const lower = appId.toLowerCase().replace(/\.desktop$/, "");
+        if (!appId || !root.windows || root.windows.length === 0) return [];
+        const app = ApplicationService.getAppById(appId);
+        const targetId = app ? app.id.toLowerCase() : String(appId).toLowerCase().replace(/\.desktop$/, "");
+        const aliases = app && app.aliases ? app.aliases : [targetId];
         const result = [];
+
         for (let i = 0; i < root.windows.length; i++) {
             const w = root.windows[i];
-            const wLower = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
-            if (wLower === lower) {
+            const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
+            const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
+            if (wAppId === targetId || w.appId === (app ? app.id : appId) || aliases.indexOf(wAppId) !== -1 || aliases.indexOf(wIcon) !== -1) {
                 result.push(w);
             }
         }
