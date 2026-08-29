@@ -11,6 +11,10 @@ Surface {
     radius: Theme.radiusSmall
     color: audioMouse.containsMouse ? Theme.hover : Theme.alpha(Theme.surfaceVariant, 0.6)
 
+    property var barWindowRef: null
+    property string surfaceEdge: "top"
+    property bool popupOpen: false
+
     readonly property string iconName: {
         if (AudioService.muted) return "audio-volume-muted";
         if (AudioService.isHeadphone) return "audio-headphones";
@@ -40,6 +44,17 @@ Surface {
         }
     }
 
+    Loader {
+        id: popupLoader
+        active: root.popupOpen
+        sourceComponent: AudioPopup {
+            parentWindow: root.barWindowRef || root.Window.window
+            anchorItem: root
+            edge: root.surfaceEdge
+            onClosed: root.popupOpen = false
+        }
+    }
+
     MouseArea {
         id: audioMouse
         anchors.fill: parent
@@ -51,7 +66,7 @@ Surface {
             if (mouse.button === Qt.RightButton) {
                 AudioService.openVolumeControl();
             } else {
-                AudioService.toggleMute();
+                root.popupOpen = !root.popupOpen;
             }
         }
 

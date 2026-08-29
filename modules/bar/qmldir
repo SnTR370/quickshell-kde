@@ -9,3 +9,6 @@ NetworkModule 1.0 NetworkModule.qml
 TrayModule 1.0 TrayModule.qml
 PowerButton 1.0 PowerButton.qml
 PowerPopup 1.0 PowerPopup.qml
+AudioPopup 1.0 AudioPopup.qml
+BrightnessModule 1.0 BrightnessModule.qml
+BrightnessPopup 1.0 BrightnessPopup.qml

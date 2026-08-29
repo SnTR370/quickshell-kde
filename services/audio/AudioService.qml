@@ -68,6 +68,15 @@ Singleton {
         }
     }
 
+    function setInputVolume(val) {
+        const clamped = Math.max(0.0, Math.min(1.0, val));
+        if (defaultSource && defaultSource.audio) {
+            defaultSource.audio.volume = clamped;
+        } else {
+            Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(clamped)]);
+        }
+    }
+
     function openVolumeControl() {
         Quickshell.execDetached(["kcmshell6", "kcm_pulseaudio"]);
     }
