@@ -34,6 +34,19 @@
   * `showDesktop(bool showing)`
   * `showDebugConsole()`
 
+### Window Management & Running Task Resolution
+* **Service**: `org.kde.KWin`
+* **Path**: `/WindowsRunner`
+* **Interface**: `org.kde.krunner1`
+* **Methods**:
+  * `Match(QString query)` -> `a(sssuda{sv})` (Queries live open toplevel windows, extracting window UUID, title, icon/appId, desktop index, and activation metadata)
+  * `Run(QString matchId, QString actionId)` (Directly activates and raises the target window by UUID)
+
+### KWin Wayland Thumbnail Protocol Research Result
+* **Protocol Availability**: KWin Wayland does not expose an unprivileged, public Wayland window thumbnail protocol (`org_kde_kwin_thumbnail` or `zwlr_screencopy_v1` are compositor-internal or specific to wlroots compositors).
+* **Plasma Architecture**: In KDE Plasma 6, window live thumbnails are provided via internal compositor-private bindings (`KWin::ThumbnailItem` texture sharing inside the compositor process) and PipeWire portal screencasting per window (which requires user permission prompts).
+* **Truthful Capabilities Tenet**: In alignment with Core Principle 8 (*Truthful Capabilities: Never fake unsupported KWin or Wayland protocols*), the multi-window chooser popup truthfully displays actual window titles, icons, and activation controls without generating faked mockups or unreliable preview boxes.
+
 ### PowerDevil / Session Management
 * **Service**: `org.kde.Shutdown`
 * **Path**: `/Shutdown`
