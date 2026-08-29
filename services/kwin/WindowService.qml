@@ -89,9 +89,9 @@ Singleton {
             if (!title && !icon) continue;
 
             const app = ApplicationService.findAppByTitleOrIcon(title, icon);
-            const resolvedAppId = app ? app.id : (icon || title);
-            const resolvedName = app ? app.name : (title || icon);
-            const resolvedIcon = app ? app.icon : (icon || "application-x-executable");
+            const resolvedAppId = app ? app.id : (icon && icon.length > 0 ? icon : ("window-" + wid));
+            const resolvedName = app ? app.name : (title && title.length > 0 ? title : (icon || "Window"));
+            const resolvedIcon = app ? app.icon : (icon && icon.length > 0 ? icon : "application-x-executable");
 
             const winObj = {
                 id: wid,
@@ -105,9 +105,13 @@ Singleton {
 
             list.push(winObj);
 
-            if (resolvedAppId && !appIdsSet[resolvedAppId]) {
-                appIdsSet[resolvedAppId] = true;
-                appIdsList.push(resolvedAppId);
+            // Never treat dynamic window titles as application identities
+            if (app && !appIdsSet[app.id]) {
+                appIdsSet[app.id] = true;
+                appIdsList.push(app.id);
+            } else if (!app && icon && icon.length > 0 && !appIdsSet[icon]) {
+                appIdsSet[icon] = true;
+                appIdsList.push(icon);
             }
         }
 

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../config"
+import "../mpris"
 import "../core/Log.js" as Log
 
 Singleton {
@@ -203,7 +204,32 @@ Singleton {
             if (appByIcon) return appByIcon;
         }
 
-        // 2. Check title separators (common in Wayland / X11 window titles)
+        // 2. Correlate with active MPRIS media players (generically resolves dynamic media track window titles)
+        if (typeof MprisService !== "undefined" && MprisService && MprisService.players && MprisService.players.length > 0 && lowerTitle.length > 0) {
+            for (let p = 0; p < MprisService.players.length; p++) {
+                const player = MprisService.players[p];
+                if (!player) continue;
+                const pTitle = (player.trackTitle || "").trim().toLowerCase();
+                const pArtist = (Array.isArray(player.trackArtists) ? player.trackArtists.join(", ") : (player.trackArtist || "")).trim().toLowerCase();
+
+                let matchesPlayer = false;
+                if (pTitle.length > 1 && (lowerTitle === pTitle || lowerTitle.indexOf(pTitle) !== -1)) {
+                    matchesPlayer = true;
+                } else if (pArtist.length > 1 && lowerTitle.indexOf(pArtist) !== -1) {
+                    matchesPlayer = true;
+                }
+
+                if (matchesPlayer) {
+                    const playerTarget = player.desktopEntry || player.identity || "";
+                    if (playerTarget.length > 0) {
+                        const appByPlayer = getAppById(playerTarget);
+                        if (appByPlayer) return appByPlayer;
+                    }
+                }
+            }
+        }
+
+        // 3. Check title separators (common in Wayland / X11 window titles)
         if (lowerTitle.length > 0) {
             // Split title by common suffixes / separators: " — ", " - ", " : ", " | "
             const segments = lowerTitle.split(/\s+[—–\-:|]\s+/);
