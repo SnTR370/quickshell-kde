@@ -12,8 +12,13 @@ Singleton {
     readonly property string barConfigFile: configDir + "/bar_config.json"
     readonly property string dockConfigFile: configDir + "/dock_config.json"
 
-    // Bar state
-    property string barPosition: "top"
+    // --- Bar Surface State ---
+    property bool barEnabled: true
+    property bool barFloating: true
+    property string barEdge: "top"
+    property alias barPosition: root.barEdge // Backward compatibility alias
+    property int barEdgeOffset: 8
+    property bool barReserveSpace: false
     property int barHeight: 44
     property var barLeft: ["launcher", "workspaces"]
     property var barCenter: ["clock"]
@@ -23,9 +28,13 @@ Singleton {
     property bool blurEnabled: true
     property bool notificationsEnabled: false
 
-    // Dock state
+    // --- Dock Surface State ---
     property bool dockEnabled: true
-    property string dockPosition: "bottom"
+    property bool dockFloating: true
+    property string dockEdge: "bottom"
+    property alias dockPosition: root.dockEdge // Backward compatibility alias
+    property int dockEdgeOffset: 8
+    property bool dockReserveSpace: false
     property int dockIconSize: 44
     property bool dockAutoHide: false
     property int dockHideDelay: 350
@@ -33,7 +42,7 @@ Singleton {
     property var dockMonitors: "all"
     property var dockPinned: []
 
-    // Window Visibility
+    // --- Window Visibility State ---
     property bool launcherVisible: false
     property bool settingsVisible: false
     property bool mediaPopupVisible: false
@@ -82,7 +91,12 @@ Singleton {
         path: root.barConfigFile
         fallbackPath: Qt.resolvedUrl("../../config/bar_config.json").toString().replace(/^file:\/\//, "")
         defaultValue: ({
+            "enabled": true,
+            "floating": true,
+            "edge": "top",
             "position": "top",
+            "edgeOffset": 8,
+            "reserveSpace": false,
             "height": 44,
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
@@ -93,11 +107,16 @@ Singleton {
             "notificationsEnabled": false
         })
         onLoadedValue: (parsed, _) => {
-            if (parsed.position) root.barPosition = parsed.position;
+            if (parsed.enabled !== undefined) root.barEnabled = parsed.enabled;
+            if (parsed.floating !== undefined) root.barFloating = parsed.floating;
+            if (parsed.edge) root.barEdge = parsed.edge;
+            else if (parsed.position) root.barEdge = parsed.position;
+            if (parsed.edgeOffset !== undefined) root.barEdgeOffset = Math.max(0, Math.min(64, parsed.edgeOffset));
+            if (parsed.reserveSpace !== undefined) root.barReserveSpace = parsed.reserveSpace;
             if (parsed.height !== undefined) root.barHeight = Math.max(24, Math.min(120, parsed.height));
-            if (parsed.left) root.barLeft = parsed.left;
-            if (parsed.center) root.barCenter = parsed.center;
-            if (parsed.right) root.barRight = parsed.right;
+            if (parsed.left) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
+            if (parsed.center) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
+            if (parsed.right) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
             if (parsed.opacity !== undefined) root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
             if (parsed.monitors !== undefined) {
                 root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
@@ -113,7 +132,11 @@ Singleton {
         fallbackPath: Qt.resolvedUrl("../../config/dock_config.json").toString().replace(/^file:\/\//, "")
         defaultValue: ({
             "enabled": true,
+            "floating": true,
+            "edge": "bottom",
             "position": "bottom",
+            "edgeOffset": 8,
+            "reserveSpace": false,
             "iconSize": 44,
             "autoHide": false,
             "hideDelay": 350,
@@ -123,7 +146,11 @@ Singleton {
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
-            if (parsed.position) root.dockPosition = parsed.position;
+            if (parsed.floating !== undefined) root.dockFloating = parsed.floating;
+            if (parsed.edge) root.dockEdge = parsed.edge;
+            else if (parsed.position) root.dockEdge = parsed.position;
+            if (parsed.edgeOffset !== undefined) root.dockEdgeOffset = Math.max(0, Math.min(64, parsed.edgeOffset));
+            if (parsed.reserveSpace !== undefined) root.dockReserveSpace = parsed.reserveSpace;
             if (parsed.iconSize !== undefined) root.dockIconSize = Math.max(20, Math.min(128, parsed.iconSize));
             if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
             if (parsed.hideDelay !== undefined) root.dockHideDelay = Math.max(50, Math.min(2000, parsed.hideDelay));
@@ -135,9 +162,15 @@ Singleton {
         }
     }
 
+    // --- Bar Operations ---
     function saveBarConfig() {
         barStore.save({
-            "position": root.barPosition,
+            "enabled": root.barEnabled,
+            "floating": root.barFloating,
+            "edge": root.barEdge,
+            "position": root.barEdge,
+            "edgeOffset": root.barEdgeOffset,
+            "reserveSpace": root.barReserveSpace,
             "height": root.barHeight,
             "left": root.barLeft,
             "center": root.barCenter,
@@ -149,8 +182,34 @@ Singleton {
         });
     }
 
+    function setBarEnabled(enabled) {
+        root.barEnabled = enabled;
+        saveBarConfig();
+    }
+
+    function setBarFloating(floating) {
+        root.barFloating = floating;
+        saveBarConfig();
+    }
+
+    function setBarEdge(edge) {
+        if (edge === "top" || edge === "bottom" || edge === "left" || edge === "right") {
+            root.barEdge = edge;
+            saveBarConfig();
+        }
+    }
+
     function setBarPosition(pos) {
-        root.barPosition = pos;
+        setBarEdge(pos);
+    }
+
+    function setBarEdgeOffset(offset) {
+        root.barEdgeOffset = Math.max(0, Math.min(64, offset));
+        saveBarConfig();
+    }
+
+    function setBarReserveSpace(reserve) {
+        root.barReserveSpace = reserve;
         saveBarConfig();
     }
 
@@ -189,7 +248,6 @@ Singleton {
 
         const idx = currentList.indexOf(screenName);
         if (idx !== -1) {
-            // Prevent removing the last selected monitor (lockout prevention)
             if (currentList.length <= 1) {
                 root.setBarMonitors("all");
                 return;
@@ -216,10 +274,15 @@ Singleton {
         saveBarConfig();
     }
 
+    // --- Dock Operations ---
     function saveDockConfig() {
         dockStore.save({
             "enabled": root.dockEnabled,
-            "position": root.dockPosition,
+            "floating": root.dockFloating,
+            "edge": root.dockEdge,
+            "position": root.dockEdge,
+            "edgeOffset": root.dockEdgeOffset,
+            "reserveSpace": root.dockReserveSpace,
             "iconSize": root.dockIconSize,
             "autoHide": root.dockAutoHide,
             "hideDelay": root.dockHideDelay,
@@ -234,8 +297,29 @@ Singleton {
         saveDockConfig();
     }
 
+    function setDockFloating(floating) {
+        root.dockFloating = floating;
+        saveDockConfig();
+    }
+
+    function setDockEdge(edge) {
+        if (edge === "top" || edge === "bottom" || edge === "left" || edge === "right") {
+            root.dockEdge = edge;
+            saveDockConfig();
+        }
+    }
+
     function setDockPosition(pos) {
-        root.dockPosition = pos;
+        setDockEdge(pos);
+    }
+
+    function setDockEdgeOffset(offset) {
+        root.dockEdgeOffset = Math.max(0, Math.min(64, offset));
+        saveDockConfig();
+    }
+
+    function setDockReserveSpace(reserve) {
+        root.dockReserveSpace = reserve;
         saveDockConfig();
     }
 
@@ -284,7 +368,6 @@ Singleton {
 
         const idx = currentList.indexOf(screenName);
         if (idx !== -1) {
-            // Prevent removing the last selected monitor (lockout prevention)
             if (currentList.length <= 1) {
                 root.setDockMonitors("all");
                 return;

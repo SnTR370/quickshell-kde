@@ -1,6 +1,10 @@
 {
   "enabled": true,
+  "floating": true,
+  "edge": "bottom",
   "position": "bottom",
+  "edgeOffset": 8,
+  "reserveSpace": false,
   "iconSize": 44,
   "autoHide": false,
   "hideDelay": 350,

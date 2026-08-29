@@ -1,1 +1,2 @@
 JsonStore 1.0 JsonStore.qml
+singleton ModuleRegistry 1.0 ModuleRegistry.qml

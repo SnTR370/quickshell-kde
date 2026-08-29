@@ -10,3 +10,4 @@ singleton NotificationService 1.0 notifications/NotificationService.qml
 singleton ConfigService 1.0 config/ConfigService.qml
 singleton WindowService 1.0 kwin/WindowService.qml
 singleton BrightnessService 1.0 brightness/BrightnessService.qml
+singleton ModuleRegistry 1.0 core/ModuleRegistry.qml
