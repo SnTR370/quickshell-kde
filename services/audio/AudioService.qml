@@ -65,14 +65,16 @@ Singleton {
         Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kmix", "org.kde.kglobalaccel.Component.invokeShortcut", "mic_mute"]);
     }
 
-    function setInputVolume(val) {
+    function setInputVolume(val, showOsd) {
         const clamped = Math.max(0.0, Math.min(1.0, val));
         if (defaultSource && defaultSource.audio) {
             defaultSource.audio.volume = clamped;
         } else {
             Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(clamped)]);
         }
-        triggerNativeMicOSD(Math.round(clamped * 100));
+        if (showOsd) {
+            triggerNativeMicOSD(Math.round(clamped * 100));
+        }
     }
 
     function openVolumeControl() {

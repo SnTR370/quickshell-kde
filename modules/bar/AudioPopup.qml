@@ -125,7 +125,7 @@ AnchoredPopup {
                 maximumValue: 1.0
                 stepSize: 0.02
                 progressColor: AudioService.inputMuted ? Theme.error : Theme.accent
-                onValueModified: val => AudioService.setInputVolume(val)
+                onValueModified: val => AudioService.setInputVolume(val, false)
             }
 
             Text {

@@ -520,6 +520,7 @@ class TestDesktopUX(unittest.TestCase):
             popup_content = f.read()
         self.assertIn("maximumValue: 1.5", popup_content, "AudioPopup output slider maximumValue must be 1.5 (150%)")
         self.assertIn("AudioService.setVolume(val, false)", popup_content, "Direct slider drag must not trigger redundant OSD spam")
+        self.assertIn("AudioService.setInputVolume(val, false)", popup_content, "Direct mic slider drag must not trigger redundant OSD spam")
 
     def test_16_svg_icon_source_scheme_handling(self):
         """Unit test: Verify SvgIcon properly detects existing URL schemes, pixmaps, file paths, and theme names."""
