@@ -10,9 +10,11 @@ PopupWindow {
     property Item anchorItem: null
     property string edge: "top"
     property int offset: 8
+    property string initialDesktopId: ""
+    property string initialActiveWindow: ""
 
     visible: true
-    grabFocus: true
+    grabFocus: false
 
     function close() {
         root.visible = false;
@@ -20,28 +22,44 @@ PopupWindow {
     }
 
     onVisibleChanged: {
-        if (!visible) {
+        if (visible) {
+            root.initialDesktopId = KWinService.currentDesktopId;
+            root.initialActiveWindow = KWinService.activeWindowId;
+            KWinService.refreshActiveWindow();
+        } else {
+            root.initialDesktopId = "";
+            root.initialActiveWindow = "";
             root.closed();
         }
     }
 
     Connections {
         target: KWinService
-        function onDesktopChanged() { root.close(); }
-        function onShowingDesktopChanged() { root.close(); }
-    }
-
-    Connections {
-        target: WindowService
-        function onWindowsUpdated() {
-            for (let i = 0; i < WindowService.windows.length; i++) {
-                const w = WindowService.windows[i];
-                if ((w.appId && w.appId.indexOf("spectacle") !== -1) || (w.rawIcon && w.rawIcon.indexOf("spectacle") !== -1)) {
-                    root.close();
-                    break;
-                }
+        function onDesktopChanged(index, id) {
+            if (!root.visible) return;
+            if (root.initialDesktopId !== "" && id !== "" && id !== root.initialDesktopId) {
+                root.close();
             }
         }
+        function onShowingDesktopChanged() {
+            root.close();
+        }
+        function onActiveWindowChanged(winId) {
+            if (!root.visible) return;
+            if (root.initialActiveWindow === "") {
+                root.initialActiveWindow = winId;
+            } else if (winId !== "" && winId !== root.initialActiveWindow) {
+                root.close();
+            }
+        }
+    }
+
+    Timer {
+        id: activeWinPollTimer
+        interval: 200
+        repeat: true
+        running: root.visible
+        onTriggered: KWinService.refreshActiveWindow()
     }
 
     anchor.window: root.parentWindow

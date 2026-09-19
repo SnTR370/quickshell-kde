@@ -588,15 +588,30 @@ class TestDesktopUX(unittest.TestCase):
             self.assertEqual(res.returncode, 0, f"QtTest simulation failed:\n{res.stdout}\n{res.stderr}")
 
     def test_20_popup_grab_focus_and_dismissal_contract(self):
-        """Structural test: Verify AnchoredPopup specifies grabFocus, Escape key handler, and Spectacle/desktop dismissal."""
+        """Structural test: Verify AnchoredPopup specifies grabFocus false (Wayland layer-shell safe), Escape key handler, and active window/desktop dismissal without app-hardcoding."""
         with open(os.path.join(REPO_DIR, "components/AnchoredPopup.qml")) as f:
             content = f.read()
 
-        self.assertIn("grabFocus: true", content, "AnchoredPopup must set grabFocus: true to enable native Wayland outside-click dismissal")
+        self.assertIn("grabFocus: false", content, "AnchoredPopup must set grabFocus: false to avoid Wayland layer-shell xdg_popup grab protocol rejection")
         self.assertIn("Keys.onEscapePressed: root.close()", content, "AnchoredPopup must close on Escape key")
-        self.assertIn("target: KWinService", content, "AnchoredPopup must observe KWinService for virtual desktop switches")
-        self.assertIn("target: WindowService", content, "AnchoredPopup must observe WindowService for screenshot app dismissal")
-        self.assertIn("spectacle", content, "AnchoredPopup must detect spectacle windows to auto-close before screenshot capture")
+        self.assertIn("target: KWinService", content, "AnchoredPopup must observe KWinService for virtual desktop switches and active window changes")
+        self.assertIn("onActiveWindowChanged", content, "AnchoredPopup must dismiss on generic active window focus change")
+        self.assertNotIn("target: WindowService", content, "AnchoredPopup must NOT use generic windowsUpdated as popup dismissal")
+        self.assertNotIn("spectacle", content.lower(), "AnchoredPopup must NOT hardcode application names like spectacle")
+
+    def test_24_app_name_cleaning_and_compact_tooltip(self):
+        """Verify ApplicationService cleans version/build noise from app names and Tooltip uses compact offset."""
+        with open(os.path.join(REPO_DIR, "services/applications/ApplicationService.qml")) as f:
+            app_service = f.read()
+        with open(os.path.join(REPO_DIR, "components/Tooltip.qml")) as f:
+            tip_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/dock/DockItem.qml")) as f:
+            dock_item = f.read()
+
+        self.assertIn("function cleanAppName(name)", app_service, "ApplicationService must provide cleanAppName helper")
+        self.assertIn("ApplicationService.cleanAppName", dock_item, "DockItem must use cleanAppName")
+        self.assertIn("offset: 4", tip_content, "Tooltip must use compact offset")
+        self.assertIn("PopupAdjustment.Slide | PopupAdjustment.Flip", tip_content, "Tooltip must use Slide | Flip to prevent edge clipping")
 
     def test_21_tooltip_popupwindow_unclipped_contract(self):
         """Verify Tooltip component supports unclipped PopupWindow without enlarging parent window."""

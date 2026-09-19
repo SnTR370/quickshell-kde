@@ -22,6 +22,7 @@ Singleton {
     // Virtual Desktops
     property var desktops: []
     property string currentDesktopId: ""
+    property string lastEmittedDesktopId: ""
     property int currentDesktopIndex: 0
     property int desktopCount: 1
 
@@ -29,6 +30,7 @@ Singleton {
     property var runningWindows: []
     property string activeWindowTitle: ""
     property string activeWindowAppId: ""
+    property string activeWindowId: ""
 
     // Desktop mode
     property bool showingDesktop: false
@@ -37,6 +39,7 @@ Singleton {
     signal desktopChanged(int index, string id)
     signal desktopsUpdated()
     signal activeOutputChanged(string outputName)
+    signal activeWindowChanged(string windowId)
 
     function refreshActiveOutput() {
         if (!root.isKWin || activeOutputProc.running) return;
@@ -73,6 +76,31 @@ Singleton {
                 }
             }
             activeOutputProc.buf = "";
+        }
+    }
+
+    function refreshActiveWindow() {
+        if (!root.isKWin || activeWindowProc.running) return;
+        activeWindowProc.buf = "";
+        activeWindowProc.running = true;
+    }
+
+    Process {
+        id: activeWindowProc
+        command: ["kdotool", "getactivewindow"]
+        property string buf: ""
+        stdout: SplitParser {
+            onRead: data => { activeWindowProc.buf += data; }
+        }
+        onExited: exitCode => {
+            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0) {
+                const wid = activeWindowProc.buf.trim();
+                if (root.activeWindowId !== wid) {
+                    root.activeWindowId = wid;
+                    root.activeWindowChanged(wid);
+                }
+            }
+            activeWindowProc.buf = "";
         }
     }
 
@@ -178,8 +206,12 @@ Singleton {
             });
         }
         root.desktops = updated;
+        const changed = (root.currentDesktopIndex !== foundIndex || root.lastEmittedDesktopId !== root.currentDesktopId);
         root.currentDesktopIndex = foundIndex;
-        root.desktopChanged(foundIndex, root.currentDesktopId);
+        root.lastEmittedDesktopId = root.currentDesktopId;
+        if (changed) {
+            root.desktopChanged(foundIndex, root.currentDesktopId);
+        }
     }
 
     function setCurrentDesktop(idOrIndex) {
