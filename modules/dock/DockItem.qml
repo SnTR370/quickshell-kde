@@ -20,6 +20,32 @@ Item {
     property bool menuOpen: false
     property bool chooserOpen: false
 
+    onMenuOpenChanged: {
+        if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
+            if (menuOpen) {
+                parentWindowRef.activePopupItem = root;
+            } else if (parentWindowRef.activePopupItem === root && !root.chooserOpen) {
+                parentWindowRef.activePopupItem = null;
+            }
+        }
+    }
+
+    onChooserOpenChanged: {
+        if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
+            if (chooserOpen) {
+                parentWindowRef.activePopupItem = root;
+            } else if (parentWindowRef.activePopupItem === root && !root.menuOpen) {
+                parentWindowRef.activePopupItem = null;
+            }
+        }
+    }
+
+    Component.onDestruction: {
+        if (parentWindowRef && parentWindowRef.activePopupItem === root) {
+            parentWindowRef.activePopupItem = null;
+        }
+    }
+
     implicitWidth: baseSize + 8
     implicitHeight: baseSize + 8
 

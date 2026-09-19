@@ -563,5 +563,29 @@ class TestDesktopUX(unittest.TestCase):
         self.assertNotIn("implicitHeight: 34", tray_content)
         self.assertIn("ConfigService.barHeight", tray_content)
 
+    def test_19_dock_autohide_hover_and_popup_ownership(self):
+        """Unit & Structural test: Verify Dock autohide uses HoverHandler and tracks active popup ownership."""
+        with open(os.path.join(REPO_DIR, "modules/dock/Dock.qml")) as f:
+            dock_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/dock/DockItem.qml")) as f:
+            item_content = f.read()
+
+        # Dock must use HoverHandler to prevent child MouseAreas from triggering false onExited
+        self.assertIn("HoverHandler {", dock_content)
+        self.assertIn("id: dockHoverHandler", dock_content)
+        self.assertIn("readonly property bool hasActivePopup: activePopupItem !== null", dock_content)
+        self.assertIn("readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverHandler.hovered || hasActivePopup", dock_content)
+
+        # DockItem must synchronize activePopupItem with parentWindowRef
+        self.assertIn("parentWindowRef.activePopupItem = root", item_content)
+        self.assertIn("parentWindowRef.activePopupItem = null", item_content)
+
+        # If Qt6 qmltestrunner is available, run interactive hover simulation test
+        qmltest_bin = "/usr/lib/qt6/bin/qmltestrunner"
+        if os.path.isfile(qmltest_bin) and os.access(qmltest_bin, os.X_OK):
+            test_qml = os.path.join(REPO_DIR, "tests/tst_dock_autohide.qml")
+            res = subprocess.run([qmltest_bin, "-input", test_qml], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"QtTest simulation failed:\n{res.stdout}\n{res.stderr}")
+
 if __name__ == "__main__":
     unittest.main()

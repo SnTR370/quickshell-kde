@@ -25,7 +25,14 @@ Variants {
         readonly property int offset: isFloating ? ConfigService.dockEdgeOffset : 0
         readonly property bool autoHide: ConfigService.dockAutoHide
         property bool hoverRevealed: false
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverArea.containsMouse
+        property var activePopupItem: null
+        readonly property bool hasActivePopup: activePopupItem !== null
+        onHasActivePopupChanged: {
+            if (!hasActivePopup && !dockHoverHandler.hovered && autoHide) {
+                hideTimer.restart();
+            }
+        }
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverHandler.hovered || hasActivePopup
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
@@ -97,7 +104,9 @@ Variants {
             interval: Math.max(50, ConfigService.dockHideDelay)
             repeat: false
             onTriggered: {
-                dockWindow.hoverRevealed = false;
+                if (!dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                    dockWindow.hoverRevealed = false;
+                }
             }
         }
 
@@ -116,18 +125,17 @@ Variants {
             height: dockWindow.isVertical ? Math.max(160, dockSurface.implicitHeight) : 6
             width: dockWindow.isVertical ? 6 : Math.max(160, dockSurface.implicitWidth)
 
-            MouseArea {
-                id: edgeTriggerMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                onEntered: {
-                    hideTimer.stop();
-                    revealTimer.restart();
-                }
-                onExited: {
-                    revealTimer.stop();
-                    if (!dockHoverArea.containsMouse) {
-                        hideTimer.restart();
+            HoverHandler {
+                id: edgeTriggerHover
+                onHoveredChanged: {
+                    if (hovered) {
+                        hideTimer.stop();
+                        revealTimer.restart();
+                    } else {
+                        revealTimer.stop();
+                        if (!dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                            hideTimer.restart();
+                        }
                     }
                 }
             }
@@ -176,17 +184,18 @@ Variants {
             opacity: (!dockWindow.autoHide || dockWindow.isRevealed) ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: Theme.animDurationNormal } }
 
-            MouseArea {
-                id: dockHoverArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onEntered: {
-                    revealTimer.stop();
-                    hideTimer.stop();
-                    dockWindow.hoverRevealed = true;
-                }
-                onExited: {
-                    if (dockWindow.autoHide) hideTimer.restart();
+            HoverHandler {
+                id: dockHoverHandler
+                onHoveredChanged: {
+                    if (hovered) {
+                        revealTimer.stop();
+                        hideTimer.stop();
+                        dockWindow.hoverRevealed = true;
+                    } else {
+                        if (dockWindow.autoHide && !dockWindow.hasActivePopup) {
+                            hideTimer.restart();
+                        }
+                    }
                 }
             }
 
