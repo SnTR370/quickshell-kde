@@ -33,6 +33,17 @@ Singleton {
         scanProc.running = true;
     }
 
+    function cleanAppName(name) {
+        if (!name) return "";
+        let clean = String(name);
+        if (clean.indexOf("appimagekit_") === 0) {
+            clean = clean.replace(/^appimagekit_[0-9a-f]+-/, "");
+        }
+        clean = clean.replace(/\.desktop$/, "");
+        clean = clean.replace(/\s*\([vV]?[0-9][0-9a-zA-Z\.\-_+]*\)$/, "");
+        return clean.trim();
+    }
+
     property var aliasMap: ({})
 
     function rebuildAliasMap() {

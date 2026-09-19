@@ -21,14 +21,32 @@ TestCase {
                 hideTimer.restart();
             }
         }
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverHandler.hovered || hasActivePopup
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup
+
+        Item {
+            id: dockInteractiveArea
+            anchors.fill: dockSurface
+            HoverHandler {
+                id: dockAreaHover
+                onHoveredChanged: {
+                    if (hovered) {
+                        hideTimer.stop();
+                        rootWindow.hoverRevealed = true;
+                    } else {
+                        if (rootWindow.autoHide && !rootWindow.hasActivePopup && !dockHoverHandler.hovered) {
+                            hideTimer.restart();
+                        }
+                    }
+                }
+            }
+        }
 
         Timer {
             id: hideTimer
             interval: 100
             repeat: false
             onTriggered: {
-                if (!dockHoverHandler.hovered && !rootWindow.hasActivePopup) {
+                if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !rootWindow.hasActivePopup) {
                     rootWindow.hoverRevealed = false;
                 }
             }

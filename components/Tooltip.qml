@@ -10,7 +10,7 @@ Item {
     property var parentWindow: null
     property Item anchorItem: null
     property string edge: "bottom"
-    property int offset: 8
+    property int offset: 4
 
     // When parentWindow is provided, render as an unclipped Wayland PopupWindow (Qt::ToolTip)
     Loader {
@@ -38,6 +38,7 @@ Item {
                     default: return Edges.Top;
                 }
             }
+            anchor.adjustment: PopupAdjustment.Slide | PopupAdjustment.Flip
             anchor.margins.top: root.edge === "top" ? root.offset : 0
             anchor.margins.bottom: root.edge === "bottom" ? root.offset : 0
             anchor.margins.left: root.edge === "left" ? root.offset : 0
@@ -48,7 +49,7 @@ Item {
             color: "transparent"
 
             Rectangle {
-                width: popupLabel.implicitWidth + 16
+                width: Math.min(popupLabel.implicitWidth + 16, 360)
                 height: popupLabel.implicitHeight + 8
                 radius: Theme.radiusSmall
                 color: Theme.card
@@ -58,10 +59,12 @@ Item {
                 Text {
                     id: popupLabel
                     anchors.centerIn: parent
+                    width: Math.min(implicitWidth, 344)
                     text: root.text
                     color: Theme.foreground
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
+                    elide: Text.ElideRight
                 }
             }
         }
@@ -79,7 +82,7 @@ Item {
         Rectangle {
             id: bubble
             anchors.centerIn: parent
-            width: label.implicitWidth + 16
+            width: Math.min(label.implicitWidth + 16, 360)
             height: label.implicitHeight + 8
             radius: Theme.radiusSmall
             color: Theme.card
@@ -94,10 +97,12 @@ Item {
             Text {
                 id: label
                 anchors.centerIn: parent
+                width: Math.min(implicitWidth, 344)
                 text: root.text
                 color: Theme.foreground
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
+                elide: Text.ElideRight
             }
         }
     }

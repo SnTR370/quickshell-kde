@@ -10,7 +10,7 @@ Item {
     property var parentWindowRef: null
     property var app: null
     property string appId: ""
-    property string appName: app ? app.name : appId
+    property string appName: ApplicationService.cleanAppName(app ? app.name : appId)
     property string appIcon: app ? app.icon : appId
     property bool isRunning: WindowService.isAppRunning(root.appId)
     property bool isPinned: ConfigService.isDockPinned(root.appId)
@@ -107,7 +107,8 @@ Item {
         parentWindow: root.parentWindowRef
         anchorItem: iconContainer
         edge: ConfigService.dockEdge
-        text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : (root.isRunning ? " (Running)" : ""))
+        offset: 4
+        text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : "")
         show: dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.menuOpen && !root.chooserOpen
     }
 

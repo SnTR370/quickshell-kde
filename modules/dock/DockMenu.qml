@@ -38,7 +38,7 @@ AnchoredPopup {
             }
 
             Text {
-                text: root.app ? root.app.name : root.appId
+                text: ApplicationService.cleanAppName(root.app ? root.app.name : root.appId)
                 color: Theme.foreground
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
