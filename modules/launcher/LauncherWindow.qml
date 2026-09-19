@@ -17,7 +17,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || modelData.name === ConfigService.launcherScreenName)
+        visible: ConfigService.launcherVisible && ConfigService.launcherScreenName !== "" && modelData.name === ConfigService.launcherScreenName
         color: "transparent"
 
         anchors {

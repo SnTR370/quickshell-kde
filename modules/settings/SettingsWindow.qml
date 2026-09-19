@@ -16,7 +16,7 @@ Variants {
         required property var modelData
 
         screen: modelData
-        visible: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || modelData.name === ConfigService.settingsScreenName)
+        visible: ConfigService.settingsVisible && ConfigService.settingsScreenName !== "" && modelData.name === ConfigService.settingsScreenName
         color: "transparent"
 
         anchors {
@@ -54,6 +54,8 @@ Variants {
             color: Theme.alpha(Theme.background, Theme.popupOpacity)
             border.color: Theme.border
             border.width: 1
+            focus: settingsWin.visible
+            Keys.onEscapePressed: settingsWin.closeSettings()
 
             MouseArea {
                 anchors.fill: parent

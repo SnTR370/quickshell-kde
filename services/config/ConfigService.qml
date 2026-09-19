@@ -48,21 +48,99 @@ Singleton {
     property string launcherScreenName: ""
     property string settingsScreenName: ""
 
+    onSettingsVisibleChanged: {
+        if (root.settingsVisible && root.settingsScreenName === "") {
+            root.settingsScreenName = root.resolveScreenName();
+        } else if (!root.settingsVisible) {
+            root.settingsScreenName = "";
+        }
+    }
+
+    onLauncherVisibleChanged: {
+        if (root.launcherVisible && root.launcherScreenName === "") {
+            root.launcherScreenName = root.resolveScreenName();
+        } else if (!root.launcherVisible) {
+            root.launcherScreenName = "";
+        }
+    }
+
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            root.validateScreenOwnership();
+        }
+    }
+
+    function validateScreenOwnership() {
+        const screens = Quickshell.screens || [];
+        if (screens.length === 0) {
+            root.settingsVisible = false;
+            root.settingsScreenName = "";
+            root.launcherVisible = false;
+            root.launcherScreenName = "";
+            return;
+        }
+
+        if (root.settingsVisible && root.settingsScreenName !== "") {
+            let found = false;
+            for (let i = 0; i < screens.length; i++) {
+                if (screens[i].name === root.settingsScreenName) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                root.settingsScreenName = screens[0].name;
+            }
+        }
+
+        if (root.launcherVisible && root.launcherScreenName !== "") {
+            let found = false;
+            for (let i = 0; i < screens.length; i++) {
+                if (screens[i].name === root.launcherScreenName) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                root.launcherScreenName = screens[0].name;
+            }
+        }
+    }
+
     function resolveScreenName(screenObjOrName) {
+        const screens = Quickshell.screens || [];
+        if (screens.length === 0) return "";
+
+        // 1. If screen object passed, verify it exists in Quickshell.screens
         if (typeof screenObjOrName === "object" && screenObjOrName && screenObjOrName.name) {
-            return screenObjOrName.name;
+            for (let i = 0; i < screens.length; i++) {
+                if (screens[i].name === screenObjOrName.name) {
+                    return screenObjOrName.name;
+                }
+            }
         }
+
+        // 2. If screen name string passed, verify it exists in Quickshell.screens
         if (typeof screenObjOrName === "string" && screenObjOrName.length > 0) {
-            return screenObjOrName;
+            for (let i = 0; i < screens.length; i++) {
+                if (screens[i].name === screenObjOrName) {
+                    return screenObjOrName;
+                }
+            }
         }
+
+        // 3. Try KWin active output if it exists in Quickshell.screens
         if (KWinService.activeOutputName && KWinService.activeOutputName.length > 0) {
-            return KWinService.activeOutputName;
+            for (let i = 0; i < screens.length; i++) {
+                if (screens[i].name === KWinService.activeOutputName) {
+                    return KWinService.activeOutputName;
+                }
+            }
         }
-        const s = Quickshell.screens;
-        if (s && s.length > 0) {
-            return s[0].name;
-        }
-        return "";
+
+        // 4. Safe fallback: exactly the primary/first connected screen
+        return screens[0].name;
     }
 
     function toggleLauncher(screenObjOrName) {

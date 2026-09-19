@@ -498,15 +498,20 @@ class TestDesktopUX(unittest.TestCase):
         self.assertIsNone(doc_with_app_name, "Document mentioning app name in middle of title must not resolve to app")
 
     def test_14_multimonitor_settings_invocation_locking(self):
-        """Unit test: Verify Settings and Launcher lock to invocation monitor and do not teleport on activeOutput changes."""
+        """Unit test: Verify Settings and Launcher lock to invocation monitor, reject empty screen flood, and support Escape dismissal."""
         with open(os.path.join(REPO_DIR, "services/config/ConfigService.qml")) as f:
             cfg_content = f.read()
         with open(os.path.join(REPO_DIR, "modules/settings/SettingsWindow.qml")) as f:
             set_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/launcher/LauncherWindow.qml")) as f:
+            launch_content = f.read()
 
         self.assertIn("property string settingsScreenName:", cfg_content)
         self.assertIn("property string launcherScreenName:", cfg_content)
-        self.assertIn("ConfigService.settingsScreenName === \"\" || modelData.name === ConfigService.settingsScreenName", set_content)
+        self.assertIn("validateScreenOwnership", cfg_content)
+        self.assertIn('ConfigService.settingsScreenName !== "" && modelData.name === ConfigService.settingsScreenName', set_content)
+        self.assertIn('ConfigService.launcherScreenName !== "" && modelData.name === ConfigService.launcherScreenName', launch_content)
+        self.assertIn("Keys.onEscapePressed: settingsWin.closeSettings()", set_content)
         self.assertIn("WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None", set_content)
 
     def test_15_audio_popup_150_percent_slider_range(self):
