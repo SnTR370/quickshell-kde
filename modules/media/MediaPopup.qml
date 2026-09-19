@@ -39,7 +39,7 @@ AnchoredPopup {
                 size: 20
                 icon: "window-close"
                 iconColor: Theme.foregroundMuted
-                onClicked: ConfigService.mediaPopupVisible = false
+                onClicked: root.close()
             }
         }
 

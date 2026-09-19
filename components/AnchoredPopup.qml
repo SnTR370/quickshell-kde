@@ -13,6 +13,11 @@ PopupWindow {
 
     visible: true
 
+    function close() {
+        root.visible = false;
+        root.closed();
+    }
+
     anchor.window: root.parentWindow
     anchor.item: root.anchorItem
 

@@ -45,7 +45,6 @@ Singleton {
     // --- Window Visibility State ---
     property bool launcherVisible: false
     property bool settingsVisible: false
-    property bool mediaPopupVisible: false
     property string launcherScreenName: ""
     property string settingsScreenName: ""
 
@@ -72,7 +71,6 @@ Singleton {
             root.launcherScreenName = "";
         } else {
             root.settingsVisible = false;
-            root.mediaPopupVisible = false;
             root.launcherScreenName = root.resolveScreenName(screenObjOrName);
             root.launcherVisible = true;
         }
@@ -84,17 +82,8 @@ Singleton {
             root.settingsScreenName = "";
         } else {
             root.launcherVisible = false;
-            root.mediaPopupVisible = false;
             root.settingsScreenName = root.resolveScreenName(screenObjOrName);
             root.settingsVisible = true;
-        }
-    }
-
-    function toggleMediaPopup() {
-        root.mediaPopupVisible = !root.mediaPopupVisible;
-        if (root.mediaPopupVisible) {
-            root.launcherVisible = false;
-            root.settingsVisible = false;
         }
     }
 

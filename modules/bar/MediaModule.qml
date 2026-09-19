@@ -9,19 +9,20 @@ Surface {
 
     property var barWindowRef: null
     property string surfaceEdge: "top"
+    property bool popupOpen: false
 
     visible: MprisService.hasPlayers
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: (mediaMouse.containsMouse || ConfigService.mediaPopupVisible) ? Theme.hover : "transparent"
+    color: (mediaMouse.containsMouse || root.popupOpen) ? Theme.hover : "transparent"
 
     MouseArea {
         id: mediaMouse
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: ConfigService.toggleMediaPopup()
+        onClicked: root.popupOpen = !root.popupOpen
     }
 
     RowLayout {
@@ -49,12 +50,12 @@ Surface {
     // Lazy-loaded Media Popup
     Loader {
         id: mediaPopupLoader
-        active: ConfigService.mediaPopupVisible && MprisService.hasPlayers
+        active: root.popupOpen && MprisService.hasPlayers
         sourceComponent: MediaPopup {
             parentWindow: root.barWindowRef || root.Window.window
             anchorItem: root
             edge: root.surfaceEdge
-            onClosed: ConfigService.mediaPopupVisible = false
+            onClosed: root.popupOpen = false
         }
     }
 }
