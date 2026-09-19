@@ -12,10 +12,36 @@ PopupWindow {
     property int offset: 8
 
     visible: true
+    grabFocus: true
 
     function close() {
         root.visible = false;
         root.closed();
+    }
+
+    onVisibleChanged: {
+        if (!visible) {
+            root.closed();
+        }
+    }
+
+    Connections {
+        target: KWinService
+        function onDesktopChanged() { root.close(); }
+        function onShowingDesktopChanged() { root.close(); }
+    }
+
+    Connections {
+        target: WindowService
+        function onWindowsUpdated() {
+            for (let i = 0; i < WindowService.windows.length; i++) {
+                const w = WindowService.windows[i];
+                if ((w.appId && w.appId.indexOf("spectacle") !== -1) || (w.rawIcon && w.rawIcon.indexOf("spectacle") !== -1)) {
+                    root.close();
+                    break;
+                }
+            }
+        }
     }
 
     anchor.window: root.parentWindow
@@ -64,6 +90,8 @@ PopupWindow {
         color: Theme.alpha(Theme.background, Theme.popupOpacity)
         border.color: Theme.border
         border.width: 1
+        focus: root.visible
+        Keys.onEscapePressed: root.close()
 
         Item {
             id: popupContent

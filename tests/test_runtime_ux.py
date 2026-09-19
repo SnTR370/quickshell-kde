@@ -587,5 +587,15 @@ class TestDesktopUX(unittest.TestCase):
             res = subprocess.run([qmltest_bin, "-input", test_qml], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, f"QtTest simulation failed:\n{res.stdout}\n{res.stderr}")
 
+    def test_20_popup_grab_focus_and_dismissal_contract(self):
+        """Structural test: Verify AnchoredPopup specifies grabFocus, Escape key handler, and Spectacle/desktop dismissal."""
+        with open(os.path.join(REPO_DIR, "components/AnchoredPopup.qml")) as f:
+            content = f.read()
+
+        self.assertIn("grabFocus: true", content, "AnchoredPopup must set grabFocus: true to enable native Wayland outside-click dismissal")
+        self.assertIn("Keys.onEscapePressed: root.close()", content, "AnchoredPopup must dismiss on Escape key")
+        self.assertIn("onDesktopChanged()", content, "AnchoredPopup must dismiss when virtual desktop changes")
+        self.assertIn("spectacle", content, "AnchoredPopup must dismiss when Spectacle screenshot is invoked")
+
 if __name__ == "__main__":
     unittest.main()
