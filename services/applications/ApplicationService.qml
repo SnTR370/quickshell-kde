@@ -204,7 +204,7 @@ Singleton {
             if (appByIcon) return appByIcon;
         }
 
-        // 2. Correlate with active MPRIS media players (generically resolves dynamic media track window titles)
+        // 2. Correlate with active MPRIS media players (strictly requires compound Artist+Title or exact track match)
         if (typeof MprisService !== "undefined" && MprisService && MprisService.players && MprisService.players.length > 0 && lowerTitle.length > 0) {
             for (let p = 0; p < MprisService.players.length; p++) {
                 const player = MprisService.players[p];
@@ -213,9 +213,17 @@ Singleton {
                 const pArtist = (Array.isArray(player.trackArtists) ? player.trackArtists.join(", ") : (player.trackArtist || "")).trim().toLowerCase();
 
                 let matchesPlayer = false;
-                if (pTitle.length > 1 && (lowerTitle === pTitle || lowerTitle.indexOf(pTitle) !== -1)) {
-                    matchesPlayer = true;
-                } else if (pArtist.length > 1 && lowerTitle.indexOf(pArtist) !== -1) {
+                if (pTitle.length > 0 && pArtist.length > 0) {
+                    const comp1 = pArtist + " - " + pTitle;
+                    const comp2 = pTitle + " - " + pArtist;
+                    const comp3 = pArtist + " — " + pTitle;
+                    const comp4 = pTitle + " — " + pArtist;
+                    if (lowerTitle === comp1 || lowerTitle === comp2 || lowerTitle === comp3 || lowerTitle === comp4) {
+                        matchesPlayer = true;
+                    } else if (lowerTitle.indexOf(pArtist) !== -1 && lowerTitle.indexOf(pTitle) !== -1) {
+                        matchesPlayer = true;
+                    }
+                } else if (pTitle.length > 1 && lowerTitle === pTitle) {
                     matchesPlayer = true;
                 }
 
@@ -229,28 +237,14 @@ Singleton {
             }
         }
 
-        // 3. Check title separators (common in Wayland / X11 window titles)
+        // 3. Exact title suffix segment (standard Wayland / XDG window title convention: "<Doc Title> — <App Name>")
         if (lowerTitle.length > 0) {
-            // Split title by common suffixes / separators: " — ", " - ", " : ", " | "
             const segments = lowerTitle.split(/\s+[—–\-:|]\s+/);
-            // Iterate from end to beginning (apps usually suffix their name, e.g. "quickshell-kde : agy — Konsole")
-            for (let s = segments.length - 1; s >= 0; s--) {
-                const seg = segments[s].trim();
-                if (seg.length > 1) {
-                    const matchedApp = getAppById(seg);
+            if (segments.length > 0) {
+                const lastSeg = segments[segments.length - 1].trim();
+                if (lastSeg.length > 1) {
+                    const matchedApp = getAppById(lastSeg);
                     if (matchedApp) return matchedApp;
-                }
-            }
-
-            // Direct substring / name match
-            for (let i = 0; i < root.applications.length; i++) {
-                const a = root.applications[i];
-                const cleanName = (a.name || "").replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
-                if (cleanName.length > 2 && lowerTitle.indexOf(cleanName) !== -1) {
-                    return a;
-                }
-                if (a.startupWMClass && a.startupWMClass.length > 2 && lowerTitle.indexOf(a.startupWMClass.toLowerCase()) !== -1) {
-                    return a;
                 }
             }
         }

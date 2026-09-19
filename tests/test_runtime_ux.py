@@ -69,28 +69,22 @@ class TestDesktopUX(unittest.TestCase):
                         cls.alias_map[al] = app
 
     def resolve_app(self, title, icon):
-        """Replicates ApplicationService.findAppByTitleOrIcon logic."""
+        """Replicates tightened ApplicationService.findAppByTitleOrIcon logic."""
         lower_icon = (icon or "").strip().lower()
         lower_title = (title or "").strip().lower()
 
+        # 1. Check icon name first
         if lower_icon and lower_icon in self.alias_map:
             return self.alias_map[lower_icon]
 
+        # 2. Exact title suffix segment (standard Wayland / XDG window title convention: "<Doc Title> — <App Name>")
         if lower_title:
             import re
             segments = re.split(r'\s+[—–\-:|]\s+', lower_title)
-            for seg in reversed(segments):
-                s = seg.strip()
-                if s and s in self.alias_map:
-                    return self.alias_map[s]
-
-            for app in self.scanned_apps:
-                clean_name = app.get("name", "").split("(")[0].strip().lower()
-                if clean_name and len(clean_name) > 2 and clean_name in lower_title:
-                    return app
-                wmclass = (app.get("startupWMClass") or "").lower()
-                if wmclass and len(wmclass) > 2 and wmclass in lower_title:
-                    return app
+            if len(segments) > 0:
+                last_seg = segments[-1].strip()
+                if len(last_seg) > 1 and last_seg in self.alias_map:
+                    return self.alias_map[last_seg]
 
         return None
 
@@ -396,7 +390,20 @@ class TestDesktopUX(unittest.TestCase):
             for p in mpris_players:
                 p_title = (p["trackTitle"] or "").strip().lower()
                 p_artist = (p["trackArtist"] or "").strip().lower()
-                if (p_title and (p_title in lower_title or lower_title == p_title)) or (p_artist and p_artist in lower_title):
+                matches = False
+                if p_title and p_artist:
+                    comp1 = f"{p_artist} - {p_title}"
+                    comp2 = f"{p_title} - {p_artist}"
+                    comp3 = f"{p_artist} — {p_title}"
+                    comp4 = f"{p_title} — {p_artist}"
+                    if lower_title in [comp1, comp2, comp3, comp4]:
+                        matches = True
+                    elif p_artist in lower_title and p_title in lower_title:
+                        matches = True
+                elif p_title and len(p_title) > 1 and lower_title == p_title:
+                    matches = True
+
+                if matches:
                     target = p.get("desktopEntry") or p.get("identity")
                     if target and target.lower() in self.alias_map:
                         return self.alias_map[target.lower()]
@@ -419,6 +426,8 @@ class TestDesktopUX(unittest.TestCase):
                 running_apps.append(resolved_id)
             elif not app and icon and icon not in running_apps:
                 running_apps.append(icon)
+            elif not app and not icon and resolved_id not in running_apps:
+                running_apps.append(resolved_id)
 
         # On the user's live desktop, at least one window exists
         self.assertTrue(len(running_apps) > 0, "Live session must enumerate running windows into non-empty runningAppIds")
@@ -448,7 +457,20 @@ class TestDesktopUX(unittest.TestCase):
             for p in mpris_players:
                 p_title = (p["trackTitle"] or "").strip().lower()
                 p_artist = (p["trackArtist"] or "").strip().lower()
-                if p_title and (p_title in lower_title or lower_title == p_title):
+                matches = False
+                if p_title and p_artist:
+                    comp1 = f"{p_artist} - {p_title}"
+                    comp2 = f"{p_title} - {p_artist}"
+                    comp3 = f"{p_artist} — {p_title}"
+                    comp4 = f"{p_title} — {p_artist}"
+                    if lower_title in [comp1, comp2, comp3, comp4]:
+                        matches = True
+                    elif p_artist in lower_title and p_title in lower_title:
+                        matches = True
+                elif p_title and len(p_title) > 1 and lower_title == p_title:
+                    matches = True
+
+                if matches:
                     target = p.get("desktopEntry") or p.get("identity")
                     if target.lower() in self.alias_map:
                         return self.alias_map[target.lower()]
@@ -459,13 +481,21 @@ class TestDesktopUX(unittest.TestCase):
         self.assertIsNotNone(app, "Spotify window title with empty icon must resolve to Spotify app entry via MPRIS")
         self.assertIn("spotify", app["id"].lower())
 
-        # 2. Test unknown window with empty icon (MUST NOT fall back to title as appId)
+        # 2. Test unrelated window that merely mentions song title (MUST NOT be hijacked by Spotify)
+        unrelated_doc = resolve_with_mpris("Flow Heat Project Notes", "")
+        self.assertIsNone(unrelated_doc, "Unrelated document mentioning song title must NOT be resolved as Spotify")
+
+        # 3. Test unknown window with empty icon (MUST NOT fall back to title as appId)
         unknown_title = "Arbitrary Document Title - Unknown Tool"
         unresolved_app = resolve_with_mpris(unknown_title, "")
         self.assertIsNone(unresolved_app)
         resolved_app_id = unresolved_app["id"] if unresolved_app else ("window-0_12345")
         self.assertNotEqual(resolved_app_id, unknown_title, "Unresolved window appId must NEVER equal dynamic window title")
         self.assertTrue(resolved_app_id.startswith("window-"), "Unresolved window must retain stable window-based ID")
+
+        # 4. Test document containing application name in middle of text (MUST NOT resolve to that app)
+        doc_with_app_name = resolve_with_mpris("Reviewing dolphin and dolphin notes.txt", "")
+        self.assertIsNone(doc_with_app_name, "Document mentioning app name in middle of title must not resolve to app")
 
     def test_14_multimonitor_settings_invocation_locking(self):
         """Unit test: Verify Settings and Launcher lock to invocation monitor and do not teleport on activeOutput changes."""

@@ -112,6 +112,9 @@ Singleton {
             } else if (!app && icon && icon.length > 0 && !appIdsSet[icon]) {
                 appIdsSet[icon] = true;
                 appIdsList.push(icon);
+            } else if (!app && (!icon || icon.length === 0) && !appIdsSet[resolvedAppId]) {
+                appIdsSet[resolvedAppId] = true;
+                appIdsList.push(resolvedAppId);
             }
         }
 
