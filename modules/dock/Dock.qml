@@ -28,11 +28,11 @@ Variants {
         property var activePopupItem: null
         readonly property bool hasActivePopup: activePopupItem !== null
         onHasActivePopupChanged: {
-            if (!hasActivePopup && !dockHoverHandler.hovered && autoHide) {
+            if (!hasActivePopup && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
                 hideTimer.restart();
             }
         }
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverHandler.hovered || hasActivePopup
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
@@ -85,9 +85,10 @@ Variants {
             item: (ConfigService.blurEnabled && dockWindow.isRevealed) ? dockSurface : null
         }
 
-        // Mask region for click-through: when hidden, ONLY physical edge trigger intercepts pointer
+        // Mask region for click-through: when hidden, ONLY physical edge trigger intercepts pointer.
+        // When revealed, dockInteractiveArea keeps edge, offset gap, and surface active to prevent pointer-leave flicker.
         mask: Region {
-            item: dockWindow.isRevealed ? dockSurface : (dockWindow.autoHide ? edgeTrigger : null)
+            item: !dockWindow.autoHide ? dockSurface : (dockWindow.isRevealed ? dockInteractiveArea : edgeTrigger)
         }
 
         Timer {
@@ -104,7 +105,7 @@ Variants {
             interval: Math.max(50, ConfigService.dockHideDelay)
             repeat: false
             onTriggered: {
-                if (!dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && !dockWindow.hasActivePopup) {
                     dockWindow.hoverRevealed = false;
                 }
             }
@@ -133,7 +134,41 @@ Variants {
                         revealTimer.restart();
                     } else {
                         revealTimer.stop();
-                        if (!dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                        if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                            hideTimer.restart();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Interactive Region spanning from physical screen edge across floating offset to dock surface
+        Item {
+            id: dockInteractiveArea
+            anchors {
+                horizontalCenter: !dockWindow.isVertical ? parent.horizontalCenter : undefined
+                verticalCenter: dockWindow.isVertical ? parent.verticalCenter : undefined
+                bottom: dockWindow.edge === "bottom" ? parent.bottom : undefined
+                top: dockWindow.edge === "top" ? parent.top : undefined
+                left: dockWindow.edge === "left" ? parent.left : undefined
+                right: dockWindow.edge === "right" ? parent.right : undefined
+            }
+            width: dockWindow.isVertical
+                ? (dockSurface.implicitWidth + (dockWindow.isFloating ? dockWindow.offset : 0))
+                : Math.max(dockSurface.implicitWidth, 160)
+            height: dockWindow.isVertical
+                ? Math.max(dockSurface.implicitHeight, 160)
+                : (dockSurface.implicitHeight + (dockWindow.isFloating ? dockWindow.offset : 0))
+
+            HoverHandler {
+                id: dockAreaHover
+                onHoveredChanged: {
+                    if (hovered) {
+                        revealTimer.stop();
+                        hideTimer.stop();
+                        dockWindow.hoverRevealed = true;
+                    } else {
+                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockHoverHandler.hovered && !edgeTriggerHover.hovered) {
                             hideTimer.restart();
                         }
                     }
@@ -192,7 +227,7 @@ Variants {
                         hideTimer.stop();
                         dockWindow.hoverRevealed = true;
                     } else {
-                        if (dockWindow.autoHide && !dockWindow.hasActivePopup) {
+                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockAreaHover.hovered && !edgeTriggerHover.hovered) {
                             hideTimer.restart();
                         }
                     }
@@ -208,6 +243,8 @@ Variants {
 
                 // Launcher toggle
                 IconButton {
+                    parentWindow: dockWindow
+                    edge: dockWindow.edge
                     size: ConfigService.dockIconSize
                     icon: "start-here-kde"
                     iconColor: Theme.primary
@@ -252,6 +289,8 @@ Variants {
 
                 // Settings toggle
                 IconButton {
+                    parentWindow: dockWindow
+                    edge: dockWindow.edge
                     size: ConfigService.dockIconSize
                     icon: "preferences-system"
                     iconColor: Theme.foreground
@@ -269,6 +308,8 @@ Variants {
 
                 // Launcher toggle
                 IconButton {
+                    parentWindow: dockWindow
+                    edge: dockWindow.edge
                     size: ConfigService.dockIconSize
                     icon: "start-here-kde"
                     iconColor: Theme.primary
@@ -313,6 +354,8 @@ Variants {
 
                 // Settings toggle
                 IconButton {
+                    parentWindow: dockWindow
+                    edge: dockWindow.edge
                     size: ConfigService.dockIconSize
                     icon: "preferences-system"
                     iconColor: Theme.foreground
