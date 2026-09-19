@@ -13,6 +13,8 @@ Item {
 
     IconButton {
         anchors.centerIn: parent
+        parentWindow: root.barWindowRef
+        edge: root.surfaceEdge
         size: Math.min(root.implicitHeight, 26)
         icon: "start-here-kde"
         iconColor: Theme.primary

@@ -16,6 +16,8 @@ Item {
     IconButton {
         id: powerIcon
         anchors.centerIn: parent
+        parentWindow: root.barWindowRef
+        edge: root.surfaceEdge
         size: Math.min(root.implicitHeight, 26)
         icon: "system-shutdown"
         iconColor: root.popupOpen ? Theme.contrastColor(Theme.error) : Theme.error

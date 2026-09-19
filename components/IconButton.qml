@@ -15,6 +15,8 @@ Item {
     property real iconSize: 0
     property real radius: Theme.radiusSmall
     property string tooltip: ""
+    property var parentWindow: null
+    property string edge: "bottom"
     property int badgeCount: 0
     property bool active: false
 
@@ -73,6 +75,9 @@ Item {
     }
 
     Tooltip {
+        parentWindow: root.parentWindow
+        anchorItem: root
+        edge: root.edge
         text: root.tooltip
         show: root.tooltip.length > 0 && mouseArea.containsMouse && !mouseArea.pressed
     }

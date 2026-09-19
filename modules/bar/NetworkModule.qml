@@ -52,6 +52,9 @@ Surface {
     }
 
     Tooltip {
+        parentWindow: root.barWindowRef
+        anchorItem: root
+        edge: root.surfaceEdge
         text: root.tooltipText
         show: netMouse.containsMouse
     }

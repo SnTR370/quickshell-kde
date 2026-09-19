@@ -56,6 +56,9 @@ Surface {
     }
 
     Tooltip {
+        parentWindow: root.barWindowRef
+        anchorItem: root
+        edge: root.surfaceEdge
         text: BrightnessService.isReadOnly ? "Backlight Telemetry (Read-Only)" : (BrightnessService.controlledDisplayName ? (BrightnessService.controlledDisplayName + ": " + BrightnessService.percentage + "%") : "Display Brightness")
         show: brightMouse.containsMouse && !root.popupOpen
     }
