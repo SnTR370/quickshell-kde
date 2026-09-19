@@ -104,6 +104,9 @@ Item {
     }
 
     Tooltip {
+        parentWindow: root.parentWindowRef
+        anchorItem: iconContainer
+        edge: ConfigService.dockEdge
         text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : (root.isRunning ? " (Running)" : ""))
         show: dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.menuOpen && !root.chooserOpen
     }
@@ -166,7 +169,7 @@ Item {
                     }
                 } else if (root.windowCount === 1) {
                     root.chooserOpen = false;
-                    WindowService.activateWindow(root.appWindows[0].id);
+                    WindowService.toggleWindow(root.appWindows[0].id);
                 } else {
                     root.chooserOpen = !root.chooserOpen;
                 }

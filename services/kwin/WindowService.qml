@@ -166,10 +166,17 @@ Singleton {
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", windowId, ""]);
     }
 
+    function toggleWindow(windowId) {
+        if (!windowId) return;
+        Log.info("WindowService", "Toggling window: " + windowId);
+        const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
+        Quickshell.execDetached([scriptPath, windowId]);
+    }
+
     function activateApp(appId) {
         const wins = getWindowsForApp(appId);
         if (wins.length === 1) {
-            activateWindow(wins[0].id);
+            toggleWindow(wins[0].id);
         } else if (wins.length > 1) {
             cycleAppWindows(appId);
         } else {

@@ -574,7 +574,7 @@ class TestDesktopUX(unittest.TestCase):
         self.assertIn("HoverHandler {", dock_content)
         self.assertIn("id: dockHoverHandler", dock_content)
         self.assertIn("readonly property bool hasActivePopup: activePopupItem !== null", dock_content)
-        self.assertIn("readonly property bool isRevealed: !autoHide || hoverRevealed || dockHoverHandler.hovered || hasActivePopup", dock_content)
+        self.assertIn("readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup", dock_content)
 
         # DockItem must synchronize activePopupItem with parentWindowRef
         self.assertIn("parentWindowRef.activePopupItem = root", item_content)
@@ -593,9 +593,57 @@ class TestDesktopUX(unittest.TestCase):
             content = f.read()
 
         self.assertIn("grabFocus: true", content, "AnchoredPopup must set grabFocus: true to enable native Wayland outside-click dismissal")
-        self.assertIn("Keys.onEscapePressed: root.close()", content, "AnchoredPopup must dismiss on Escape key")
-        self.assertIn("onDesktopChanged()", content, "AnchoredPopup must dismiss when virtual desktop changes")
-        self.assertIn("spectacle", content, "AnchoredPopup must dismiss when Spectacle screenshot is invoked")
+        self.assertIn("Keys.onEscapePressed: root.close()", content, "AnchoredPopup must close on Escape key")
+        self.assertIn("target: KWinService", content, "AnchoredPopup must observe KWinService for virtual desktop switches")
+        self.assertIn("target: WindowService", content, "AnchoredPopup must observe WindowService for screenshot app dismissal")
+        self.assertIn("spectacle", content, "AnchoredPopup must detect spectacle windows to auto-close before screenshot capture")
+
+    def test_21_tooltip_popupwindow_unclipped_contract(self):
+        """Verify Tooltip component supports unclipped PopupWindow without enlarging parent window."""
+        with open(os.path.join(REPO_DIR, "components/Tooltip.qml")) as f:
+            tip_content = f.read()
+        with open(os.path.join(REPO_DIR, "components/IconButton.qml")) as f:
+            btn_content = f.read()
+        with open(os.path.join(REPO_DIR, "modules/dock/DockItem.qml")) as f:
+            dock_item_content = f.read()
+
+        self.assertIn("PopupWindow {", tip_content, "Tooltip must use PopupWindow to escape layer-shell surface clipping")
+        self.assertIn("grabFocus: false", tip_content, "Tooltip PopupWindow must not steal focus")
+        self.assertIn("property var parentWindow: null", tip_content)
+        self.assertIn("anchor.window: root.parentWindow", tip_content)
+        self.assertIn("property var parentWindow: null", btn_content, "IconButton must accept parentWindow")
+        self.assertIn("parentWindow: root.parentWindowRef", dock_item_content, "DockItem must pass parentWindowRef to Tooltip")
+
+    def test_22_dock_interactive_area_and_mask_contract(self):
+        """Verify Dock uses dockInteractiveArea covering floating offset gap and edge trigger to prevent flicker."""
+        with open(os.path.join(REPO_DIR, "modules/dock/Dock.qml")) as f:
+            dock_content = f.read()
+
+        self.assertIn("id: dockInteractiveArea", dock_content)
+        self.assertIn("id: dockAreaHover", dock_content)
+        self.assertIn("dockWindow.isRevealed ? dockInteractiveArea : edgeTrigger", dock_content,
+                      "Revealed mask must cover dockInteractiveArea so cursor at bottom edge or in floating offset gap stays in input mask")
+
+    def test_23_single_window_toggle_and_script_contract(self):
+        """Verify single-window apps toggle between minimize and restore/focus on task click."""
+        with open(os.path.join(REPO_DIR, "modules/dock/DockItem.qml")) as f:
+            item_content = f.read()
+        with open(os.path.join(REPO_DIR, "services/kwin/WindowService.qml")) as f:
+            win_service = f.read()
+        script_path = os.path.join(REPO_DIR, "services/kwin/scripts/kwin-toggle-window.sh")
+
+        self.assertIn("WindowService.toggleWindow(root.appWindows[0].id)", item_content,
+                      "DockItem single-window click must invoke WindowService.toggleWindow")
+        self.assertIn("function toggleWindow(windowId)", win_service,
+                      "WindowService must provide toggleWindow method")
+        self.assertTrue(os.path.isfile(script_path), "kwin-toggle-window.sh script must exist")
+        self.assertTrue(os.access(script_path, os.X_OK), "kwin-toggle-window.sh script must be executable")
+
+        with open(script_path) as f:
+            script_content = f.read()
+        self.assertIn("w.minimized = true", script_content, "Script must minimize active window")
+        self.assertIn("w.minimized = false", script_content, "Script must unminimize inactive window")
+        self.assertIn("workspace.activeWindow = w", script_content, "Script must activate restored window")
 
 if __name__ == "__main__":
     unittest.main()
