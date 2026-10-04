@@ -52,7 +52,10 @@ Surface {
                         onClicked: mouse => {
                             if (mouse.button === Qt.RightButton) {
                                 if (trayDelegate.modelData.hasMenu) {
-                                    trayDelegate.modelData.display(root.barWindowRef || root.Window.window, mouse.x, mouse.y);
+                                    const win = root.barWindowRef || root.Window.window;
+                                    const targetItem = win && win.contentItem ? win.contentItem : null;
+                                    const pt = trayItemMouse.mapToItem(targetItem, mouse.x, mouse.y);
+                                    trayDelegate.modelData.display(win, Math.round(pt.x), Math.round(pt.y));
                                 } else {
                                     trayDelegate.modelData.secondaryActivate();
                                 }
