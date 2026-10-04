@@ -151,6 +151,10 @@ Item {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
+        onEntered: {
+            WindowService.refreshActiveWindow();
+        }
+
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton) {
                 root.chooserOpen = false;
@@ -172,7 +176,12 @@ Item {
                     root.chooserOpen = false;
                     WindowService.toggleWindow(root.appWindows[0].id);
                 } else {
-                    root.chooserOpen = !root.chooserOpen;
+                    const activeWin = WindowService.getActiveWindowForApp(root.appId);
+                    if (activeWin && !root.chooserOpen) {
+                        WindowService.toggleWindow(activeWin.id);
+                    } else {
+                        root.chooserOpen = !root.chooserOpen;
+                    }
                 }
             }
         }

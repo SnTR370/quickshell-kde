@@ -13,6 +13,7 @@ Singleton {
     property var windows: []
     property var runningAppIds: []
     property int windowCount: 0
+    property string activeWindowId: ""
 
     signal windowsUpdated()
 
@@ -24,6 +25,9 @@ Singleton {
         }
         function onDesktopsUpdated() {
             root.refreshWindows();
+        }
+        function onActiveWindowChanged(windowId) {
+            root.activeWindowId = root.cleanWindowId(windowId);
         }
     }
 
@@ -51,14 +55,42 @@ Singleton {
         }
     }
 
+    // Process to query active window from KWin via kdotool
+    Process {
+        id: activeWindowProc
+        command: ["kdotool", "getactivewindow"]
+        property string buf: ""
+        stdout: SplitParser {
+            onRead: data => { activeWindowProc.buf += data; }
+        }
+        onExited: exitCode => {
+            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0) {
+                const wid = root.cleanWindowId(activeWindowProc.buf.trim());
+                if (wid.length > 0 && root.activeWindowId !== wid) {
+                    root.activeWindowId = wid;
+                }
+            }
+            activeWindowProc.buf = "";
+        }
+    }
+
     // Periodic sync timer for external window changes (KWin fallback)
     Timer {
         id: syncTimer
-        interval: 2500
+        interval: 1000
         repeat: true
         running: KWinService.isKWin
         onTriggered: {
             root.refreshWindows();
+            root.refreshActiveWindow();
+        }
+    }
+
+    function refreshActiveWindow() {
+        if (!KWinService.isKWin) return;
+        if (!activeWindowProc.running) {
+            activeWindowProc.buf = "";
+            activeWindowProc.running = true;
         }
     }
 
@@ -158,17 +190,41 @@ Singleton {
         return result;
     }
 
+    function cleanWindowId(wid) {
+        if (!wid) return "";
+        return String(wid).replace(/^0_/, "").replace(/[{}]/g, "").toLowerCase();
+    }
+
+    function getActiveWindowForApp(appId) {
+        const wins = getWindowsForApp(appId);
+        if (wins.length === 0 || !root.activeWindowId) return null;
+        const curActive = root.activeWindowId;
+        for (let i = 0; i < wins.length; i++) {
+            if (cleanWindowId(wins[i].id) === curActive) {
+                return wins[i];
+            }
+        }
+        return null;
+    }
+
     property var appCycleIndices: ({})
 
     function activateWindow(windowId) {
         if (!windowId) return;
         Log.info("WindowService", "Activating window: " + windowId);
+        root.activeWindowId = cleanWindowId(windowId);
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", windowId, ""]);
     }
 
     function toggleWindow(windowId) {
         if (!windowId) return;
         Log.info("WindowService", "Toggling window: " + windowId);
+        const clean = cleanWindowId(windowId);
+        if (root.activeWindowId === clean) {
+            root.activeWindowId = "";
+        } else {
+            root.activeWindowId = clean;
+        }
         const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
         Quickshell.execDetached([scriptPath, windowId]);
     }
@@ -208,5 +264,6 @@ Singleton {
 
     Component.onCompleted: {
         refreshWindows();
+        refreshActiveWindow();
     }
 }

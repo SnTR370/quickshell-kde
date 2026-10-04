@@ -10,6 +10,18 @@ TARGET_ID="$1"
 [ -z "$TARGET_ID" ] && exit 0
 
 CLEAN_ID=$(echo "$TARGET_ID" | sed 's/^0_//; s/[{}]//g' | tr '[:upper:]' '[:lower:]')
+FORMATTED_ID="{$CLEAN_ID}"
+
+if command -v kdotool >/dev/null 2>&1; then
+    ACTIVE_WIN=$(kdotool getactivewindow 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    if [ "$ACTIVE_WIN" = "$FORMATTED_ID" ]; then
+        kdotool windowminimize "$FORMATTED_ID" 2>/dev/null
+    else
+        kdotool windowactivate "$FORMATTED_ID" 2>/dev/null
+    fi
+    exit 0
+fi
+
 TMP_SCRIPT="/tmp/kwin_toggle_${CLEAN_ID}_$$.js"
 PLUGIN_NAME="toggle_${CLEAN_ID}_$$"
 
@@ -32,8 +44,9 @@ for (var i = 0; i < wins.length; i++) {
 SCRIPT_EOF
 
 SCRIPT_ID=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$TMP_SCRIPT" "$PLUGIN_NAME" 2>/dev/null || true)
-if [ -n "$SCRIPT_ID" ] && [ "$SCRIPT_ID" != "0" ]; then
+if [ -n "$SCRIPT_ID" ] && [ "$SCRIPT_ID" -ge 0 ] 2>/dev/null; then
     qdbus6 org.kde.KWin "/Scripting/Script${SCRIPT_ID}" org.kde.kwin.Script.run 2>/dev/null || true
+    sleep 0.05
     qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_NAME" 2>/dev/null || true
 else
     # Fallback to standard WindowsRunner activation
