@@ -64,6 +64,6 @@ Surface {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: NetworkService.openNetworkSettings()
+        onClicked: KWinService.toggleKdeSettings("kcm_networkmanagement")
     }
 }

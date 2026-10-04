@@ -251,12 +251,59 @@ Singleton {
         Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/KWin", "org.kde.KWin.showDesktop", root.showingDesktop ? "true" : "false"]);
     }
 
-    function openKdeSettings(moduleName) {
-        if (moduleName && moduleName.length > 0) {
-            Quickshell.execDetached(["kcmshell6", moduleName]);
-        } else {
-            Quickshell.execDetached(["systemsettings"]);
+    // --- KDE Settings Process Owner ---
+    property string activeKdeSettingsModule: ""
+    property string pendingKdeSettingsModule: ""
+
+    Process {
+        id: kdeSettingsProc
+        onExited: exitCode => {
+            root.activeKdeSettingsModule = "";
+            if (root.pendingKdeSettingsModule !== "") {
+                const nextMod = root.pendingKdeSettingsModule;
+                root.pendingKdeSettingsModule = "";
+                root.openKdeSettingsInstance(nextMod);
+            }
         }
+        onRunningChanged: {
+            if (!running && root.pendingKdeSettingsModule === "") {
+                root.activeKdeSettingsModule = "";
+            }
+        }
+    }
+
+    function openKdeSettingsInstance(moduleName) {
+        root.activeKdeSettingsModule = moduleName || "";
+        kdeSettingsProc.command = (moduleName && moduleName.length > 0) ? ["kcmshell6", moduleName] : ["systemsettings"];
+        kdeSettingsProc.running = true;
+    }
+
+    function toggleKdeSettings(moduleName) {
+        const mod = moduleName || "";
+        if (kdeSettingsProc.running) {
+            if (root.activeKdeSettingsModule === mod && root.pendingKdeSettingsModule === "") {
+                // Same button clicked while open: close our instance
+                root.pendingKdeSettingsModule = "";
+                root.activeKdeSettingsModule = "";
+                kdeSettingsProc.running = false;
+                return;
+            }
+            if (root.pendingKdeSettingsModule === mod) {
+                // Same button clicked while queued: cancel pending
+                root.pendingKdeSettingsModule = "";
+                return;
+            }
+            // Different button clicked: queue requested module, close current instance
+            root.pendingKdeSettingsModule = mod;
+            kdeSettingsProc.running = false;
+            return;
+        }
+
+        openKdeSettingsInstance(mod);
+    }
+
+    function openKdeSettings(moduleName) {
+        toggleKdeSettings(moduleName);
     }
 
     function lockSession() {

@@ -56,6 +56,6 @@ Surface {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: KWinService.openKdeSettings("kcm_powerdevilprofilesconfig")
+        onClicked: KWinService.toggleKdeSettings("kcm_powerdevilprofilesconfig")
     }
 }
