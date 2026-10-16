@@ -21,6 +21,9 @@ Item {
     property bool chooserOpen: false
 
     onMenuOpenChanged: {
+        if (menuOpen && chooserOpen) {
+            chooserOpen = false;
+        }
         if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
             if (menuOpen) {
                 parentWindowRef.activePopupItem = root;
@@ -31,11 +34,24 @@ Item {
     }
 
     onChooserOpenChanged: {
+        if (chooserOpen && menuOpen) {
+            menuOpen = false;
+        }
         if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
             if (chooserOpen) {
                 parentWindowRef.activePopupItem = root;
             } else if (parentWindowRef.activePopupItem === root && !root.menuOpen) {
                 parentWindowRef.activePopupItem = null;
+            }
+        }
+    }
+
+    Connections {
+        target: root.parentWindowRef
+        function onActivePopupItemChanged() {
+            if (root.parentWindowRef && root.parentWindowRef.activePopupItem !== root) {
+                root.menuOpen = false;
+                root.chooserOpen = false;
             }
         }
     }
@@ -157,27 +173,40 @@ Item {
 
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton) {
-                root.chooserOpen = false;
                 root.menuOpen = !root.menuOpen;
             } else if (mouse.button === Qt.MiddleButton) {
                 root.chooserOpen = false;
                 root.menuOpen = false;
+                if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                    root.parentWindowRef.activePopupItem = null;
+                }
                 ApplicationService.launchAppId(root.appId);
             } else {
-                root.menuOpen = false;
                 if (root.windowCount === 0) {
+                    root.menuOpen = false;
                     root.chooserOpen = false;
+                    if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                        root.parentWindowRef.activePopupItem = null;
+                    }
                     if (root.app) {
                         ApplicationService.launch(root.app);
                     } else {
                         ApplicationService.launchAppId(root.appId);
                     }
                 } else if (root.windowCount === 1) {
+                    root.menuOpen = false;
                     root.chooserOpen = false;
+                    if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                        root.parentWindowRef.activePopupItem = null;
+                    }
                     WindowService.toggleWindow(root.appWindows[0].id);
                 } else {
                     const activeWin = WindowService.getActiveWindowForApp(root.appId);
                     if (activeWin && !root.chooserOpen) {
+                        root.menuOpen = false;
+                        if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                            root.parentWindowRef.activePopupItem = null;
+                        }
                         WindowService.toggleWindow(activeWin.id);
                     } else {
                         root.chooserOpen = !root.chooserOpen;
