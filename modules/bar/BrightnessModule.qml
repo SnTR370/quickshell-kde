@@ -18,10 +18,8 @@ Surface {
     visible: BrightnessService.supported
 
     readonly property string iconName: {
-        if (BrightnessService.brightness > 0.66) return "display-brightness-high";
-        if (BrightnessService.brightness > 0.33) return "display-brightness-medium";
-        if (BrightnessService.brightness > 0.0) return "display-brightness-low";
-        return "display-brightness-off";
+        if (BrightnessService.brightness > 0.5) return "brightness-high";
+        return "brightness-low";
     }
 
     RowLayout {
