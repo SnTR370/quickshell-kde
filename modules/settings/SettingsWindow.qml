@@ -471,7 +471,7 @@ Variants {
                                 }
 
                                 for (const savedKey in _policies) {
-                                    if (!seen[savedKey]) {
+                                    if (!seen[savedKey] && !ConfigService.isLegacyTrayKeyCovered(savedKey, liveItems)) {
                                         seen[savedKey] = true;
                                         list.push({
                                             key: savedKey,

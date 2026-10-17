@@ -279,7 +279,7 @@ class TestMilestone3A(unittest.TestCase):
             self.assertTrue(is_running, "Quickshell process crashed or exited unexpectedly during startup")
 
     def test_10_tray_visibility_and_id_collisions(self):
-        """Verify tray visibility policies, live status transitions, chevron rules, and _status_icon_N collision safety."""
+        """Verify tray visibility policies, live status transitions, chevron rules, and _status_icon_N collision/transition safety."""
         with open(os.path.join(REPO_DIR, "modules/bar/TrayModule.qml")) as f:
             tray_content = f.read()
         self.assertIn("readonly property bool hasHiddenItems: root.hiddenItems.length > 0", tray_content)
@@ -290,6 +290,7 @@ class TestMilestone3A(unittest.TestCase):
         with open(os.path.join(REPO_DIR, "services/config/ConfigService.qml")) as f:
             cfg_content = f.read()
         self.assertIn("function hasTrayPrefixCollision", cfg_content)
+        self.assertIn("function isLegacyTrayKeyCovered", cfg_content)
         self.assertIn("function getTrayItemId", cfg_content)
         self.assertIn("function getTrayItemPolicy", cfg_content)
         self.assertIn("function setTrayItemPolicy", cfg_content)
@@ -298,6 +299,7 @@ class TestMilestone3A(unittest.TestCase):
             env = os.environ.copy()
             env["XDG_CONFIG_HOME"] = tmpdir
             probe_path = os.path.join(REPO_DIR, "_test_tray_regression_probe.qml")
+            reload_probe_path = os.path.join(REPO_DIR, "_test_tray_reload_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -322,25 +324,42 @@ Scope {
         running: true
         repeat: false
         onTriggered: {
-            // 1. Single-icon _status_icon_N normalizes and survives reconnect with incremented counter
+            // Single-icon _status_icon_N normalizes and survives reconnect with incremented counter
             const idSingle1 = ConfigService.getTrayItemId(single1, [single1]);
             ConfigService.setTrayItemPolicy(single1, "hidden", [single1]);
             const polReconnect = ConfigService.getTrayItemPolicy(single2, [single2]);
 
-            // 2. Multi-icon _status_icon_N collision prevention
-            const bothMulti = [multi1, multi2];
-            const idM1 = ConfigService.getTrayItemId(multi1, bothMulti);
-            const idM2 = ConfigService.getTrayItemId(multi2, bothMulti);
-            ConfigService.setTrayItemPolicy(multi1, "hidden", bothMulti);
-            ConfigService.setTrayItemPolicy(multi2, "always", bothMulti);
-            const polM1 = ConfigService.getTrayItemPolicy(multi1, bothMulti);
-            const polM2 = ConfigService.getTrayItemPolicy(multi2, bothMulti);
+            // BB2.1 Transition 1: Single icon -> save Hidden (stored as "myapp")
+            const idM1Solo = ConfigService.getTrayItemId(multi1, [multi1]);
+            ConfigService.setTrayItemPolicy(multi1, "hidden", [multi1]);
+            const polM1Solo = ConfigService.getTrayItemPolicy(multi1, [multi1]);
 
-            // 3. Generic runtime prefix collision prevention
+            // BB2.1 Transition 2: Second same-prefix icon joins -> existing user preference must not disappear
+            const bothMulti = [multi1, multi2];
+            const idM1Joined = ConfigService.getTrayItemId(multi1, bothMulti);
+            const idM2Joined = ConfigService.getTrayItemId(multi2, bothMulti);
+            const polM1AfterJoin = ConfigService.getTrayItemPolicy(multi1, bothMulti);
+            const polM1ByKeyAfterJoin = ConfigService.getTrayItemPolicy(idM1Joined, bothMulti);
+            const legacyCoveredOnJoin = ConfigService.isLegacyTrayKeyCovered("myapp", bothMulti);
+
+            // BB2.1 Transition 3: Set different policies on both icons -> independent
+            ConfigService.setTrayItemPolicy(multi2, "always", bothMulti);
+            const polM1AfterM2Set = ConfigService.getTrayItemPolicy(multi1, bothMulti);
+            const polM2AfterM2Set = ConfigService.getTrayItemPolicy(multi2, bothMulti);
+            ConfigService.setTrayItemPolicy(multi1, "hidden", bothMulti);
+            const polM1Explicit = ConfigService.getTrayItemPolicy(multi1, bothMulti);
+
+            // BB2.1 Transition 4: Second icon disappears -> policies remain deterministic
+            const polM1AfterLeave = ConfigService.getTrayItemPolicy(multi1, [multi1]);
+            const polM2WhileDisconnected = ConfigService.getTrayItemPolicy(multi2, [multi1]);
+            const legacyCoveredAfterLeave = ConfigService.isLegacyTrayKeyCovered("myapp", [multi1]);
+            const m2CoveredWhileDisconnected = ConfigService.isLegacyTrayKeyCovered("myapp_status_icon_2", [multi1]);
+
+            // Generic runtime prefix collision prevention
             const idG1 = ConfigService.getTrayItemId(generic1, [generic1]);
             const idG2 = ConfigService.getTrayItemId(generic2, [generic1, generic2]);
 
-            // 4. TrayModule policy + status evaluation
+            // TrayModule policy + status evaluation
             ConfigService.setTrayItemPolicy(single1, "auto", [single1]);
             const autoActiveVis = trayMod.isItemVisibleInBar(single1);
             single1.status = Status.Passive;
@@ -352,10 +371,20 @@ Scope {
             console.log("TRAY_TEST_RESULT:" + JSON.stringify({
                 idSingle1: idSingle1,
                 polReconnect: polReconnect,
-                idM1: idM1,
-                idM2: idM2,
-                polM1: polM1,
-                polM2: polM2,
+                idM1Solo: idM1Solo,
+                polM1Solo: polM1Solo,
+                idM1Joined: idM1Joined,
+                idM2Joined: idM2Joined,
+                polM1AfterJoin: polM1AfterJoin,
+                polM1ByKeyAfterJoin: polM1ByKeyAfterJoin,
+                legacyCoveredOnJoin: legacyCoveredOnJoin,
+                polM1AfterM2Set: polM1AfterM2Set,
+                polM2AfterM2Set: polM2AfterM2Set,
+                polM1Explicit: polM1Explicit,
+                polM1AfterLeave: polM1AfterLeave,
+                polM2WhileDisconnected: polM2WhileDisconnected,
+                legacyCoveredAfterLeave: legacyCoveredAfterLeave,
+                m2CoveredWhileDisconnected: m2CoveredWhileDisconnected,
                 idG1: idG1,
                 idG2: idG2,
                 autoActiveVis: autoActiveVis,
@@ -363,8 +392,14 @@ Scope {
                 autoAttnVis: autoAttnVis,
                 unknownVis: unknownVis
             }));
-            Qt.quit();
+            quitTimer.running = true;
         }
+    }
+    Timer {
+        id: quitTimer
+        interval: 100
+        repeat: false
+        onTriggered: Qt.quit()
     }
 }
 """)
@@ -384,19 +419,78 @@ Scope {
 
                 self.assertEqual(data["idSingle1"], "discord")
                 self.assertEqual(data["polReconnect"], "hidden")
-                self.assertEqual(data["idM1"], "myapp_status_icon_1")
-                self.assertEqual(data["idM2"], "myapp_status_icon_2")
-                self.assertEqual(data["polM1"], "hidden")
-                self.assertEqual(data["polM2"], "always")
+                self.assertEqual(data["idM1Solo"], "myapp")
+                self.assertEqual(data["polM1Solo"], "hidden")
+                self.assertEqual(data["idM1Joined"], "myapp_status_icon_1")
+                self.assertEqual(data["idM2Joined"], "myapp_status_icon_2")
+                self.assertEqual(data["polM1AfterJoin"], "hidden")
+                self.assertEqual(data["polM1ByKeyAfterJoin"], "hidden")
+                self.assertTrue(data["legacyCoveredOnJoin"])
+                self.assertEqual(data["polM1AfterM2Set"], "hidden")
+                self.assertEqual(data["polM2AfterM2Set"], "always")
+                self.assertEqual(data["polM1Explicit"], "hidden")
+                self.assertEqual(data["polM1AfterLeave"], "hidden")
+                self.assertEqual(data["polM2WhileDisconnected"], "always")
+                self.assertTrue(data["legacyCoveredAfterLeave"])
+                self.assertFalse(data["m2CoveredWhileDisconnected"])
                 self.assertEqual(data["idG1"], "chrome_status_icon_1")
                 self.assertEqual(data["idG2"], "chrome_status_icon_2")
                 self.assertTrue(data["autoActiveVis"])
                 self.assertFalse(data["autoPassiveVis"])
                 self.assertTrue(data["autoAttnVis"])
                 self.assertTrue(data["unknownVis"])
+
+                # BB2.1 Transition 5 & 6: Reload config in fresh process -> preferences persist and legacy key is suppressed
+                with open(reload_probe_path, "w") as rpf:
+                    rpf.write("""import QtQuick
+import Quickshell
+import Quickshell.Services.SystemTray
+import "./services"
+
+Scope {
+    property var _cfg: ConfigService.trayItemPolicies
+    QtObject { id: multi1; property string id: "myapp_status_icon_1"; property int status: Status.Active }
+    QtObject { id: multi2; property string id: "myapp_status_icon_2"; property int status: Status.Active }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            const both = [multi1, multi2];
+            console.log("TRAY_RELOAD_RESULT:" + JSON.stringify({
+                polM1SoloReload: ConfigService.getTrayItemPolicy(multi1, [multi1]),
+                polM1BothReload: ConfigService.getTrayItemPolicy(multi1, both),
+                polM2BothReload: ConfigService.getTrayItemPolicy(multi2, both),
+                legacyCoveredReload: ConfigService.isLegacyTrayKeyCovered("myapp", [multi1])
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc_reload = subprocess.run(
+                    ["quickshell", "-p", reload_probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                reload_combined = (proc_reload.stdout or "") + "\n" + (proc_reload.stderr or "")
+                reload_marker = "TRAY_RELOAD_RESULT:"
+                self.assertIn(reload_marker, reload_combined, f"Missing reload marker:\\n{reload_combined}")
+                reload_line = [line for line in reload_combined.splitlines() if reload_marker in line][-1]
+                reload_data = json.loads(reload_line.split(reload_marker, 1)[1].strip())
+
+                self.assertEqual(reload_data["polM1SoloReload"], "hidden")
+                self.assertEqual(reload_data["polM1BothReload"], "hidden")
+                self.assertEqual(reload_data["polM2BothReload"], "always")
+                self.assertTrue(reload_data["legacyCoveredReload"])
             finally:
-                if os.path.exists(probe_path):
-                    os.remove(probe_path)
+                for p in (probe_path, reload_probe_path):
+                    if os.path.exists(p):
+                        os.remove(p)
 
 if __name__ == "__main__":
     unittest.main()

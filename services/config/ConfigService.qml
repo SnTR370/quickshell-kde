@@ -231,6 +231,24 @@ Singleton {
                 root.trayItemPolicies = cleanPolicies;
             }
         }
+        property bool saveInFlight: false
+        property bool savePending: false
+        onSavedValue: {
+            barStore.saveInFlight = false;
+            if (barStore.savePending) {
+                barStore.savePending = false;
+                root.saveBarConfig();
+            }
+        }
+        onFailed: (phase, _, __) => {
+            if (phase === "write" || phase === "serialize") {
+                barStore.saveInFlight = false;
+                if (barStore.savePending) {
+                    barStore.savePending = false;
+                    root.saveBarConfig();
+                }
+            }
+        }
     }
 
     JsonStore {
@@ -271,6 +289,11 @@ Singleton {
 
     // --- Bar Operations ---
     function saveBarConfig() {
+        if (barStore.saveInFlight) {
+            barStore.savePending = true;
+            return;
+        }
+        barStore.saveInFlight = true;
         barStore.save({
             "enabled": root.barEnabled,
             "floating": root.barFloating,
@@ -297,14 +320,25 @@ Singleton {
         return "auto";
     }
 
+    function getTrayBaseId(itemOrId) {
+        if (!itemOrId) return "";
+        const raw = (typeof itemOrId === "object") ? String(itemOrId.id || "").trim() : String(itemOrId).trim();
+        if (!raw) return "";
+        const stripped = raw.replace(/_status_icon_\d+$/, "");
+        return stripped.length > 0 ? stripped : raw;
+    }
+
+    function isGenericTrayPrefix(prefix) {
+        if (!prefix) return false;
+        const lower = String(prefix).toLowerCase();
+        return (lower === "chrome" || lower === "chromium" || lower === "electron" ||
+                lower === "status_icon" || lower === "app" || lower === "java" ||
+                lower === "python" || lower === "python3");
+    }
+
     function hasTrayPrefixCollision(prefix, itemsList) {
         if (!prefix) return false;
-        const lower = prefix.toLowerCase();
-        if (lower === "chrome" || lower === "chromium" || lower === "electron" ||
-            lower === "status_icon" || lower === "app" || lower === "java" ||
-            lower === "python" || lower === "python3") {
-            return true;
-        }
+        if (isGenericTrayPrefix(prefix)) return true;
         const list = (itemsList !== undefined && itemsList !== null)
             ? itemsList
             : ((typeof SystemTray !== "undefined" && SystemTray.items) ? SystemTray.items.values : []);
@@ -328,13 +362,36 @@ Singleton {
         return false;
     }
 
+    function isLegacyTrayKeyCovered(savedKey, itemsList) {
+        if (!savedKey || isGenericTrayPrefix(savedKey)) return false;
+        const prefixTag = savedKey + "_status_icon_";
+        const list = (itemsList !== undefined && itemsList !== null)
+            ? itemsList
+            : ((typeof SystemTray !== "undefined" && SystemTray.items) ? SystemTray.items.values : []);
+        for (let i = 0; i < list.length; i++) {
+            const it = list[i];
+            if (!it) continue;
+            const rawId = String(it.id || "").trim();
+            if (rawId === savedKey || rawId.indexOf(prefixTag) === 0) {
+                return true;
+            }
+        }
+        const policies = root.trayItemPolicies || {};
+        for (const otherKey in policies) {
+            if (otherKey.indexOf(prefixTag) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function getTrayItemId(itemOrId, itemsList) {
         if (!itemOrId) return "";
         const raw = (typeof itemOrId === "object") ? String(itemOrId.id || "").trim() : String(itemOrId).trim();
         if (!raw) return "";
         const policies = root.trayItemPolicies || {};
         if (policies[raw] !== undefined) return raw;
-        const stripped = raw.replace(/_status_icon_\d+$/, "");
+        const stripped = getTrayBaseId(raw);
         if (!stripped || stripped === raw) return raw;
         if (hasTrayPrefixCollision(stripped, itemsList)) return raw;
         return stripped;
@@ -350,6 +407,10 @@ Singleton {
         const key = getTrayItemId(itemOrId, itemsList);
         if (key && policies[key] !== undefined) {
             return normalizeTrayPolicy(policies[key]);
+        }
+        const baseKey = getTrayBaseId(raw);
+        if (baseKey && baseKey !== raw && !isGenericTrayPrefix(baseKey) && policies[baseKey] !== undefined) {
+            return normalizeTrayPolicy(policies[baseKey]);
         }
         return "auto";
     }
