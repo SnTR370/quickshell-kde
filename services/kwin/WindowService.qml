@@ -39,31 +39,110 @@ Singleton {
         }
     }
 
-    // Process to query open windows and authoritative KWin window metadata
+    property var metadataCache: ({})
+    property string lastScannerRawText: ""
+
+    // Process to query open windows directly from /WindowsRunner (fast, 1 process)
     Process {
         id: windowScanner
-        command: [
-            "sh", "-c",
-            "out=$(qdbus6 --literal org.kde.KWin /WindowsRunner org.kde.krunner1.Match \"\"); " +
-            "printf \"%s\\n\" \"$out\"; " +
-            "printf \"%s\\n\" \"$out\" | grep -oE \"0_\\{[0-9a-fA-F-]+\\}\" | sort -u | while read -r wid; do " +
-            "uuid=\"${wid#0_}\"; " +
-            "info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null); " +
-            "df=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^desktopFile: //p\"); " +
-            "rc=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^resourceClass: //p\"); " +
-            "rn=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^resourceName: //p\"); " +
-            "printf \"===KWIN_META:%s\\t%s\\t%s\\t%s===\\n\" \"$wid\" \"$df\" \"$rc\" \"$rn\"; " +
-            "done"
-        ]
+        command: ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Match", ""]
         property string buf: ""
         stdout: SplitParser {
             onRead: data => { windowScanner.buf += data; }
         }
         onExited: exitCode => {
             if (exitCode === 0 && windowScanner.buf.length > 0) {
-                root.parseWindowsOutput(windowScanner.buf);
+                root.handleScannerOutput(windowScanner.buf);
             }
             windowScanner.buf = "";
+        }
+    }
+
+    // Process to query KWin getWindowInfo metadata ONLY for newly discovered windows
+    Process {
+        id: metaProc
+        property string buf: ""
+        stdout: SplitParser {
+            onRead: data => { metaProc.buf += data; }
+        }
+        onExited: exitCode => {
+            if (exitCode === 0 && metaProc.buf.length > 0) {
+                root.parseMetaOutput(metaProc.buf);
+            }
+            metaProc.buf = "";
+        }
+    }
+
+    function handleScannerOutput(text) {
+        root.parseWindowsOutput(text);
+
+        // Check for any window UUIDs missing from metadataCache
+        const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)"/g;
+        let m;
+        const activeWids = {};
+        const uncached = [];
+        while ((m = re.exec(text)) !== null) {
+            const wid = m[1];
+            if (!wid) continue;
+            activeWids[wid] = true;
+            if (!root.metadataCache[wid]) {
+                uncached.push(wid);
+            }
+        }
+
+        // Prune closed windows from cache
+        const cachedKeys = Object.keys(root.metadataCache);
+        for (let i = 0; i < cachedKeys.length; i++) {
+            const k = cachedKeys[i];
+            if (!activeWids[k]) {
+                delete root.metadataCache[k];
+            }
+        }
+
+        // Fetch metadata for new windows only
+        if (uncached.length > 0 && !metaProc.running) {
+            root.queryNewWindowMetadata(uncached);
+        }
+    }
+
+    function queryNewWindowMetadata(wids) {
+        if (!wids || wids.length === 0) return;
+        const script = "for wid in \"$@\"; do " +
+            "uuid=\"${wid#0_}\"; " +
+            "info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null); " +
+            "df=\"\"; rc=\"\"; rn=\"\"; " +
+            "while IFS= read -r line; do " +
+            "case \"$line\" in " +
+            "desktopFile:*) df=\"${line#desktopFile: }\" ;; " +
+            "resourceClass:*) rc=\"${line#resourceClass: }\" ;; " +
+            "resourceName:*) rn=\"${line#resourceName: }\" ;; " +
+            "esac; " +
+            "done <<EOF\n$info\nEOF\n" +
+            "printf \"===KWIN_META:%s\\t%s\\t%s\\t%s===\\n\" \"$wid\" \"$df\" \"$rc\" \"$rn\"; " +
+            "done";
+        metaProc.buf = "";
+        metaProc.command = ["sh", "-c", script, "--"].concat(wids);
+        metaProc.running = true;
+    }
+
+    function parseMetaOutput(text) {
+        if (!text) return;
+        const metaRe = /===KWIN_META:([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)===/g;
+        let m;
+        let updated = false;
+        while ((m = metaRe.exec(text)) !== null) {
+            const mWid = m[1];
+            if (mWid) {
+                root.metadataCache[mWid] = {
+                    desktopFile: (m[2] || "").trim(),
+                    resourceClass: (m[3] || "").trim(),
+                    resourceName: (m[4] || "").trim()
+                };
+                updated = true;
+            }
+        }
+        if (updated && root.lastScannerRawText.length > 0) {
+            root.parseWindowsOutput(root.lastScannerRawText);
         }
     }
 
@@ -116,13 +195,13 @@ Singleton {
 
     function parseWindowsOutput(text, metaOverride) {
         if (!text) return;
-        const metaByWid = {};
+        root.lastScannerRawText = text;
         const metaRe = /===KWIN_META:([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)===/g;
         let metaMatch;
         while ((metaMatch = metaRe.exec(text)) !== null) {
             const mWid = metaMatch[1];
             if (mWid) {
-                metaByWid[mWid] = {
+                root.metadataCache[mWid] = {
                     desktopFile: (metaMatch[2] || "").trim(),
                     resourceClass: (metaMatch[3] || "").trim(),
                     resourceName: (metaMatch[4] || "").trim()
@@ -133,7 +212,7 @@ Singleton {
             const keys = Object.keys(metaOverride);
             for (let k = 0; k < keys.length; k++) {
                 const kw = keys[k];
-                metaByWid[kw] = metaOverride[kw];
+                root.metadataCache[kw] = metaOverride[kw];
             }
         }
 
@@ -151,7 +230,7 @@ Singleton {
 
             const title = match[2].replace(/\\"/g, '"');
             const icon = match[3];
-            const meta = metaByWid[wid] || {};
+            const meta = root.metadataCache[wid] || {};
             const desktopFile = (meta.desktopFile || "").trim();
             const resourceClass = (meta.resourceClass || "").trim();
             const resourceName = (meta.resourceName || "").trim();
