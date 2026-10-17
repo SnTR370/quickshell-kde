@@ -110,11 +110,13 @@ Singleton {
         const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)"/g;
         let m;
         const activeWids = {};
+        const activeCleanWids = {};
         const uncached = [];
         while ((m = re.exec(text)) !== null) {
             const wid = m[1];
             if (!wid) continue;
             activeWids[wid] = true;
+            activeCleanWids[root.cleanWindowId(wid)] = true;
             if (!root.metadataCache[wid]) {
                 uncached.push(wid);
             }
@@ -123,7 +125,11 @@ Singleton {
 
         root.parseWindowsOutput(text);
 
-        // Prune closed windows from cache and retry tracker
+        if (root.activeWindowId && !activeCleanWids[root.activeWindowId]) {
+            root.activeWindowId = "";
+        }
+
+        // Prune closed windows from cache, retry tracker, and output map
         const cachedKeys = Object.keys(root.metadataCache);
         for (let i = 0; i < cachedKeys.length; i++) {
             const k = cachedKeys[i];
@@ -138,6 +144,20 @@ Singleton {
             if (!activeWids[rk]) {
                 delete root.metaRetries[rk];
             }
+        }
+        const outKeys = Object.keys(root.windowOutputs || {});
+        let outPruned = false;
+        const nextOuts = {};
+        for (let i = 0; i < outKeys.length; i++) {
+            const ok = outKeys[i];
+            if (activeCleanWids[ok]) {
+                nextOuts[ok] = root.windowOutputs[ok];
+            } else {
+                outPruned = true;
+            }
+        }
+        if (outPruned) {
+            root.windowOutputs = nextOuts;
         }
 
         // Fetch metadata for new windows only (on controlled ticks, not tight loops)
@@ -241,6 +261,17 @@ Singleton {
         onTriggered: {
             root.refreshWindows();
             root.refreshActiveWindow();
+        }
+    }
+
+    // Prompt reconciliation timer after user-initiated close/move actions
+    Timer {
+        id: actionReconcileTimer
+        interval: 180
+        repeat: false
+        onTriggered: {
+            root.refreshWindows();
+            root.refreshWindowOutputs();
         }
     }
 
@@ -428,6 +459,27 @@ Singleton {
         return res;
     }
 
+    function parseWindowOutputsJson(jsonText) {
+        if (!jsonText) return false;
+        try {
+            const parsed = JSON.parse(String(jsonText).trim());
+            if (Array.isArray(parsed)) {
+                const next = {};
+                for (let i = 0; i < parsed.length; i++) {
+                    const item = parsed[i];
+                    if (item && item.id && item.output) {
+                        next[root.cleanWindowId(item.id)] = String(item.output).trim();
+                    }
+                }
+                root.windowOutputs = next;
+                return true;
+            }
+        } catch (e) {
+            Log.warn("WindowService", "Failed to parse window outputs: " + e);
+        }
+        return false;
+    }
+
     Process {
         id: outputsSyncProc
         property string buf: ""
@@ -440,21 +492,7 @@ Singleton {
         }
         onExited: exitCode => {
             if (exitCode === 0 && outputsSyncProc.buf.trim().length > 0) {
-                try {
-                    const parsed = JSON.parse(outputsSyncProc.buf.trim());
-                    if (Array.isArray(parsed)) {
-                        const next = {};
-                        for (let i = 0; i < parsed.length; i++) {
-                            const item = parsed[i];
-                            if (item && item.id && item.output) {
-                                next[root.cleanWindowId(item.id)] = String(item.output).trim();
-                            }
-                        }
-                        root.windowOutputs = next;
-                    }
-                } catch (e) {
-                    Log.warn("WindowService", "Failed to parse window outputs: " + e);
-                }
+                root.parseWindowOutputsJson(outputsSyncProc.buf);
             }
             outputsSyncProc.buf = "";
         }
@@ -501,22 +539,6 @@ Singleton {
             return root.availableOutputs[0];
         }
         return "";
-    }
-
-    function setWindowOutput(windowId, outputName) {
-        const clean = cleanWindowId(windowId);
-        if (!clean) return;
-        const next = {};
-        const keys = Object.keys(root.windowOutputs || {});
-        for (let i = 0; i < keys.length; i++) {
-            next[keys[i]] = root.windowOutputs[keys[i]];
-        }
-        if (outputName && outputName.length > 0) {
-            next[clean] = outputName.trim();
-        } else {
-            delete next[clean];
-        }
-        root.windowOutputs = next;
     }
 
     function getTargetOutputsForWindow(windowId) {
@@ -567,36 +589,14 @@ Singleton {
         const win = findWindowById(windowId);
         if (!win) return false;
         const clean = cleanWindowId(win.id);
-        Log.info("WindowService", "Closing window gracefully: " + win.id);
+        Log.info("WindowService", "Requesting graceful close for window: " + win.id);
         root.lastExecutedAction = { action: "close", windowId: win.id, cleanId: clean };
 
-        const remaining = [];
-        const appIdsSet = {};
-        const appIdsList = [];
-        for (let i = 0; i < root.windows.length; i++) {
-            const w = root.windows[i];
-            if (!w || cleanWindowId(w.id) === clean) continue;
-            remaining.push(w);
-            if (w.appId && !appIdsSet[w.appId]) {
-                appIdsSet[w.appId] = true;
-                appIdsList.push(w.appId);
-            }
-        }
-        if (root.latestRunnerWids && root.latestRunnerWids[win.id]) {
-            delete root.latestRunnerWids[win.id];
-        }
-        if (root.activeWindowId === clean) {
-            root.activeWindowId = "";
-        }
-        setWindowOutput(win.id, "");
-        root.windows = remaining;
-        root.windowCount = remaining.length;
-        root.runningAppIds = appIdsList;
-        root.windowsUpdated();
-
+        // Do NOT optimistically remove the window from local state; wait for KWin enumeration to confirm closure
         if (KWinService.isKWin && root.outputsOverride === null) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
             Quickshell.execDetached([scriptPath, "close", win.id]);
+            actionReconcileTimer.restart();
         }
         return true;
     }
@@ -613,13 +613,14 @@ Singleton {
         if (curOut && curOut === targetOut) return false;
 
         const clean = cleanWindowId(win.id);
-        Log.info("WindowService", "Moving window " + win.id + " to output " + targetOut);
-        setWindowOutput(win.id, targetOut);
+        Log.info("WindowService", "Requesting move for window " + win.id + " to output " + targetOut);
         root.lastExecutedAction = { action: "move-output", windowId: win.id, cleanId: clean, outputName: targetOut };
 
+        // Do NOT optimistically update windowOutputs; wait for actual KWin output sync to confirm movement
         if (KWinService.isKWin && root.outputsOverride === null) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
             Quickshell.execDetached([scriptPath, "move-output", win.id, targetOut]);
+            actionReconcileTimer.restart();
         }
         return true;
     }

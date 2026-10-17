@@ -855,17 +855,43 @@ Scope {
             const activeAfterA = WindowService.activeWindowId;
             const ffWinsBeforeClose = WindowService.getWindowsForApp("firefox").map(w => w.id);
 
-            // 3. Multi-monitor (2 connected outputs: eDP-1 and DP-2)
+            // 3. Multi-monitor (2 connected outputs: eDP-1 and DP-2) — non-optimistic move reconciliation
             WindowService.outputsOverride = ["eDP-1", "DP-2"];
-            WindowService.setWindowOutput(uuidA, "eDP-1");
-            WindowService.setWindowOutput(uuidB, "eDP-1");
+            WindowService.parseWindowOutputsJson(JSON.stringify([
+                { id: "{11111111-1111-1111-1111-111111111111}", output: "eDP-1" },
+                { id: "{22222222-2222-2222-2222-222222222222}", output: "eDP-1" },
+                { id: "{33333333-3333-3333-3333-333333333333}", output: "eDP-1" }
+            ]));
             const twoOutTargetsABefore = WindowService.getTargetOutputsForWindow(uuidA);
             const moveAToDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
-            const outAAfterMove = WindowService.getWindowOutput(uuidA);
+            // Unconfirmed move must NOT optimistically report DP-2 before KWin confirms
+            const outABeforeKWinConfirm = WindowService.getWindowOutput(uuidA);
+            const targetsABeforeKWinConfirm = WindowService.getTargetOutputsForWindow(uuidA);
+
+            // Simulate move rejected/failed in KWin (KWin still reports eDP-1)
+            WindowService.parseWindowOutputsJson(JSON.stringify([
+                { id: "{11111111-1111-1111-1111-111111111111}", output: "eDP-1" },
+                { id: "{22222222-2222-2222-2222-222222222222}", output: "eDP-1" },
+                { id: "{33333333-3333-3333-3333-333333333333}", output: "eDP-1" }
+            ]));
+            const outAAfterRejectedMove = WindowService.getWindowOutput(uuidA);
+
+            // Simulate move confirmed by later KWin output refresh
+            WindowService.parseWindowOutputsJson(JSON.stringify([
+                { id: "{11111111-1111-1111-1111-111111111111}", output: "DP-2" },
+                { id: "{22222222-2222-2222-2222-222222222222}", output: "eDP-1" },
+                { id: "{33333333-3333-3333-3333-333333333333}", output: "eDP-1" }
+            ]));
+            const outAAfterConfirmedMove = WindowService.getWindowOutput(uuidA);
             const outBAfterMoveA = WindowService.getWindowOutput(uuidB);
             const twoOutTargetsAAfter = WindowService.getTargetOutputsForWindow(uuidA);
             const moveAToSameDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
             const moveABackToEDP1 = WindowService.moveWindowToOutput(uuidA, "eDP-1");
+            WindowService.parseWindowOutputsJson(JSON.stringify([
+                { id: "{11111111-1111-1111-1111-111111111111}", output: "eDP-1" },
+                { id: "{22222222-2222-2222-2222-222222222222}", output: "eDP-1" },
+                { id: "{33333333-3333-3333-3333-333333333333}", output: "eDP-1" }
+            ]));
             const outAAfterReturn = WindowService.getWindowOutput(uuidA);
 
             // 4. Invalid / removed output checks
@@ -875,13 +901,25 @@ Scope {
             const targetsAfterRemoveDP2 = WindowService.getTargetOutputsForWindow(uuidA);
             const moveRemovedDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
 
-            // 5. Close UUID A gracefully without affecting UUID B or UUID C
+            // 5. Close UUID A gracefully — non-optimistic close reconciliation
             WindowService.outputsOverride = ["eDP-1", "DP-2"];
             const closeA = WindowService.closeWindow(uuidA);
-            const ffWinsAfterCloseA = WindowService.getWindowsForApp("firefox").map(w => w.id);
-            const konsoleWinsAfterCloseA = WindowService.getWindowsForApp("konsole").map(w => w.id);
+            // Window must remain in local state until KWin confirms closure (e.g. unsaved-changes dialog)
+            const ffWinsBeforeConfirmClose = WindowService.getWindowsForApp("firefox").map(w => w.id);
+            WindowService.handleScannerOutput(rawWin); // KWin still enumerates uuidA (close rejected/delayed)
+            const ffWinsAfterRejectedClose = WindowService.getWindowsForApp("firefox").map(w => w.id);
 
-            // 6. Stale UUID no-ops (already closed UUID A + non-existent UUID + unsafe string)
+            // Now KWin scanner update confirms uuidA disappeared
+            const rawWinAfterCloseA = [
+                '[Argument: (sssida{sv}) "' + uuidB + '", "Firefox Win B", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + uuidC + '", "Konsole Win C", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]'
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawWinAfterCloseA);
+            const ffWinsAfterConfirmedCloseA = WindowService.getWindowsForApp("firefox").map(w => w.id);
+            const konsoleWinsAfterCloseA = WindowService.getWindowsForApp("konsole").map(w => w.id);
+            const activeAfterConfirmedCloseA = WindowService.activeWindowId;
+
+            // 6. Stale UUID no-ops (confirmed closed UUID A + non-existent UUID + unsafe string)
             const closeAAgain = WindowService.closeWindow(uuidA);
             const activateClosedA = WindowService.activateWindow(uuidA);
             const moveClosedA = WindowService.moveWindowToOutput(uuidA, "DP-2");
@@ -898,7 +936,10 @@ Scope {
                 ffWinsBeforeClose: ffWinsBeforeClose,
                 twoOutTargetsABefore: twoOutTargetsABefore,
                 moveAToDP2: moveAToDP2,
-                outAAfterMove: outAAfterMove,
+                outABeforeKWinConfirm: outABeforeKWinConfirm,
+                targetsABeforeKWinConfirm: targetsABeforeKWinConfirm,
+                outAAfterRejectedMove: outAAfterRejectedMove,
+                outAAfterConfirmedMove: outAAfterConfirmedMove,
                 outBAfterMoveA: outBAfterMoveA,
                 twoOutTargetsAAfter: twoOutTargetsAAfter,
                 moveAToSameDP2: moveAToSameDP2,
@@ -909,8 +950,11 @@ Scope {
                 targetsAfterRemoveDP2: targetsAfterRemoveDP2,
                 moveRemovedDP2: moveRemovedDP2,
                 closeA: closeA,
-                ffWinsAfterCloseA: ffWinsAfterCloseA,
+                ffWinsBeforeConfirmClose: ffWinsBeforeConfirmClose,
+                ffWinsAfterRejectedClose: ffWinsAfterRejectedClose,
+                ffWinsAfterConfirmedCloseA: ffWinsAfterConfirmedCloseA,
                 konsoleWinsAfterCloseA: konsoleWinsAfterCloseA,
+                activeAfterConfirmedCloseA: activeAfterConfirmedCloseA,
                 closeAAgain: closeAAgain,
                 activateClosedA: activateClosedA,
                 moveClosedA: moveClosedA,
@@ -951,10 +995,13 @@ Scope {
                 self.assertEqual(data["activeAfterA"], "11111111-1111-1111-1111-111111111111")
                 self.assertEqual(data["ffWinsBeforeClose"], [uuid_a, uuid_b])
 
-                # 3. Move between two connected outputs
+                # 3. Move between two connected outputs (non-optimistic, KWin-confirmed)
                 self.assertEqual(data["twoOutTargetsABefore"], ["DP-2"])
                 self.assertTrue(data["moveAToDP2"])
-                self.assertEqual(data["outAAfterMove"], "DP-2")
+                self.assertEqual(data["outABeforeKWinConfirm"], "eDP-1")
+                self.assertEqual(data["targetsABeforeKWinConfirm"], ["DP-2"])
+                self.assertEqual(data["outAAfterRejectedMove"], "eDP-1")
+                self.assertEqual(data["outAAfterConfirmedMove"], "DP-2")
                 self.assertEqual(data["outBAfterMoveA"], "eDP-1")
                 self.assertEqual(data["twoOutTargetsAAfter"], ["eDP-1"])
                 self.assertFalse(data["moveAToSameDP2"])
@@ -967,10 +1014,13 @@ Scope {
                 self.assertEqual(data["targetsAfterRemoveDP2"], [])
                 self.assertFalse(data["moveRemovedDP2"])
 
-                # 5. Graceful close UUID A preserves UUID B and UUID C
+                # 5. Graceful close UUID A (non-optimistic when rejected/delayed, removed when KWin confirms)
                 self.assertTrue(data["closeA"])
-                self.assertEqual(data["ffWinsAfterCloseA"], [uuid_b])
+                self.assertEqual(data["ffWinsBeforeConfirmClose"], [uuid_a, uuid_b])
+                self.assertEqual(data["ffWinsAfterRejectedClose"], [uuid_a, uuid_b])
+                self.assertEqual(data["ffWinsAfterConfirmedCloseA"], [uuid_b])
                 self.assertEqual(data["konsoleWinsAfterCloseA"], [uuid_c])
+                self.assertEqual(data["activeAfterConfirmedCloseA"], "")
 
                 # 6. Stale / closed / unsafe UUID no-ops
                 self.assertFalse(data["closeAAgain"])
