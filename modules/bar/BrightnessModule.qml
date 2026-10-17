@@ -14,7 +14,8 @@ Surface {
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: (brightMouse.containsMouse || root.popupOpen) ? Theme.hover : "transparent"
+    readonly property bool isSettingsActive: KWinService.activeKdeSettingsModule === "kcm_kscreen"
+    color: (brightMouse.containsMouse || root.popupOpen || root.isSettingsActive) ? Theme.hover : "transparent"
     visible: BrightnessService.supported
 
     readonly property string iconName: {
@@ -70,7 +71,8 @@ Surface {
 
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton) {
-                Quickshell.execDetached(["kcmshell6", "kcm_kscreen"]);
+                root.popupOpen = false;
+                KWinService.toggleKdeSettings("kcm_kscreen");
             } else {
                 root.popupOpen = !root.popupOpen;
             }

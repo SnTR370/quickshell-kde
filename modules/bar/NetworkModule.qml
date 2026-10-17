@@ -12,7 +12,8 @@ Surface {
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: netMouse.containsMouse ? Theme.hover : "transparent"
+    readonly property bool isSettingsActive: KWinService.activeKdeSettingsModule === "kcm_networkmanagement"
+    color: (netMouse.containsMouse || root.isSettingsActive) ? Theme.hover : "transparent"
 
     readonly property string iconName: {
         if (!NetworkService.connected) return "network-disconnect";

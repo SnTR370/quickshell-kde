@@ -12,7 +12,8 @@ Surface {
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 10
     radius: Theme.radiusSmall
-    color: clockMouse.containsMouse ? Theme.hover : "transparent"
+    readonly property bool isSettingsActive: KWinService.activeKdeSettingsModule === "kcm_clock"
+    color: (clockMouse.containsMouse || root.isSettingsActive) ? Theme.hover : "transparent"
 
     property string currentTime: ""
     property string currentDate: ""

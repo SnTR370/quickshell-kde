@@ -13,7 +13,10 @@ Surface {
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
     implicitWidth: layout.implicitWidth + 8
     radius: Theme.radiusSmall
-    color: batMouse.containsMouse ? Theme.hover : "transparent"
+    readonly property bool isSettingsActive: KWinService.activeKdeSettingsModule === "kcm_powerdevilprofilesconfig"
+    color: (batMouse.containsMouse || root.isSettingsActive) ? Theme.hover : "transparent"
+
+    readonly property string tooltipText: "Battery: " + Math.round(PowerService.percentage * 100) + "% (" + (PowerService.isCharging ? "Charging" : (PowerService.isPluggedIn ? "Fully Charged" : "Discharging")) + ")"
 
     readonly property string iconName: {
         if (PowerService.isCharging) return "battery-charging";
@@ -49,6 +52,14 @@ Surface {
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
         }
+    }
+
+    Tooltip {
+        parentWindow: root.barWindowRef
+        anchorItem: root
+        edge: root.surfaceEdge
+        text: root.tooltipText
+        show: batMouse.containsMouse
     }
 
     MouseArea {
