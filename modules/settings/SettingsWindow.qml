@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.SystemTray
 import "../../services"
 import "../../components"
 
@@ -428,6 +429,166 @@ Variants {
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: ConfigService.toggleBarMonitor(bScrBtn.modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // System Tray Visibility Management
+                        Surface {
+                            id: traySettingsCard
+                            Layout.fillWidth: true
+                            implicitHeight: traySettingsCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            readonly property var trayEntries: {
+                                const _policies = ConfigService.trayItemPolicies || {};
+                                const liveItems = SystemTray.items ? SystemTray.items.values : [];
+                                const seen = {};
+                                const list = [];
+
+                                for (let i = 0; i < liveItems.length; i++) {
+                                    const it = liveItems[i];
+                                    if (!it) continue;
+                                    const key = ConfigService.getTrayItemId(it);
+                                    if (!key || seen[key]) continue;
+                                    seen[key] = true;
+                                    const st = it.status;
+                                    const stLabel = (st === Status.Passive || st === 0) ? "Passive" : ((st === Status.NeedsAttention || st === 2) ? "Needs Attention" : "Active");
+                                    list.push({
+                                        key: key,
+                                        label: it.tooltipTitle || it.title || key,
+                                        icon: (it.icon && String(it.icon).length > 0) ? String(it.icon) : (it.iconName || "application-x-executable"),
+                                        connected: true,
+                                        statusText: stLabel
+                                    });
+                                }
+
+                                for (const savedKey in _policies) {
+                                    if (!seen[savedKey]) {
+                                        seen[savedKey] = true;
+                                        list.push({
+                                            key: savedKey,
+                                            label: savedKey,
+                                            icon: "application-x-executable",
+                                            connected: false,
+                                            statusText: "Disconnected"
+                                        });
+                                    }
+                                }
+
+                                return list;
+                            }
+
+                            ColumnLayout {
+                                id: traySettingsCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Text {
+                                    text: "System Tray Visibility"
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: "Configure per-item tray policy. Auto shows Active and Needs Attention items in the bar and moves Passive items into the overflow popup."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+
+                                Text {
+                                    visible: traySettingsCard.trayEntries.length === 0
+                                    text: "No system tray items currently registered."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                Repeater {
+                                    model: traySettingsCard.trayEntries
+
+                                    RowLayout {
+                                        id: trayEntryRow
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        SvgIcon {
+                                            icon: trayEntryRow.modelData.icon
+                                            size: 18
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+
+                                            Text {
+                                                text: trayEntryRow.modelData.label
+                                                color: trayEntryRow.modelData.connected ? Theme.foreground : Theme.foregroundMuted
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                text: trayEntryRow.modelData.key + " • " + trayEntryRow.modelData.statusText
+                                                color: Theme.foregroundMuted
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeCaption - 1
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: [
+                                                { id: "auto", name: "Auto" },
+                                                { id: "always", name: "Always Visible" },
+                                                { id: "hidden", name: "Hidden" }
+                                            ]
+
+                                            Rectangle {
+                                                id: trayPolBtn
+                                                required property var modelData
+                                                readonly property string activePolicy: {
+                                                    const _p = ConfigService.trayItemPolicies;
+                                                    return ConfigService.getTrayItemPolicy(trayEntryRow.modelData.key);
+                                                }
+                                                readonly property bool isSelected: activePolicy === modelData.id
+                                                implicitWidth: trayPolText.implicitWidth + 16
+                                                implicitHeight: 28
+                                                radius: Theme.radiusSmall
+                                                color: isSelected ? Theme.primary : (trayPolMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                                Text {
+                                                    id: trayPolText
+                                                    anchors.centerIn: parent
+                                                    text: trayPolBtn.modelData.name
+                                                    color: trayPolBtn.isSelected ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    font.bold: trayPolBtn.isSelected
+                                                }
+
+                                                MouseArea {
+                                                    id: trayPolMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: ConfigService.setTrayItemPolicy(trayEntryRow.modelData.key, trayPolBtn.modelData.id)
+                                                }
                                             }
                                         }
                                     }

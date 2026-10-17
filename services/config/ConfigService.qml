@@ -27,6 +27,7 @@ Singleton {
     property var barMonitors: "all"
     property bool blurEnabled: true
     property bool notificationsEnabled: false
+    property var trayItemPolicies: ({})
 
     // --- Dock Surface State ---
     property bool dockEnabled: true
@@ -198,7 +199,8 @@ Singleton {
             "opacity": 0.92,
             "monitors": "all",
             "blur": true,
-            "notificationsEnabled": false
+            "notificationsEnabled": false,
+            "trayItemPolicies": {}
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.barEnabled = parsed.enabled;
@@ -217,6 +219,16 @@ Singleton {
             }
             if (parsed.blur !== undefined) root.blurEnabled = parsed.blur;
             if (parsed.notificationsEnabled !== undefined) root.notificationsEnabled = parsed.notificationsEnabled;
+            if (parsed.trayItemPolicies && typeof parsed.trayItemPolicies === "object" && !Array.isArray(parsed.trayItemPolicies)) {
+                const cleanPolicies = {};
+                for (const k in parsed.trayItemPolicies) {
+                    const key = String(k || "").trim();
+                    if (key.length > 0) {
+                        cleanPolicies[key] = root.normalizeTrayPolicy(parsed.trayItemPolicies[k]);
+                    }
+                }
+                root.trayItemPolicies = cleanPolicies;
+            }
         }
     }
 
@@ -272,8 +284,56 @@ Singleton {
             "opacity": root.barOpacity,
             "monitors": root.barMonitors,
             "blur": root.blurEnabled,
-            "notificationsEnabled": root.notificationsEnabled
+            "notificationsEnabled": root.notificationsEnabled,
+            "trayItemPolicies": root.trayItemPolicies || {}
         });
+    }
+
+    function normalizeTrayPolicy(policy) {
+        const p = String(policy || "").trim().toLowerCase();
+        if (p === "always" || p === "visible" || p === "always_visible" || p === "always visible") return "always";
+        if (p === "hidden" || p === "hide") return "hidden";
+        return "auto";
+    }
+
+    function getTrayItemId(itemOrId) {
+        if (!itemOrId) return "";
+        const raw = (typeof itemOrId === "object") ? String(itemOrId.id || "").trim() : String(itemOrId).trim();
+        if (!raw) return "";
+        const stripped = raw.replace(/_status_icon_\d+$/, "");
+        return stripped.length > 0 ? stripped : raw;
+    }
+
+    function getTrayItemPolicy(itemOrId) {
+        const key = getTrayItemId(itemOrId);
+        if (!key) return "auto";
+        const policies = root.trayItemPolicies || {};
+        if (policies[key] !== undefined) {
+            return normalizeTrayPolicy(policies[key]);
+        }
+        const raw = (typeof itemOrId === "object" && itemOrId) ? String(itemOrId.id || "").trim() : String(itemOrId || "").trim();
+        if (raw && policies[raw] !== undefined) {
+            return normalizeTrayPolicy(policies[raw]);
+        }
+        return "auto";
+    }
+
+    function setTrayItemPolicy(itemOrId, policy) {
+        const key = getTrayItemId(itemOrId);
+        if (!key) return;
+        const validPolicy = normalizeTrayPolicy(policy);
+        const next = {};
+        const current = root.trayItemPolicies || {};
+        for (const k in current) {
+            next[k] = current[k];
+        }
+        const raw = (typeof itemOrId === "object" && itemOrId) ? String(itemOrId.id || "").trim() : String(itemOrId || "").trim();
+        if (raw && raw !== key && next[raw] !== undefined) {
+            delete next[raw];
+        }
+        next[key] = validPolicy;
+        root.trayItemPolicies = next;
+        saveBarConfig();
     }
 
     function setBarEnabled(enabled) {
