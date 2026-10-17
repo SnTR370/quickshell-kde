@@ -453,11 +453,14 @@ Variants {
                                 for (let i = 0; i < liveItems.length; i++) {
                                     const it = liveItems[i];
                                     if (!it) continue;
-                                    const key = ConfigService.getTrayItemId(it);
+                                    const st = it.status;
+                                    const key = ConfigService.getTrayItemId(it, liveItems);
                                     if (!key || seen[key]) continue;
                                     seen[key] = true;
-                                    const st = it.status;
-                                    const stLabel = (st === Status.Passive || st === 0) ? "Passive" : ((st === Status.NeedsAttention || st === 2) ? "Needs Attention" : "Active");
+                                    const stLower = String(st).toLowerCase();
+                                    const isPassive = (st === Status.Passive || st === 0 || stLower === "passive");
+                                    const isAttention = (st === Status.NeedsAttention || st === 2 || stLower === "needsattention");
+                                    const stLabel = isPassive ? "Passive" : (isAttention ? "Needs Attention" : "Active");
                                     list.push({
                                         key: key,
                                         label: it.tooltipTitle || it.title || key,
@@ -530,6 +533,7 @@ Variants {
 
                                         ColumnLayout {
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             spacing: 1
 
                                             Text {

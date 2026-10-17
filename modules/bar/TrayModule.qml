@@ -16,10 +16,10 @@ Surface {
     function isItemVisibleInBar(item) {
         if (!item) return false;
         const _policies = ConfigService.trayItemPolicies;
-        const policy = ConfigService.getTrayItemPolicy(item);
+        const st = item.status;
+        const policy = ConfigService.getTrayItemPolicy(item, root.rawItems);
         if (policy === "always") return true;
         if (policy === "hidden") return false;
-        const st = item.status;
         if (st === Status.Passive || st === 0 || String(st).toLowerCase() === "passive") {
             return false;
         }
@@ -56,6 +56,12 @@ Surface {
 
     onHasHiddenItemsChanged: {
         if (!root.hasHiddenItems && root.overflowOpen) {
+            root.overflowOpen = false;
+        }
+    }
+
+    onVisibleChanged: {
+        if (!root.visible && root.overflowOpen) {
             root.overflowOpen = false;
         }
     }

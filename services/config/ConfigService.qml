@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Services.SystemTray
 import "../core"
 import "../kwin"
 
@@ -296,30 +297,65 @@ Singleton {
         return "auto";
     }
 
-    function getTrayItemId(itemOrId) {
+    function hasTrayPrefixCollision(prefix, itemsList) {
+        if (!prefix) return false;
+        const lower = prefix.toLowerCase();
+        if (lower === "chrome" || lower === "chromium" || lower === "electron" ||
+            lower === "status_icon" || lower === "app" || lower === "java" ||
+            lower === "python" || lower === "python3") {
+            return true;
+        }
+        const list = (itemsList !== undefined && itemsList !== null)
+            ? itemsList
+            : ((typeof SystemTray !== "undefined" && SystemTray.items) ? SystemTray.items.values : []);
+        let matches = 0;
+        const prefixTag = prefix + "_status_icon_";
+        for (let i = 0; i < list.length; i++) {
+            const it = list[i];
+            if (!it) continue;
+            const rawId = String(it.id || "").trim();
+            if (rawId === prefix || rawId.indexOf(prefixTag) === 0) {
+                matches++;
+                if (matches > 1) return true;
+            }
+        }
+        const policies = root.trayItemPolicies || {};
+        for (const k in policies) {
+            if (k.indexOf(prefixTag) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function getTrayItemId(itemOrId, itemsList) {
         if (!itemOrId) return "";
         const raw = (typeof itemOrId === "object") ? String(itemOrId.id || "").trim() : String(itemOrId).trim();
         if (!raw) return "";
+        const policies = root.trayItemPolicies || {};
+        if (policies[raw] !== undefined) return raw;
         const stripped = raw.replace(/_status_icon_\d+$/, "");
-        return stripped.length > 0 ? stripped : raw;
+        if (!stripped || stripped === raw) return raw;
+        if (hasTrayPrefixCollision(stripped, itemsList)) return raw;
+        return stripped;
     }
 
-    function getTrayItemPolicy(itemOrId) {
-        const key = getTrayItemId(itemOrId);
-        if (!key) return "auto";
+    function getTrayItemPolicy(itemOrId, itemsList) {
+        if (!itemOrId) return "auto";
         const policies = root.trayItemPolicies || {};
-        if (policies[key] !== undefined) {
-            return normalizeTrayPolicy(policies[key]);
-        }
-        const raw = (typeof itemOrId === "object" && itemOrId) ? String(itemOrId.id || "").trim() : String(itemOrId || "").trim();
+        const raw = (typeof itemOrId === "object") ? String(itemOrId.id || "").trim() : String(itemOrId).trim();
         if (raw && policies[raw] !== undefined) {
             return normalizeTrayPolicy(policies[raw]);
+        }
+        const key = getTrayItemId(itemOrId, itemsList);
+        if (key && policies[key] !== undefined) {
+            return normalizeTrayPolicy(policies[key]);
         }
         return "auto";
     }
 
-    function setTrayItemPolicy(itemOrId, policy) {
-        const key = getTrayItemId(itemOrId);
+    function setTrayItemPolicy(itemOrId, policy, itemsList) {
+        const key = getTrayItemId(itemOrId, itemsList);
         if (!key) return;
         const validPolicy = normalizeTrayPolicy(policy);
         const next = {};
@@ -328,7 +364,7 @@ Singleton {
             next[k] = current[k];
         }
         const raw = (typeof itemOrId === "object" && itemOrId) ? String(itemOrId.id || "").trim() : String(itemOrId || "").trim();
-        if (raw && raw !== key && next[raw] !== undefined) {
+        if (raw && raw !== key && next[raw] !== undefined && !hasTrayPrefixCollision(key, itemsList)) {
             delete next[raw];
         }
         next[key] = validPolicy;

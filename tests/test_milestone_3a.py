@@ -17,6 +17,7 @@ Comprehensive automated test suite covering:
 import os
 import json
 import time
+import tempfile
 import unittest
 import subprocess
 
@@ -27,7 +28,7 @@ class TestMilestone3A(unittest.TestCase):
     def test_01_qml_syntax_lint(self):
         """Verify all QML files in the repository pass qmllint without errors."""
         res = subprocess.run(
-            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml"],
+            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml"],
             cwd=REPO_DIR,
             capture_output=True,
             text=True
@@ -257,21 +258,145 @@ class TestMilestone3A(unittest.TestCase):
 
     def test_09_quickshell_startup_smoke_test(self):
         """Startup smoke test: execute quickshell against root shell.qml to verify syntax/QML engine startup."""
-        proc = subprocess.Popen(
-            ["quickshell", "-p", "./shell.qml"],
-            cwd=REPO_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        time.sleep(2)
-        is_running = proc.poll() is None
-        proc.terminate()
-        try:
-            proc.communicate(timeout=2)
-        except Exception:
-            proc.kill()
-        self.assertTrue(is_running, "Quickshell process crashed or exited unexpectedly during startup")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            proc = subprocess.Popen(
+                ["quickshell", "-p", "./shell.qml", "--no-duplicate"],
+                cwd=REPO_DIR,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            time.sleep(2)
+            is_running = proc.poll() is None
+            proc.terminate()
+            try:
+                proc.communicate(timeout=2)
+            except Exception:
+                proc.kill()
+            self.assertTrue(is_running, "Quickshell process crashed or exited unexpectedly during startup")
+
+    def test_10_tray_visibility_and_id_collisions(self):
+        """Verify tray visibility policies, live status transitions, chevron rules, and _status_icon_N collision safety."""
+        with open(os.path.join(REPO_DIR, "modules/bar/TrayModule.qml")) as f:
+            tray_content = f.read()
+        self.assertIn("readonly property bool hasHiddenItems: root.hiddenItems.length > 0", tray_content)
+        self.assertIn("visible: root.hasHiddenItems", tray_content)
+        self.assertIn("active: root.overflowOpen && root.hasHiddenItems", tray_content)
+        self.assertIn("overflowDelegate.modelData.display(win, Math.round(pt.x), Math.round(pt.y))", tray_content)
+
+        with open(os.path.join(REPO_DIR, "services/config/ConfigService.qml")) as f:
+            cfg_content = f.read()
+        self.assertIn("function hasTrayPrefixCollision", cfg_content)
+        self.assertIn("function getTrayItemId", cfg_content)
+        self.assertIn("function getTrayItemPolicy", cfg_content)
+        self.assertIn("function setTrayItemPolicy", cfg_content)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_tray_regression_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import Quickshell.Services.SystemTray
+import "./services"
+import "./modules/bar"
+
+Scope {
+    QtObject { id: single1; property string id: "discord_status_icon_1"; property int status: Status.Active }
+    QtObject { id: single2; property string id: "discord_status_icon_2"; property int status: Status.Passive }
+    QtObject { id: multi1; property string id: "myapp_status_icon_1"; property int status: Status.Active }
+    QtObject { id: multi2; property string id: "myapp_status_icon_2"; property int status: Status.Active }
+    QtObject { id: generic1; property string id: "chrome_status_icon_1"; property int status: Status.Active }
+    QtObject { id: generic2; property string id: "chrome_status_icon_2"; property int status: Status.Active }
+    QtObject { id: unknownSt; property string id: "custom-sni"; property var status: undefined }
+
+    TrayModule { id: trayMod }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            // 1. Single-icon _status_icon_N normalizes and survives reconnect with incremented counter
+            const idSingle1 = ConfigService.getTrayItemId(single1, [single1]);
+            ConfigService.setTrayItemPolicy(single1, "hidden", [single1]);
+            const polReconnect = ConfigService.getTrayItemPolicy(single2, [single2]);
+
+            // 2. Multi-icon _status_icon_N collision prevention
+            const bothMulti = [multi1, multi2];
+            const idM1 = ConfigService.getTrayItemId(multi1, bothMulti);
+            const idM2 = ConfigService.getTrayItemId(multi2, bothMulti);
+            ConfigService.setTrayItemPolicy(multi1, "hidden", bothMulti);
+            ConfigService.setTrayItemPolicy(multi2, "always", bothMulti);
+            const polM1 = ConfigService.getTrayItemPolicy(multi1, bothMulti);
+            const polM2 = ConfigService.getTrayItemPolicy(multi2, bothMulti);
+
+            // 3. Generic runtime prefix collision prevention
+            const idG1 = ConfigService.getTrayItemId(generic1, [generic1]);
+            const idG2 = ConfigService.getTrayItemId(generic2, [generic1, generic2]);
+
+            // 4. TrayModule policy + status evaluation
+            ConfigService.setTrayItemPolicy(single1, "auto", [single1]);
+            const autoActiveVis = trayMod.isItemVisibleInBar(single1);
+            single1.status = Status.Passive;
+            const autoPassiveVis = trayMod.isItemVisibleInBar(single1);
+            single1.status = Status.NeedsAttention;
+            const autoAttnVis = trayMod.isItemVisibleInBar(single1);
+            const unknownVis = trayMod.isItemVisibleInBar(unknownSt);
+
+            console.log("TRAY_TEST_RESULT:" + JSON.stringify({
+                idSingle1: idSingle1,
+                polReconnect: polReconnect,
+                idM1: idM1,
+                idM2: idM2,
+                polM1: polM1,
+                polM2: polM2,
+                idG1: idG1,
+                idG2: idG2,
+                autoActiveVis: autoActiveVis,
+                autoPassiveVis: autoPassiveVis,
+                autoAttnVis: autoAttnVis,
+                unknownVis: unknownVis
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "TRAY_TEST_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertEqual(data["idSingle1"], "discord")
+                self.assertEqual(data["polReconnect"], "hidden")
+                self.assertEqual(data["idM1"], "myapp_status_icon_1")
+                self.assertEqual(data["idM2"], "myapp_status_icon_2")
+                self.assertEqual(data["polM1"], "hidden")
+                self.assertEqual(data["polM2"], "always")
+                self.assertEqual(data["idG1"], "chrome_status_icon_1")
+                self.assertEqual(data["idG2"], "chrome_status_icon_2")
+                self.assertTrue(data["autoActiveVis"])
+                self.assertFalse(data["autoPassiveVis"])
+                self.assertTrue(data["autoAttnVis"])
+                self.assertTrue(data["unknownVis"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
 
 if __name__ == "__main__":
     unittest.main()
