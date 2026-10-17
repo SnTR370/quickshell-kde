@@ -1,6 +1,10 @@
 # quickshell-kde
 
 > **Composable, KDE-native desktop shell surfaces (Bar, Dock, Launcher, Popups, and OSD) built with [Quickshell](https://quickshell.outfoxxed.me) for KDE Plasma 6 and KWin Wayland.**
+>
+> *Created and maintained by [Sena](https://github.com/SnTR370).*
+
+[English](README.md) · [Türkçe](README.tr.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: KDE Plasma 6 | KWin Wayland](https://img.shields.io/badge/Platform-KDE%20Plasma%206%20%7C%20KWin%20Wayland-1d99f3)](https://kde.org/plasma-desktop/)
