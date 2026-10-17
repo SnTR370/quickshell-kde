@@ -27,13 +27,14 @@ Singleton {
     property bool isPresent: batteryDevice ? batteryDevice.isPresent : fallbackPresent
     property real percentage: batteryDevice ? batteryDevice.percentage : fallbackPercentage
     property bool isCharging: batteryDevice ? (batteryDevice.state === UPowerDeviceState.Charging) : fallbackCharging
-    property bool isPluggedIn: batteryDevice ? (batteryDevice.state === UPowerDeviceState.Charging || batteryDevice.state === UPowerDeviceState.FullyCharged) : fallbackCharging
+    property bool isPluggedIn: batteryDevice ? (batteryDevice.state === UPowerDeviceState.Charging || batteryDevice.state === UPowerDeviceState.FullyCharged) : fallbackPluggedIn
     property int state: batteryDevice ? batteryDevice.state : 0
 
     // Sysfs fallback properties
     property bool fallbackPresent: false
     property real fallbackPercentage: 100
     property bool fallbackCharging: false
+    property bool fallbackPluggedIn: false
 
     function refreshFallback() {
         if (!batteryDevice) {
@@ -61,7 +62,8 @@ Singleton {
                 }
                 if (lines.length >= 2) {
                     const status = lines[1].trim().toLowerCase();
-                    root.fallbackCharging = (status === "charging" || status === "full");
+                    root.fallbackCharging = (status === "charging");
+                    root.fallbackPluggedIn = (status === "charging" || status === "full");
                 }
             }
             sysfsProc.buf = "";
