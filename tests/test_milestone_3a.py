@@ -28,7 +28,7 @@ class TestMilestone3A(unittest.TestCase):
     def test_01_qml_syntax_lint(self):
         """Verify all QML files in the repository pass qmllint without errors."""
         res = subprocess.run(
-            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml"],
+            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml", "services/kwin/WindowService.qml", "services/applications/ApplicationService.qml"],
             cwd=REPO_DIR,
             capture_output=True,
             text=True
@@ -491,6 +491,175 @@ Scope {
                 for p in (probe_path, reload_probe_path):
                     if os.path.exists(p):
                         os.remove(p)
+
+    def test_11_window_identity_and_ghost_dock_prevention(self):
+        """Verify KWin window identity resolution ignores window titles, resolves StartupWMClass/desktopFile, filters uninstalled pinned apps, and keeps unknown apps deterministic."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_window_identity_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+
+Scope {
+    property var _cfg: ConfigService.dockPinned
+    Timer {
+        interval: 350
+        running: true
+        repeat: false
+        onTriggered: {
+            ApplicationService.applications = [
+                {
+                    id: "org.kde.dolphin",
+                    name: "Dolphin",
+                    icon: "system-file-manager",
+                    startupWMClass: "",
+                    execBinary: "dolphin",
+                    aliases: ["org.kde.dolphin", "dolphin", "system-file-manager"]
+                },
+                {
+                    id: "org.kde.konsole",
+                    name: "Konsole",
+                    icon: "utilities-terminal",
+                    startupWMClass: "",
+                    execBinary: "konsole",
+                    aliases: ["org.kde.konsole", "konsole", "utilities-terminal"]
+                },
+                {
+                    id: "org.mozilla.firefox",
+                    name: "Firefox",
+                    icon: "org.mozilla.firefox",
+                    startupWMClass: "org.mozilla.firefox",
+                    execBinary: "firefox",
+                    aliases: ["org.mozilla.firefox", "firefox"]
+                },
+                {
+                    id: "com.discordapp.Discord",
+                    name: "Discord",
+                    icon: "com.discordapp.Discord",
+                    startupWMClass: "discord",
+                    execBinary: "flatpak",
+                    aliases: ["com.discordapp.discord", "discord"]
+                },
+                {
+                    id: "com.spotify.Client",
+                    name: "Spotify",
+                    icon: "com.spotify.Client",
+                    startupWMClass: "spotify",
+                    execBinary: "flatpak",
+                    aliases: ["com.spotify.client", "spotify"]
+                },
+                {
+                    id: "faugus-shortcut",
+                    name: "Faugus Launcher",
+                    icon: "application-x-executable",
+                    startupWMClass: "",
+                    execBinary: "env",
+                    aliases: ["faugus-shortcut", "env", "application-x-executable"]
+                }
+            ];
+            ApplicationService.loading = false;
+
+            const rawOutput = [
+                '[Argument: (sssida{sv}) "0_{95883ac0-1606-4793-828b-35d890ed89e0}", "Sesli Sohbet 1 | NepentheSubs - Discord", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{178fdccb-6efb-41d5-864f-26a4e0095b74}", "Fatma Turgut - Gunleri Baglarken", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{19261c49-3ffb-45ba-bab8-892801ae3dbd}", "QuickShell - Mozilla Firefox", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{19261c49-3ffb-45ba-bab8-892801ae3dbe}", "Docs - code - Mozilla Firefox", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{deadbeef-0000-0000-0000-000000000001}", "project.py - code", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{deadbeef-0000-0000-0000-000000000002}", "Fake Spoof - Firefox", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{deadbeef-0000-0000-0000-000000000003}", "Build Output - env", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{deadbeef-0000-0000-0000-000000000004}", "Custom Tool Window 1 - Discord", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{deadbeef-0000-0000-0000-000000000005}", "Custom Tool Window 2 - Spotify", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:0_{95883ac0-1606-4793-828b-35d890ed89e0}\\tdiscord\\tdiscord\\t===',
+                '===KWIN_META:0_{178fdccb-6efb-41d5-864f-26a4e0095b74}\\tspotify\\tspotify\\t===',
+                '===KWIN_META:0_{19261c49-3ffb-45ba-bab8-892801ae3dbd}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:0_{19261c49-3ffb-45ba-bab8-892801ae3dbe}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:0_{deadbeef-0000-0000-0000-000000000004}\\t\\tmy-uninstalled-tool\\tmy-uninstalled-tool===',
+                '===KWIN_META:0_{deadbeef-0000-0000-0000-000000000005}\\t\\tmy-uninstalled-tool\\tmy-uninstalled-tool==='
+            ].join("\\n");
+
+            WindowService.parseWindowsOutput(rawOutput);
+
+            const byWid = {};
+            for (let i = 0; i < WindowService.windows.length; i++) {
+                const w = WindowService.windows[i];
+                byWid[w.id] = { appId: w.appId, appName: w.appName, hasApp: w.app !== null };
+            }
+
+            const ffWins = WindowService.getWindowsForApp("firefox").map(w => w.id);
+            const customWins = WindowService.getWindowsForApp("window-my-uninstalled-tool").map(w => w.id);
+
+            console.log("WINDOW_IDENTITY_RESULT:" + JSON.stringify({
+                rawPinned: ConfigService.dockPinned,
+                filteredPinned: ApplicationService.pinnedApps,
+                runningAppIds: WindowService.runningAppIds,
+                byWid: byWid,
+                ffWins: ffWins,
+                customWins: customWins,
+                faugusRunning: WindowService.isAppRunning("faugus-shortcut")
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "WINDOW_IDENTITY_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                # 1. Uninstalled "code" remains in raw config but is excluded from effective pinnedApps
+                self.assertIn("code", data["rawPinned"])
+                self.assertNotIn("code", data["filteredPinned"])
+                self.assertEqual(
+                    data["filteredPinned"],
+                    ["org.kde.dolphin", "org.kde.konsole", "firefox"]
+                )
+
+                # 2. Discord and Spotify resolve via KWin desktopFile/StartupWMClass even when WindowsRunner icon is empty
+                self.assertEqual(data["byWid"]["0_{95883ac0-1606-4793-828b-35d890ed89e0}"]["appId"], "com.discordapp.Discord")
+                self.assertEqual(data["byWid"]["0_{178fdccb-6efb-41d5-864f-26a4e0095b74}"]["appId"], "com.spotify.Client")
+
+                # 3. Window titles ending in "- code", "- Firefox", "- env" never infer app identity
+                self.assertEqual(
+                    data["byWid"]["0_{deadbeef-0000-0000-0000-000000000001}"]["appId"],
+                    "window-0_{deadbeef-0000-0000-0000-000000000001}"
+                )
+                self.assertFalse(data["byWid"]["0_{deadbeef-0000-0000-0000-000000000001}"]["hasApp"])
+                self.assertEqual(
+                    data["byWid"]["0_{deadbeef-0000-0000-0000-000000000002}"]["appId"],
+                    "window-0_{deadbeef-0000-0000-0000-000000000002}"
+                )
+                self.assertEqual(
+                    data["byWid"]["0_{deadbeef-0000-0000-0000-000000000003}"]["appId"],
+                    "window-0_{deadbeef-0000-0000-0000-000000000003}"
+                )
+                self.assertFalse(data["faugusRunning"])
+
+                # 4. Known and unknown multi-window apps group deterministically and preserve exact UUIDs
+                self.assertEqual(
+                    data["ffWins"],
+                    ["0_{19261c49-3ffb-45ba-bab8-892801ae3dbd}", "0_{19261c49-3ffb-45ba-bab8-892801ae3dbe}"]
+                )
+                self.assertEqual(
+                    data["customWins"],
+                    ["0_{deadbeef-0000-0000-0000-000000000004}", "0_{deadbeef-0000-0000-0000-000000000005}"]
+                )
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
 
 if __name__ == "__main__":
     unittest.main()

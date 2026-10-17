@@ -3,14 +3,31 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../config"
-import "../mpris"
 import "../core/Log.js" as Log
 
 Singleton {
     id: root
 
     property var applications: []
-    readonly property var pinnedApps: ConfigService.dockPinned
+    onApplicationsChanged: {
+        root.rebuildAliasMap();
+    }
+
+    readonly property var pinnedApps: {
+        const raw = ConfigService.dockPinned || [];
+        const _map = root.aliasMap;
+        if (!root.applications || root.applications.length === 0) {
+            return [];
+        }
+        const valid = [];
+        for (let i = 0; i < raw.length; i++) {
+            const id = raw[i];
+            if (id && root.getAppById(id) !== null) {
+                valid.push(id);
+            }
+        }
+        return valid;
+    }
     property bool loading: true
 
     readonly property var categories: [
@@ -46,52 +63,68 @@ Singleton {
 
     property var aliasMap: ({})
 
+    function isIgnoredAlias(alias) {
+        if (!alias) return true;
+        const a = String(alias).trim().toLowerCase();
+        return (a.length <= 1 || a === "env" || a === "sh" || a === "bash" ||
+                a.indexOf("@@") === 0 || a === "application-x-executable");
+    }
+
     function rebuildAliasMap() {
         const map = {};
         if (!root.applications) return;
 
-        // Pass 1: Primary identifiers (ID, StartupWMClass, Clean Name, Icon)
+        // Pass 1: Canonical desktop file IDs (highest priority, never overwritten by aliases)
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
-            if (!app) continue;
-            if (app.id) {
-                const cleanId = app.id.toLowerCase().replace(/\.desktop$/, "");
-                map[cleanId] = app;
-                map[app.id.toLowerCase()] = app;
-                if (cleanId.indexOf("appimagekit_") === 0) {
-                    const cleanAppImage = cleanId.replace(/^appimagekit_[0-9a-f]+-/, "");
+            if (!app || !app.id) continue;
+            const cleanId = app.id.toLowerCase().replace(/\.desktop$/, "");
+            map[cleanId] = app;
+            map[app.id.toLowerCase()] = app;
+            if (cleanId.indexOf("appimagekit_") === 0) {
+                const cleanAppImage = cleanId.replace(/^appimagekit_[0-9a-f]+-/, "");
+                if (!isIgnoredAlias(cleanAppImage) && !map[cleanAppImage]) {
                     map[cleanAppImage] = app;
                 }
             }
-            if (app.startupWMClass) {
-                map[app.startupWMClass.toLowerCase()] = app;
-            }
-            if (app.name) {
-                const cleanName = app.name.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
-                if (cleanName.length > 1) {
-                    map[cleanName] = app;
-                }
-            }
-            if (app.icon) {
-                const cleanIcon = app.icon.toLowerCase().replace(/\.desktop$/, "");
-                map[cleanIcon] = app;
+        }
+
+        // Pass 2: Explicit StartupWMClass from desktop entries
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app || !app.startupWMClass) continue;
+            const wm = app.startupWMClass.trim().toLowerCase();
+            if (!isIgnoredAlias(wm) && !map[wm]) {
+                map[wm] = app;
             }
         }
 
-        // Pass 2: Secondary / generic fallback aliases (exec binary, generic categories)
+        // Pass 3: Icon, Exec binary, clean Name, and secondary aliases
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
             if (!app) continue;
+            if (app.icon) {
+                const cleanIcon = app.icon.toLowerCase().replace(/\.desktop$/, "");
+                if (!isIgnoredAlias(cleanIcon) && !map[cleanIcon]) {
+                    map[cleanIcon] = app;
+                }
+            }
             if (app.execBinary) {
                 const eb = app.execBinary.toLowerCase();
-                if (!map[eb]) {
+                if (!isIgnoredAlias(eb) && !map[eb]) {
                     map[eb] = app;
+                }
+            }
+            if (app.name) {
+                const cleanName = app.name.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
+                if (!isIgnoredAlias(cleanName) && !map[cleanName]) {
+                    map[cleanName] = app;
                 }
             }
             if (app.aliases && Array.isArray(app.aliases)) {
                 for (let a = 0; a < app.aliases.length; a++) {
                     const alias = app.aliases[a].toLowerCase();
-                    if (!map[alias]) {
+                    if (!isIgnoredAlias(alias) && !map[alias]) {
                         map[alias] = app;
                     }
                 }
@@ -184,6 +217,7 @@ Singleton {
         if (!appId || !root.applications) return null;
         const needle = String(appId).trim().toLowerCase();
         const cleanNeedle = needle.replace(/\.desktop$/, "");
+        if (isIgnoredAlias(cleanNeedle)) return null;
 
         // 1. Direct aliasMap index lookup (O(1))
         if (root.aliasMap) {
@@ -191,73 +225,40 @@ Singleton {
             if (root.aliasMap[cleanNeedle]) return root.aliasMap[cleanNeedle];
         }
 
-        // 2. Linear scan of applications
+        // 2. Priority linear scan (ID -> StartupWMClass -> ExecBinary/Aliases)
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
+            if (!app || !app.id) continue;
             const aid = app.id.toLowerCase();
             const aClean = aid.replace(/\.desktop$/, "");
             if (aid === needle || aClean === cleanNeedle) return app;
-            if (app.startupWMClass && app.startupWMClass.toLowerCase() === cleanNeedle) return app;
+        }
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app || !app.startupWMClass) continue;
+            if (app.startupWMClass.trim().toLowerCase() === cleanNeedle) return app;
+        }
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app) continue;
+            if (app.icon && app.icon.toLowerCase().replace(/\.desktop$/, "") === cleanNeedle) return app;
             if (app.execBinary && app.execBinary.toLowerCase() === cleanNeedle) return app;
             if (app.aliases && app.aliases.indexOf(cleanNeedle) !== -1) return app;
         }
         return null;
     }
 
-    function findAppByTitleOrIcon(title, iconName) {
+    function findAppByTitleOrIcon(_title, iconName, desktopFile, resourceClass, resourceName) {
         if (!root.applications || root.applications.length === 0) return null;
-        const lowerTitle = (title || "").trim().toLowerCase();
-        const lowerIcon = (iconName || "").trim().toLowerCase();
 
-        // 1. Check icon name first
-        if (lowerIcon.length > 0) {
-            const appByIcon = getAppById(lowerIcon);
-            if (appByIcon) return appByIcon;
-        }
-
-        // 2. Correlate with active MPRIS media players (strictly requires compound Artist+Title or exact track match)
-        if (typeof MprisService !== "undefined" && MprisService && MprisService.players && MprisService.players.length > 0 && lowerTitle.length > 0) {
-            for (let p = 0; p < MprisService.players.length; p++) {
-                const player = MprisService.players[p];
-                if (!player) continue;
-                const pTitle = (player.trackTitle || "").trim().toLowerCase();
-                const pArtist = (Array.isArray(player.trackArtists) ? player.trackArtists.join(", ") : (player.trackArtist || "")).trim().toLowerCase();
-
-                let matchesPlayer = false;
-                if (pTitle.length > 0 && pArtist.length > 0) {
-                    const comp1 = pArtist + " - " + pTitle;
-                    const comp2 = pTitle + " - " + pArtist;
-                    const comp3 = pArtist + " — " + pTitle;
-                    const comp4 = pTitle + " — " + pArtist;
-                    if (lowerTitle === comp1 || lowerTitle === comp2 || lowerTitle === comp3 || lowerTitle === comp4) {
-                        matchesPlayer = true;
-                    } else if (lowerTitle.indexOf(pArtist) !== -1 && lowerTitle.indexOf(pTitle) !== -1) {
-                        matchesPlayer = true;
-                    }
-                } else if (pTitle.length > 1 && lowerTitle === pTitle) {
-                    matchesPlayer = true;
-                }
-
-                if (matchesPlayer) {
-                    const playerTarget = player.desktopEntry || player.identity || "";
-                    if (playerTarget.length > 0) {
-                        const appByPlayer = getAppById(playerTarget);
-                        if (appByPlayer) return appByPlayer;
-                    }
-                }
-            }
-        }
-
-        // 3. Exact title suffix segment (standard Wayland / XDG window title convention: "<Doc Title> — <App Name>")
-        if (lowerTitle.length > 0) {
-            const segments = lowerTitle.split(/\s+[—–\-:|]\s+/);
-            if (segments.length > 0) {
-                const lastSeg = segments[segments.length - 1].trim();
-                if (lastSeg.length > 1) {
-                    const matchedApp = getAppById(lastSeg);
-                    if (matchedApp) return matchedApp;
-                }
-            }
+        // Window titles are content, never application identity.
+        // Resolve strictly from KWin metadata: desktopFile -> resourceClass -> resourceName -> iconName
+        const candidates = [desktopFile, resourceClass, resourceName, iconName];
+        for (let i = 0; i < candidates.length; i++) {
+            const raw = String(candidates[i] || "").trim().toLowerCase();
+            if (!raw || isIgnoredAlias(raw)) continue;
+            const matched = getAppById(raw);
+            if (matched) return matched;
         }
 
         return null;

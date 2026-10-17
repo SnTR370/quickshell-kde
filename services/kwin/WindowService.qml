@@ -39,10 +39,22 @@ Singleton {
         }
     }
 
-    // Process to query open windows from KWin
+    // Process to query open windows and authoritative KWin window metadata
     Process {
         id: windowScanner
-        command: ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Match", ""]
+        command: [
+            "sh", "-c",
+            "out=$(qdbus6 --literal org.kde.KWin /WindowsRunner org.kde.krunner1.Match \"\"); " +
+            "printf \"%s\\n\" \"$out\"; " +
+            "printf \"%s\\n\" \"$out\" | grep -oE \"0_\\{[0-9a-fA-F-]+\\}\" | sort -u | while read -r wid; do " +
+            "uuid=\"${wid#0_}\"; " +
+            "info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null); " +
+            "df=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^desktopFile: //p\"); " +
+            "rc=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^resourceClass: //p\"); " +
+            "rn=$(printf \"%s\\n\" \"$info\" | sed -n \"s/^resourceName: //p\"); " +
+            "printf \"===KWIN_META:%s\\t%s\\t%s\\t%s===\\n\" \"$wid\" \"$df\" \"$rc\" \"$rn\"; " +
+            "done"
+        ]
         property string buf: ""
         stdout: SplitParser {
             onRead: data => { windowScanner.buf += data; }
@@ -102,8 +114,29 @@ Singleton {
         }
     }
 
-    function parseWindowsOutput(text) {
+    function parseWindowsOutput(text, metaOverride) {
         if (!text) return;
+        const metaByWid = {};
+        const metaRe = /===KWIN_META:([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)===/g;
+        let metaMatch;
+        while ((metaMatch = metaRe.exec(text)) !== null) {
+            const mWid = metaMatch[1];
+            if (mWid) {
+                metaByWid[mWid] = {
+                    desktopFile: (metaMatch[2] || "").trim(),
+                    resourceClass: (metaMatch[3] || "").trim(),
+                    resourceName: (metaMatch[4] || "").trim()
+                };
+            }
+        }
+        if (metaOverride && typeof metaOverride === "object") {
+            const keys = Object.keys(metaOverride);
+            for (let k = 0; k < keys.length; k++) {
+                const kw = keys[k];
+                metaByWid[kw] = metaOverride[kw];
+            }
+        }
+
         const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)",\s*"((?:[^"\\]|\\.)*)",\s*"([^"]*)"/g;
         let match;
         const list = [];
@@ -118,18 +151,36 @@ Singleton {
 
             const title = match[2].replace(/\\"/g, '"');
             const icon = match[3];
-            if (!title && !icon) continue;
+            const meta = metaByWid[wid] || {};
+            const desktopFile = (meta.desktopFile || "").trim();
+            const resourceClass = (meta.resourceClass || "").trim();
+            const resourceName = (meta.resourceName || "").trim();
 
-            const app = ApplicationService.findAppByTitleOrIcon(title, icon);
-            const resolvedAppId = app ? app.id : (icon && icon.length > 0 ? icon : ("window-" + wid));
-            const resolvedName = app ? app.name : (title && title.length > 0 ? title : (icon || "Window"));
-            const resolvedIcon = app ? app.icon : (icon && icon.length > 0 ? icon : "application-x-executable");
+            if (!title && !icon && !desktopFile && !resourceClass) continue;
+
+            const app = ApplicationService.findAppByTitleOrIcon(title, icon, desktopFile, resourceClass, resourceName);
+            const rawMetaClass = (desktopFile || resourceClass || resourceName).toLowerCase().replace(/\.desktop$/, "");
+            const validMetaClass = (!ApplicationService.isIgnoredAlias(rawMetaClass)) ? rawMetaClass : "";
+            const resolvedAppId = app
+                ? app.id
+                : (validMetaClass.length > 0
+                    ? ("window-" + validMetaClass)
+                    : (icon && icon.length > 0 ? icon : ("window-" + wid)));
+            const resolvedName = app
+                ? app.name
+                : (validMetaClass.length > 0 ? (desktopFile || resourceClass || resourceName) : (icon || "Window"));
+            const resolvedIcon = app
+                ? app.icon
+                : (icon && icon.length > 0 ? icon : "application-x-executable");
 
             const winObj = {
                 id: wid,
                 title: title,
                 icon: resolvedIcon,
                 rawIcon: icon,
+                desktopFile: desktopFile,
+                resourceClass: resourceClass,
+                resourceName: resourceName,
                 appId: resolvedAppId,
                 appName: resolvedName,
                 app: app
@@ -138,13 +189,7 @@ Singleton {
             list.push(winObj);
 
             // Never treat dynamic window titles as application identities
-            if (app && !appIdsSet[app.id]) {
-                appIdsSet[app.id] = true;
-                appIdsList.push(app.id);
-            } else if (!app && icon && icon.length > 0 && !appIdsSet[icon]) {
-                appIdsSet[icon] = true;
-                appIdsList.push(icon);
-            } else if (!app && (!icon || icon.length === 0) && !appIdsSet[resolvedAppId]) {
+            if (resolvedAppId && !appIdsSet[resolvedAppId]) {
                 appIdsSet[resolvedAppId] = true;
                 appIdsList.push(resolvedAppId);
             }
@@ -156,18 +201,30 @@ Singleton {
         root.windowsUpdated();
     }
 
+    function matchesAppWindow(w, app, appId, targetId, aliases) {
+        if (!w) return false;
+        const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
+        const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
+        const wDesktop = (w.desktopFile || "").toLowerCase().replace(/\.desktop$/, "");
+        const wClass = (w.resourceClass || "").toLowerCase().replace(/\.desktop$/, "");
+        if (wAppId === targetId || w.appId === (app ? app.id : appId)) return true;
+        if (wDesktop.length > 0 && (wDesktop === targetId || aliases.indexOf(wDesktop) !== -1)) return true;
+        if (wClass.length > 0 && (wClass === targetId || aliases.indexOf(wClass) !== -1)) return true;
+        if (aliases.indexOf(wAppId) !== -1) return true;
+        if (wIcon.length > 0 && wIcon !== "application-x-executable" && aliases.indexOf(wIcon) !== -1) return true;
+        return false;
+    }
+
     function isAppRunning(appId) {
         if (!appId || !root.windows || root.windows.length === 0) return false;
         const app = ApplicationService.getAppById(appId);
-        const targetId = app ? app.id.toLowerCase() : String(appId).toLowerCase().replace(/\.desktop$/, "");
+        const targetId = app ? app.id.toLowerCase().replace(/\.desktop$/, "") : String(appId).toLowerCase().replace(/\.desktop$/, "");
         const aliases = app && app.aliases ? app.aliases : [targetId];
 
         for (let i = 0; i < root.windows.length; i++) {
-            const w = root.windows[i];
-            const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
-            const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
-            if (wAppId === targetId || w.appId === (app ? app.id : appId)) return true;
-            if (aliases.indexOf(wAppId) !== -1 || aliases.indexOf(wIcon) !== -1) return true;
+            if (matchesAppWindow(root.windows[i], app, appId, targetId, aliases)) {
+                return true;
+            }
         }
         return false;
     }
@@ -175,15 +232,13 @@ Singleton {
     function getWindowsForApp(appId) {
         if (!appId || !root.windows || root.windows.length === 0) return [];
         const app = ApplicationService.getAppById(appId);
-        const targetId = app ? app.id.toLowerCase() : String(appId).toLowerCase().replace(/\.desktop$/, "");
+        const targetId = app ? app.id.toLowerCase().replace(/\.desktop$/, "") : String(appId).toLowerCase().replace(/\.desktop$/, "");
         const aliases = app && app.aliases ? app.aliases : [targetId];
         const result = [];
 
         for (let i = 0; i < root.windows.length; i++) {
             const w = root.windows[i];
-            const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
-            const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
-            if (wAppId === targetId || w.appId === (app ? app.id : appId) || aliases.indexOf(wAppId) !== -1 || aliases.indexOf(wIcon) !== -1) {
+            if (matchesAppWindow(w, app, appId, targetId, aliases)) {
                 result.push(w);
             }
         }
