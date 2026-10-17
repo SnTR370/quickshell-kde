@@ -28,7 +28,7 @@ class TestMilestone3A(unittest.TestCase):
     def test_01_qml_syntax_lint(self):
         """Verify all QML files in the repository pass qmllint without errors."""
         res = subprocess.run(
-            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml", "services/kwin/WindowService.qml", "services/applications/ApplicationService.qml"],
+            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml", "services/kwin/WindowService.qml", "services/applications/ApplicationService.qml", "modules/dock/DockMenu.qml", "modules/dock/WindowChooserPopup.qml"],
             cwd=REPO_DIR,
             capture_output=True,
             text=True
@@ -772,6 +772,214 @@ Scope {
 
                 # 3 consecutive failures safely caches empty metadata to prevent infinite loop
                 self.assertTrue(data["hasCachedAfter3Fails"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
+    def test_13_kwin_window_actions(self):
+        """Verify KWin native window actions: UUID-exact activate, graceful close, move across outputs, 1-output hiding, invalid output rejection, and stale UUID no-ops."""
+        script_path = os.path.join(REPO_DIR, "services/kwin/scripts/kwin-window-action.sh")
+        self.assertTrue(os.path.exists(script_path), "kwin-window-action.sh must exist")
+        with open(script_path) as sf:
+            script_text = sf.read()
+        for forbidden in ["killall", "pkill", "SIGTERM", "SIGKILL", "killWindow"]:
+            self.assertNotIn(forbidden, script_text)
+        self.assertIn("w.closeWindow()", script_text)
+        self.assertIn("workspace.sendClientToScreen(w, targetScreen)", script_text)
+
+        with open(os.path.join(REPO_DIR, "modules/dock/DockMenu.qml")) as dmf:
+            dm_text = dmf.read()
+        self.assertIn("WindowService.activateWindow(", dm_text)
+        self.assertIn("WindowService.moveWindowToOutput(", dm_text)
+        self.assertIn("WindowService.closeWindow(", dm_text)
+        self.assertIn("WindowService.getTargetOutputsForWindow(", dm_text)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_window_actions_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+
+Scope {
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            ApplicationService.applications = [
+                {
+                    id: "org.mozilla.firefox",
+                    name: "Firefox",
+                    icon: "org.mozilla.firefox",
+                    startupWMClass: "org.mozilla.firefox",
+                    execBinary: "firefox",
+                    aliases: ["org.mozilla.firefox", "firefox"]
+                },
+                {
+                    id: "org.kde.konsole",
+                    name: "Konsole",
+                    icon: "utilities-terminal",
+                    startupWMClass: "org.kde.konsole",
+                    execBinary: "konsole",
+                    aliases: ["org.kde.konsole", "konsole"]
+                }
+            ];
+            ApplicationService.loading = false;
+
+            const uuidA = "0_{11111111-1111-1111-1111-111111111111}";
+            const uuidB = "0_{22222222-2222-2222-2222-222222222222}";
+            const uuidC = "0_{33333333-3333-3333-3333-333333333333}";
+            const staleUuid = "0_{99999999-9999-9999-9999-999999999999}";
+
+            // 1. One-output behavior initially
+            WindowService.outputsOverride = ["eDP-1"];
+            const rawWin = [
+                '[Argument: (sssida{sv}) "' + uuidA + '", "Firefox Win A", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + uuidB + '", "Firefox Win B", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + uuidC + '", "Konsole Win C", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + uuidA + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:' + uuidB + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:' + uuidC + '\\torg.kde.konsole\\torg.kde.konsole\\tkonsole==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawWin);
+
+            const oneOutTargetsA = WindowService.getTargetOutputsForWindow(uuidA);
+            const oneOutMoveAttempt = WindowService.moveWindowToOutput(uuidA, "eDP-1");
+
+            // 2. Activate UUID A without affecting UUID B
+            const actA = WindowService.activateWindow(uuidA);
+            const activeAfterA = WindowService.activeWindowId;
+            const ffWinsBeforeClose = WindowService.getWindowsForApp("firefox").map(w => w.id);
+
+            // 3. Multi-monitor (2 connected outputs: eDP-1 and DP-2)
+            WindowService.outputsOverride = ["eDP-1", "DP-2"];
+            WindowService.setWindowOutput(uuidA, "eDP-1");
+            WindowService.setWindowOutput(uuidB, "eDP-1");
+            const twoOutTargetsABefore = WindowService.getTargetOutputsForWindow(uuidA);
+            const moveAToDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
+            const outAAfterMove = WindowService.getWindowOutput(uuidA);
+            const outBAfterMoveA = WindowService.getWindowOutput(uuidB);
+            const twoOutTargetsAAfter = WindowService.getTargetOutputsForWindow(uuidA);
+            const moveAToSameDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
+            const moveABackToEDP1 = WindowService.moveWindowToOutput(uuidA, "eDP-1");
+            const outAAfterReturn = WindowService.getWindowOutput(uuidA);
+
+            // 4. Invalid / removed output checks
+            const moveInvalidOut = WindowService.moveWindowToOutput(uuidA, "HDMI-99-NONE");
+            const moveUnsafeOut = WindowService.moveWindowToOutput(uuidA, "DP-2;rm");
+            WindowService.outputsOverride = ["eDP-1"];
+            const targetsAfterRemoveDP2 = WindowService.getTargetOutputsForWindow(uuidA);
+            const moveRemovedDP2 = WindowService.moveWindowToOutput(uuidA, "DP-2");
+
+            // 5. Close UUID A gracefully without affecting UUID B or UUID C
+            WindowService.outputsOverride = ["eDP-1", "DP-2"];
+            const closeA = WindowService.closeWindow(uuidA);
+            const ffWinsAfterCloseA = WindowService.getWindowsForApp("firefox").map(w => w.id);
+            const konsoleWinsAfterCloseA = WindowService.getWindowsForApp("konsole").map(w => w.id);
+
+            // 6. Stale UUID no-ops (already closed UUID A + non-existent UUID + unsafe string)
+            const closeAAgain = WindowService.closeWindow(uuidA);
+            const activateClosedA = WindowService.activateWindow(uuidA);
+            const moveClosedA = WindowService.moveWindowToOutput(uuidA, "DP-2");
+            const closeStale = WindowService.closeWindow(staleUuid);
+            const activateStale = WindowService.activateWindow(staleUuid);
+            const moveStale = WindowService.moveWindowToOutput(staleUuid, "DP-2");
+            const closeUnsafe = WindowService.closeWindow("0_{bad;cmd}");
+
+            console.log("WINDOW_ACTIONS_RESULT:" + JSON.stringify({
+                oneOutTargetsA: oneOutTargetsA,
+                oneOutMoveAttempt: oneOutMoveAttempt,
+                actA: actA,
+                activeAfterA: activeAfterA,
+                ffWinsBeforeClose: ffWinsBeforeClose,
+                twoOutTargetsABefore: twoOutTargetsABefore,
+                moveAToDP2: moveAToDP2,
+                outAAfterMove: outAAfterMove,
+                outBAfterMoveA: outBAfterMoveA,
+                twoOutTargetsAAfter: twoOutTargetsAAfter,
+                moveAToSameDP2: moveAToSameDP2,
+                moveABackToEDP1: moveABackToEDP1,
+                outAAfterReturn: outAAfterReturn,
+                moveInvalidOut: moveInvalidOut,
+                moveUnsafeOut: moveUnsafeOut,
+                targetsAfterRemoveDP2: targetsAfterRemoveDP2,
+                moveRemovedDP2: moveRemovedDP2,
+                closeA: closeA,
+                ffWinsAfterCloseA: ffWinsAfterCloseA,
+                konsoleWinsAfterCloseA: konsoleWinsAfterCloseA,
+                closeAAgain: closeAAgain,
+                activateClosedA: activateClosedA,
+                moveClosedA: moveClosedA,
+                closeStale: closeStale,
+                activateStale: activateStale,
+                moveStale: moveStale,
+                closeUnsafe: closeUnsafe
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "WINDOW_ACTIONS_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                uuid_a = "0_{11111111-1111-1111-1111-111111111111}"
+                uuid_b = "0_{22222222-2222-2222-2222-222222222222}"
+                uuid_c = "0_{33333333-3333-3333-3333-333333333333}"
+
+                # 1. One-output behavior
+                self.assertEqual(data["oneOutTargetsA"], [])
+                self.assertFalse(data["oneOutMoveAttempt"])
+
+                # 2. Activate UUID A without affecting UUID B
+                self.assertTrue(data["actA"])
+                self.assertEqual(data["activeAfterA"], "11111111-1111-1111-1111-111111111111")
+                self.assertEqual(data["ffWinsBeforeClose"], [uuid_a, uuid_b])
+
+                # 3. Move between two connected outputs
+                self.assertEqual(data["twoOutTargetsABefore"], ["DP-2"])
+                self.assertTrue(data["moveAToDP2"])
+                self.assertEqual(data["outAAfterMove"], "DP-2")
+                self.assertEqual(data["outBAfterMoveA"], "eDP-1")
+                self.assertEqual(data["twoOutTargetsAAfter"], ["eDP-1"])
+                self.assertFalse(data["moveAToSameDP2"])
+                self.assertTrue(data["moveABackToEDP1"])
+                self.assertEqual(data["outAAfterReturn"], "eDP-1")
+
+                # 4. Invalid / removed outputs
+                self.assertFalse(data["moveInvalidOut"])
+                self.assertFalse(data["moveUnsafeOut"])
+                self.assertEqual(data["targetsAfterRemoveDP2"], [])
+                self.assertFalse(data["moveRemovedDP2"])
+
+                # 5. Graceful close UUID A preserves UUID B and UUID C
+                self.assertTrue(data["closeA"])
+                self.assertEqual(data["ffWinsAfterCloseA"], [uuid_b])
+                self.assertEqual(data["konsoleWinsAfterCloseA"], [uuid_c])
+
+                # 6. Stale / closed / unsafe UUID no-ops
+                self.assertFalse(data["closeAAgain"])
+                self.assertFalse(data["activateClosedA"])
+                self.assertFalse(data["moveClosedA"])
+                self.assertFalse(data["closeStale"])
+                self.assertFalse(data["activateStale"])
+                self.assertFalse(data["moveStale"])
+                self.assertFalse(data["closeUnsafe"])
             finally:
                 if os.path.exists(probe_path):
                     os.remove(probe_path)

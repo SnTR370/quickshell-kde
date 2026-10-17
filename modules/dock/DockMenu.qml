@@ -15,6 +15,10 @@ AnchoredPopup {
 
     signal actionTriggered()
 
+    Component.onCompleted: {
+        WindowService.refreshWindowOutputs();
+    }
+
     implicitWidth: Math.max(200, Math.min(320, menuLayout.implicitWidth + 24))
     implicitHeight: menuLayout.implicitHeight + 16
 
@@ -59,44 +63,125 @@ AnchoredPopup {
         Repeater {
             model: root.appWindows
 
-            Rectangle {
+            ColumnLayout {
                 id: winItem
                 required property var modelData
+                readonly property string windowId: modelData ? (modelData.id || "") : ""
+                readonly property var targetOutputs: WindowService.getTargetOutputsForWindow(windowId)
                 Layout.fillWidth: true
-                implicitHeight: 28
-                radius: Theme.radiusSmall
-                color: winMouse.containsMouse ? Theme.hover : "transparent"
+                spacing: 2
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 8
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 28
+                    radius: Theme.radiusSmall
+                    color: winActivateMouse.containsMouse ? Theme.hover : "transparent"
 
-                    SvgIcon {
-                        icon: "window-duplicate"
-                        size: 14
-                        color: Theme.accent
-                    }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 4
+                        spacing: 6
 
-                    Text {
-                        text: winItem.modelData.title || (root.app ? root.app.name : root.appId)
-                        color: Theme.foreground
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                }
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
 
-                MouseArea {
-                    id: winMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        WindowService.activateWindow(winItem.modelData.id);
-                        root.actionTriggered();
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                SvgIcon {
+                                    icon: "window-duplicate"
+                                    size: 14
+                                    color: Theme.accent
+                                }
+
+                                Text {
+                                    text: (winItem.modelData && winItem.modelData.title) ? winItem.modelData.title : (root.app ? root.app.name : root.appId)
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            MouseArea {
+                                id: winActivateMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    WindowService.activateWindow(winItem.windowId);
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
+
+                        // Move to Screen buttons (only shown when >1 output and valid targets exist)
+                        Repeater {
+                            model: winItem.targetOutputs
+
+                            Rectangle {
+                                id: moveOutBtn
+                                required property string modelData
+                                visible: winItem.targetOutputs.length > 0
+                                implicitWidth: moveOutLabel.implicitWidth + 10
+                                implicitHeight: 20
+                                radius: Theme.radiusSmall
+                                color: moveOutMouse.containsMouse ? Theme.alpha(Theme.primary, 0.22) : Theme.alpha(Theme.surface, 0.6)
+                                border.width: 1
+                                border.color: moveOutMouse.containsMouse ? Theme.primary : Theme.border
+
+                                Text {
+                                    id: moveOutLabel
+                                    anchors.centerIn: parent
+                                    text: "→ " + moveOutBtn.modelData
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall - 2
+                                }
+
+                                MouseArea {
+                                    id: moveOutMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        WindowService.moveWindowToOutput(winItem.windowId, moveOutBtn.modelData);
+                                        root.actionTriggered();
+                                    }
+                                }
+                            }
+                        }
+
+                        // Graceful Close Window button
+                        Rectangle {
+                            id: closeWinBtn
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            radius: Theme.radiusSmall
+                            color: closeWinMouse.containsMouse ? Theme.alpha(Theme.error, 0.22) : "transparent"
+
+                            SvgIcon {
+                                anchors.centerIn: parent
+                                icon: "window-close"
+                                size: 13
+                                color: closeWinMouse.containsMouse ? Theme.error : Theme.foreground
+                            }
+
+                            MouseArea {
+                                id: closeWinMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    WindowService.closeWindow(winItem.windowId);
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
                     }
                 }
             }

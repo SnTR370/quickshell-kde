@@ -396,6 +396,144 @@ Singleton {
         return String(wid).replace(/^0_/, "").replace(/[{}]/g, "").toLowerCase();
     }
 
+    function isValidWindowUuid(wid) {
+        const clean = cleanWindowId(wid);
+        return clean.length > 0 && /^[0-9a-f-]+$/.test(clean);
+    }
+
+    property var outputsOverride: null
+    property var windowOutputs: ({})
+    property var lastExecutedAction: null
+
+    readonly property var availableOutputs: {
+        if (root.outputsOverride !== null && Array.isArray(root.outputsOverride)) {
+            const custom = [];
+            for (let i = 0; i < root.outputsOverride.length; i++) {
+                const name = String(root.outputsOverride[i] || "").trim();
+                if (name.length > 0 && /^[a-zA-Z0-9._-]+$/.test(name) && custom.indexOf(name) === -1) {
+                    custom.push(name);
+                }
+            }
+            return custom;
+        }
+        const screens = Quickshell.screens || [];
+        const res = [];
+        for (let i = 0; i < screens.length; i++) {
+            const s = screens[i];
+            const name = (s && s.name) ? String(s.name).trim() : "";
+            if (name.length > 0 && /^[a-zA-Z0-9._-]+$/.test(name) && res.indexOf(name) === -1) {
+                res.push(name);
+            }
+        }
+        return res;
+    }
+
+    Process {
+        id: outputsSyncProc
+        property string buf: ""
+        command: [
+            "kdotool", "kwinscript", "--inline",
+            "var wins = workspace.windowList().filter(w => w.normalWindow).map(w => ({ id: w.internalId.toString(), output: w.output ? w.output.name : '' })); output_result(JSON.stringify(wins));"
+        ]
+        stdout: SplitParser {
+            onRead: data => { outputsSyncProc.buf += data; }
+        }
+        onExited: exitCode => {
+            if (exitCode === 0 && outputsSyncProc.buf.trim().length > 0) {
+                try {
+                    const parsed = JSON.parse(outputsSyncProc.buf.trim());
+                    if (Array.isArray(parsed)) {
+                        const next = {};
+                        for (let i = 0; i < parsed.length; i++) {
+                            const item = parsed[i];
+                            if (item && item.id && item.output) {
+                                next[root.cleanWindowId(item.id)] = String(item.output).trim();
+                            }
+                        }
+                        root.windowOutputs = next;
+                    }
+                } catch (e) {
+                    Log.warn("WindowService", "Failed to parse window outputs: " + e);
+                }
+            }
+            outputsSyncProc.buf = "";
+        }
+    }
+
+    function refreshWindowOutputs() {
+        if (!KWinService.isKWin || root.outputsOverride !== null) return;
+        if (root.availableOutputs.length <= 1) return;
+        if (!outputsSyncProc.running) {
+            outputsSyncProc.buf = "";
+            outputsSyncProc.running = true;
+        }
+    }
+
+    function isValidOutputName(outputName) {
+        if (!outputName || typeof outputName !== "string") return false;
+        const trimmed = outputName.trim();
+        if (!/^[a-zA-Z0-9._-]+$/.test(trimmed)) return false;
+        return root.availableOutputs.indexOf(trimmed) !== -1;
+    }
+
+    function findWindowById(windowId) {
+        const clean = cleanWindowId(windowId);
+        if (!clean || !root.windows) return null;
+        for (let i = 0; i < root.windows.length; i++) {
+            const w = root.windows[i];
+            if (w && cleanWindowId(w.id) === clean) {
+                return w;
+            }
+        }
+        return null;
+    }
+
+    function getWindowOutput(windowId) {
+        const clean = cleanWindowId(windowId);
+        if (!clean) return "";
+        if (root.windowOutputs && root.windowOutputs[clean]) {
+            const mapped = root.windowOutputs[clean];
+            if (root.availableOutputs.indexOf(mapped) !== -1) {
+                return mapped;
+            }
+        }
+        if (root.availableOutputs.length === 1) {
+            return root.availableOutputs[0];
+        }
+        return "";
+    }
+
+    function setWindowOutput(windowId, outputName) {
+        const clean = cleanWindowId(windowId);
+        if (!clean) return;
+        const next = {};
+        const keys = Object.keys(root.windowOutputs || {});
+        for (let i = 0; i < keys.length; i++) {
+            next[keys[i]] = root.windowOutputs[keys[i]];
+        }
+        if (outputName && outputName.length > 0) {
+            next[clean] = outputName.trim();
+        } else {
+            delete next[clean];
+        }
+        root.windowOutputs = next;
+    }
+
+    function getTargetOutputsForWindow(windowId) {
+        const win = findWindowById(windowId);
+        if (!win) return [];
+        const outs = root.availableOutputs || [];
+        if (outs.length <= 1) return [];
+        const curOut = getWindowOutput(win.id);
+        const targets = [];
+        for (let i = 0; i < outs.length; i++) {
+            if (!curOut || outs[i] !== curOut) {
+                targets.push(outs[i]);
+            }
+        }
+        return targets;
+    }
+
     function getActiveWindowForApp(appId) {
         const wins = getWindowsForApp(appId);
         if (wins.length === 0 || !root.activeWindowId) return null;
@@ -411,23 +549,98 @@ Singleton {
     property var appCycleIndices: ({})
 
     function activateWindow(windowId) {
-        if (!windowId) return;
-        Log.info("WindowService", "Activating window: " + windowId);
-        root.activeWindowId = cleanWindowId(windowId);
-        Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", windowId, ""]);
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Activating window: " + win.id);
+        root.activeWindowId = clean;
+        root.lastExecutedAction = { action: "activate", windowId: win.id, cleanId: clean };
+        if (KWinService.isKWin && root.outputsOverride === null) {
+            Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", win.id, ""]);
+        }
+        return true;
+    }
+
+    function closeWindow(windowId) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Closing window gracefully: " + win.id);
+        root.lastExecutedAction = { action: "close", windowId: win.id, cleanId: clean };
+
+        const remaining = [];
+        const appIdsSet = {};
+        const appIdsList = [];
+        for (let i = 0; i < root.windows.length; i++) {
+            const w = root.windows[i];
+            if (!w || cleanWindowId(w.id) === clean) continue;
+            remaining.push(w);
+            if (w.appId && !appIdsSet[w.appId]) {
+                appIdsSet[w.appId] = true;
+                appIdsList.push(w.appId);
+            }
+        }
+        if (root.latestRunnerWids && root.latestRunnerWids[win.id]) {
+            delete root.latestRunnerWids[win.id];
+        }
+        if (root.activeWindowId === clean) {
+            root.activeWindowId = "";
+        }
+        setWindowOutput(win.id, "");
+        root.windows = remaining;
+        root.windowCount = remaining.length;
+        root.runningAppIds = appIdsList;
+        root.windowsUpdated();
+
+        if (KWinService.isKWin && root.outputsOverride === null) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, "close", win.id]);
+        }
+        return true;
+    }
+
+    function moveWindowToOutput(windowId, outputName) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const outs = root.availableOutputs || [];
+        if (outs.length <= 1) return false;
+        if (!isValidOutputName(outputName)) return false;
+        const targetOut = outputName.trim();
+        const curOut = getWindowOutput(win.id);
+        if (curOut && curOut === targetOut) return false;
+
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Moving window " + win.id + " to output " + targetOut);
+        setWindowOutput(win.id, targetOut);
+        root.lastExecutedAction = { action: "move-output", windowId: win.id, cleanId: clean, outputName: targetOut };
+
+        if (KWinService.isKWin && root.outputsOverride === null) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, "move-output", win.id, targetOut]);
+        }
+        return true;
     }
 
     function toggleWindow(windowId) {
-        if (!windowId) return;
-        Log.info("WindowService", "Toggling window: " + windowId);
-        const clean = cleanWindowId(windowId);
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        Log.info("WindowService", "Toggling window: " + win.id);
+        const clean = cleanWindowId(win.id);
         if (root.activeWindowId === clean) {
             root.activeWindowId = "";
         } else {
             root.activeWindowId = clean;
         }
-        const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
-        Quickshell.execDetached([scriptPath, windowId]);
+        root.lastExecutedAction = { action: "toggle", windowId: win.id, cleanId: clean };
+        if (KWinService.isKWin && root.outputsOverride === null) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
+            Quickshell.execDetached([scriptPath, win.id]);
+        }
+        return true;
     }
 
     function activateApp(appId) {
@@ -466,5 +679,6 @@ Singleton {
     Component.onCompleted: {
         refreshWindows();
         refreshActiveWindow();
+        refreshWindowOutputs();
     }
 }
