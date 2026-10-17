@@ -691,12 +691,14 @@ Scope {
             ];
             ApplicationService.loading = false;
 
-            // Scenario 1: Setup active windows
+            // Scenario 1: Setup active windows including a blank-title/icon window
             const winOutput = [
                 '[Argument: (sssida{sv}) "0_{active-1111}", "Active Window 1", "", 100, 1.0, [Argument: a{sv} {}]]',
-                '[Argument: (sssida{sv}) "0_{active-2222}", "Active Window 2", "", 100, 1.0, [Argument: a{sv} {}]]'
+                '[Argument: (sssida{sv}) "0_{active-2222}", "Active Window 2", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{blank-3333}", "", "", 100, 1.0, [Argument: a{sv} {}]]'
             ].join("\\n");
-            WindowService.parseWindowsOutput(winOutput);
+            WindowService.handleScannerOutput(winOutput);
+            const blankInWindowsBeforeMeta = WindowService.windows.some(w => w.id === "0_{blank-3333}");
 
             // 1. Single getWindowInfo failure does NOT permanently cache empty metadata
             WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-1111}===");
@@ -707,18 +709,24 @@ Scope {
             WindowService.parseMetaOutput("===KWIN_META:0_{closed-9999}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===");
             const closedCached = WindowService.metadataCache["0_{closed-9999}"];
 
-            // 3. Subsequent success for 0_{active-1111} populates cache and clears retry count
+            // 3. Metadata arrives for blank-title/icon window -> discovered and resolved
+            WindowService.parseMetaOutput("===KWIN_META:0_{blank-3333}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===");
+            const blankWin = WindowService.windows.find(w => w.id === "0_{blank-3333}");
+
+            // 4. Subsequent success for 0_{active-1111} populates cache and clears retry count
             WindowService.parseMetaOutput("===KWIN_META:0_{active-1111}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===");
             const cachedAfterSuccess = WindowService.metadataCache["0_{active-1111}"];
             const retriesAfterSuccess = WindowService.metaRetries["0_{active-1111}"];
 
-            // 4. Repeated 3 failures permanently marks cache to avoid infinite polling
+            // 5. Repeated 3 failures permanently marks cache to avoid infinite polling
             WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
             WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
             WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
             const cachedAfter3Fails = WindowService.metadataCache["0_{active-2222}"];
 
             console.log("CACHE_EDGE_RESULT:" + JSON.stringify({
+                blankInWindowsBeforeMeta: blankInWindowsBeforeMeta,
+                blankResolvedAppId: blankWin ? blankWin.appId : null,
                 cachedAfter1Fail: cachedAfter1Fail !== undefined,
                 retriesAfter1Fail: retriesAfter1Fail,
                 closedCached: closedCached !== undefined,
@@ -745,6 +753,10 @@ Scope {
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
                 payload_line = [line for line in combined.splitlines() if marker in line][-1]
                 data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                # Blank title/icon window initially skipped, then discovered upon metadata arrival
+                self.assertFalse(data["blankInWindowsBeforeMeta"])
+                self.assertEqual(data["blankResolvedAppId"], "org.mozilla.firefox")
 
                 # Single failure must not cache empty metadata, must increment retry
                 self.assertFalse(data["cachedAfter1Fail"])

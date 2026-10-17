@@ -41,6 +41,8 @@ Singleton {
 
     property var metadataCache: ({})
     property var metaRetries: ({})
+    property var latestRunnerWids: null
+    property var inFlightWids: []
     property string lastScannerRawText: ""
 
     // Process to query open windows directly from /WindowsRunner (fast, 1 process)
@@ -67,29 +69,44 @@ Singleton {
             onRead: data => { metaProc.buf += data; }
         }
         onExited: exitCode => {
-            if (metaProc.buf.length > 0) {
-                root.parseMetaOutput(metaProc.buf);
-            }
+            const raw = metaProc.buf;
             metaProc.buf = "";
-
-            // Check if any active window still needs metadata (e.g. appeared while metaProc was busy or pending retry)
-            const pending = [];
-            for (let i = 0; i < root.windows.length; i++) {
-                const w = root.windows[i];
-                if (w && w.id && !root.metadataCache[w.id]) {
-                    pending.push(w.id);
+            if (raw.length > 0) {
+                root.parseMetaOutput(raw);
+            } else if (root.inFlightWids && root.inFlightWids.length > 0) {
+                // Empty output or process failure: count failure for in-flight windows
+                for (let i = 0; i < root.inFlightWids.length; i++) {
+                    const wid = root.inFlightWids[i];
+                    if (!wid || !root.isWindowStillActive(wid)) continue;
+                    const retries = (root.metaRetries[wid] || 0) + 1;
+                    root.metaRetries[wid] = retries;
+                    if (retries >= 3) {
+                        root.metadataCache[wid] = {
+                            desktopFile: "",
+                            resourceClass: "",
+                            resourceName: ""
+                        };
+                    }
                 }
             }
-            if (pending.length > 0) {
-                root.queryNewWindowMetadata(pending);
-            }
+            root.inFlightWids = [];
+            // Retries happen on subsequent controlled scanner ticks, preventing busy loops
         }
     }
 
-    function handleScannerOutput(text) {
-        root.parseWindowsOutput(text);
+    function isWindowStillActive(wid) {
+        if (!wid) return false;
+        if (root.latestRunnerWids) {
+            return !!root.latestRunnerWids[wid];
+        }
+        for (let i = 0; i < root.windows.length; i++) {
+            if (root.windows[i] && root.windows[i].id === wid) return true;
+        }
+        return false;
+    }
 
-        // Check for any window UUIDs missing from metadataCache
+    function handleScannerOutput(text) {
+        // Extract authoritative active window UUIDs from runner output
         const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)"/g;
         let m;
         const activeWids = {};
@@ -102,6 +119,9 @@ Singleton {
                 uncached.push(wid);
             }
         }
+        root.latestRunnerWids = activeWids;
+
+        root.parseWindowsOutput(text);
 
         // Prune closed windows from cache and retry tracker
         const cachedKeys = Object.keys(root.metadataCache);
@@ -120,7 +140,7 @@ Singleton {
             }
         }
 
-        // Fetch metadata for new windows only
+        // Fetch metadata for new windows only (on controlled ticks, not tight loops)
         if (uncached.length > 0 && !metaProc.running) {
             root.queryNewWindowMetadata(uncached);
         }
@@ -128,6 +148,7 @@ Singleton {
 
     function queryNewWindowMetadata(wids) {
         if (!wids || wids.length === 0) return;
+        root.inFlightWids = wids.slice();
         const script = "for wid in \"$@\"; do " +
             "uuid=\"${wid#0_}\"; " +
             "if info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null) && [ -n \"$info\" ]; then " +
@@ -151,11 +172,6 @@ Singleton {
 
     function parseMetaOutput(text) {
         if (!text) return;
-        const activeSet = {};
-        for (let i = 0; i < root.windows.length; i++) {
-            if (root.windows[i]) activeSet[root.windows[i].id] = true;
-        }
-
         let updated = false;
 
         // Parse successful metadata queries
@@ -163,7 +179,7 @@ Singleton {
         let m;
         while ((m = metaRe.exec(text)) !== null) {
             const mWid = m[1];
-            if (!mWid || !activeSet[mWid]) continue; // Ignore if window closed while metaProc was running
+            if (!mWid || !root.isWindowStillActive(mWid)) continue; // Discard closed windows
             root.metadataCache[mWid] = {
                 desktopFile: (m[2] || "").trim(),
                 resourceClass: (m[3] || "").trim(),
@@ -178,7 +194,7 @@ Singleton {
         let fm;
         while ((fm = failRe.exec(text)) !== null) {
             const fWid = fm[1];
-            if (!fWid || !activeSet[fWid]) continue;
+            if (!fWid || !root.isWindowStillActive(fWid)) continue;
             const retries = (root.metaRetries[fWid] || 0) + 1;
             root.metaRetries[fWid] = retries;
             if (retries >= 3) {
