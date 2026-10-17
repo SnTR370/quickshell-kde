@@ -34,13 +34,22 @@
   * `showDesktop(bool showing)`
   * `showDebugConsole()`
 
-### Window Management & Running Task Resolution
-* **Service**: `org.kde.KWin`
-* **Path**: `/WindowsRunner`
-* **Interface**: `org.kde.krunner1`
-* **Methods**:
-  * `Match(QString query)` -> `a(sssuda{sv})` (Queries live open toplevel windows, extracting window UUID, title, icon/appId, desktop index, and activation metadata)
-  * `Run(QString matchId, QString actionId)` (Directly activates and raises the target window by UUID)
+### Window Management, Metadata Caching & Native Window Actions
+* **Runner Enumeration**:
+  * **Service**: `org.kde.KWin`
+  * **Path**: `/WindowsRunner`
+  * **Interface**: `org.kde.krunner1`
+  * **Methods**:
+    * `Match(QString query)` -> `a(sssuda{sv})` (Queries live open toplevel windows, extracting immutable window UUID, title, icon, desktop index, and activation state)
+    * `Run(QString matchId, QString actionId)` (Activates and raises the target window by UUID)
+* **Window Metadata Resolution (`org.kde.KWin.getWindowInfo`)**:
+  * Queries `org.kde.KWin /KWin org.kde.KWin.getWindowInfo(QString uuid)` once per newly discovered window UUID and caches `desktopFile`, `resourceClass`, and `resourceName` across scans (with bounded retries on transient empty responses).
+  * Matches desktop entries deterministically via exact ID, `StartupWMClass`, `Exec` binary stem, and reverse-DNS suffix without inferring application identity from window title content.
+* **KWin 6 Scripting Actions (`org.kde.kwin.Scripting`)**:
+  * Executes transient, self-unloading KWin 6 workspace scripts (`services/kwin/scripts/kwin-toggle-window.sh` and `services/kwin/scripts/kwin-window-action.sh`) targeting exact window UUIDs (`workspace.windowList()`):
+    * **Activate / Toggle Minimize**: Restores and activates unfocused/minimized windows or minimizes the currently active window.
+    * **Graceful Close**: Calls `win.closeWindow()` on the target UUID (allowing applications to prompt for unsaved changes; local state is only updated once KWin confirms closure).
+    * **Move to Screen**: Resolves connected outputs from `workspace.screens` and moves the target window via `workspace.sendClientToScreen(win, targetScreen)` (reconciling output placement from KWin state).
 
 ### KWin Wayland Thumbnail Protocol Research Result
 * **Protocol Availability**: KWin Wayland does not expose an unprivileged, public Wayland window thumbnail protocol (`org_kde_kwin_thumbnail` or `zwlr_screencopy_v1` are compositor-internal or specific to wlroots compositors).

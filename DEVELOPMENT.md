@@ -50,9 +50,9 @@ All core services export reactive QML properties and signals. UI components decl
   * Exposes desktop switching (`setCurrentDesktop`, `nextDesktop`, `previousDesktop`), desktop creation, show-desktop toggling, and KDE settings launcher.
   * Employs an event debounce timer plus a lightweight 3000ms polling fallback to sync desktop changes made outside Quickshell (e.g. compositor shortcuts).
 * **`services/kwin/WindowService.qml`**:
-  * Queries running windows and window metadata via KWin's D-Bus runner interface (`org.kde.KWin /WindowsRunner`).
-  * Manages target window activation (`activateWindow`) and multi-window cycling (`cycleAppWindows`).
-  * Employs a 2500ms polling timer as an external lifecycle sync fallback under standard KWin Wayland sessions where `zwlr_foreign_toplevel_manager_v1` is restricted.
+  * Queries running windows via KWin's D-Bus runner interface (`org.kde.KWin /WindowsRunner`) and caches per-UUID window metadata (`desktopFile`, `resourceClass`, `resourceName`) from `org.kde.KWin.getWindowInfo`.
+  * Manages UUID-targeted window activation (`activateWindow`), minimize/restore toggling, multi-window cycling (`cycleAppWindows`), graceful window close (`closeWindow`), and multi-monitor movement (`moveWindowToOutput`) via transient KWin 6 scripts (`services/kwin/scripts/`).
+  * Employs a 1000ms `/WindowsRunner` polling timer as an external lifecycle sync fallback under standard KWin Wayland sessions where `zwlr_foreign_toplevel_manager_v1` is restricted, without mutating local window/output state optimistically before KWin confirmation.
 * **`services/brightness/BrightnessService.qml`**:
   * Event-driven display brightness management listening to `org.kde.ScreenBrightness` D-Bus signals (`BrightnessChanged`).
   * Dynamically discovers connected display paths via `DisplaysDBusNames` and reads hardware `MaxBrightness` and `Brightness`.

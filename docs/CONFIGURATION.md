@@ -17,14 +17,15 @@ If user configuration files do not exist, the shell automatically uses defaults 
   "position": "top",
   "edgeOffset": 8,
   "reserveSpace": false,
-  "height": 44,
+  "height": 30,
   "left": ["launcher", "workspaces"],
   "center": ["clock"],
-  "right": ["media", "tray", "network", "battery", "audio", "power"],
+  "right": ["media", "tray", "network", "battery", "audio", "brightness", "power"],
   "opacity": 0.92,
   "monitors": "all",
   "blur": true,
-  "notificationsEnabled": false
+  "notificationsEnabled": false,
+  "trayPolicies": {}
 }
 ```
 
@@ -33,14 +34,15 @@ If user configuration files do not exist, the shell automatically uses defaults 
 * `edge` / `position`: `"top"`, `"bottom"`, `"left"`, or `"right"` (screen edge placement)
 * `edgeOffset`: Distance in pixels from screen edge when floating (default: `8`)
 * `reserveSpace`: `false` (default: zero exclusive zone so maximized apps fill screen) or `true` (reserves struts)
-* `height`: Panel thickness in pixels
-* `left`: List of module identifiers for start slot (`launcher`, `workspaces`, `clock`, `media`, `tray`, `network`, `battery`, `audio`, `power`)
+* `height`: Panel thickness in pixels (default: `30`)
+* `left`: List of module identifiers for start slot (`launcher`, `workspaces`, `clock`, `media`, `tray`, `network`, `battery`, `audio`, `brightness`, `power`)
 * `center`: List of module identifiers for center slot
 * `right`: List of module identifiers for end slot
 * `opacity`: Background opacity value between `0.1` and `1.0`
 * `monitors`: `"all"` or array of display names (e.g. `["eDP-1"]`)
 * `blur`: `true` or `false` (enables KWin hardware background blur via `ext_background_effect_manager_v1`)
 * `notificationsEnabled`: `false` (default; enables built-in notification server for standalone compositor sessions)
+* `trayPolicies`: Object mapping normalized or exact SNI item IDs to `"auto"`, `"always"`, or `"hidden"` visibility policies
 
 ---
 
