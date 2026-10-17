@@ -661,5 +661,108 @@ Scope {
                 if os.path.exists(probe_path):
                     os.remove(probe_path)
 
+    def test_12_kwin_metadata_cache_edge_cases(self):
+        """Verify KWin metadata cache handles failure retries, closed windows during query, and queued queries."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_cache_edge_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+
+Scope {
+    Timer {
+        interval: 200
+        running: true
+        repeat: false
+        onTriggered: {
+            ApplicationService.applications = [
+                {
+                    id: "org.mozilla.firefox",
+                    name: "Firefox",
+                    icon: "org.mozilla.firefox",
+                    startupWMClass: "org.mozilla.firefox",
+                    execBinary: "firefox",
+                    aliases: ["org.mozilla.firefox", "firefox"]
+                }
+            ];
+            ApplicationService.loading = false;
+
+            // Scenario 1: Setup active windows
+            const winOutput = [
+                '[Argument: (sssida{sv}) "0_{active-1111}", "Active Window 1", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "0_{active-2222}", "Active Window 2", "", 100, 1.0, [Argument: a{sv} {}]]'
+            ].join("\\n");
+            WindowService.parseWindowsOutput(winOutput);
+
+            // 1. Single getWindowInfo failure does NOT permanently cache empty metadata
+            WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-1111}===");
+            const cachedAfter1Fail = WindowService.metadataCache["0_{active-1111}"];
+            const retriesAfter1Fail = WindowService.metaRetries["0_{active-1111}"];
+
+            // 2. Window closes while meta query was in-flight (0_{closed-9999} not in active set)
+            WindowService.parseMetaOutput("===KWIN_META:0_{closed-9999}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===");
+            const closedCached = WindowService.metadataCache["0_{closed-9999}"];
+
+            // 3. Subsequent success for 0_{active-1111} populates cache and clears retry count
+            WindowService.parseMetaOutput("===KWIN_META:0_{active-1111}\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===");
+            const cachedAfterSuccess = WindowService.metadataCache["0_{active-1111}"];
+            const retriesAfterSuccess = WindowService.metaRetries["0_{active-1111}"];
+
+            // 4. Repeated 3 failures permanently marks cache to avoid infinite polling
+            WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
+            WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
+            WindowService.parseMetaOutput("===KWIN_META_FAIL:0_{active-2222}===");
+            const cachedAfter3Fails = WindowService.metadataCache["0_{active-2222}"];
+
+            console.log("CACHE_EDGE_RESULT:" + JSON.stringify({
+                cachedAfter1Fail: cachedAfter1Fail !== undefined,
+                retriesAfter1Fail: retriesAfter1Fail,
+                closedCached: closedCached !== undefined,
+                hasCachedAfterSuccess: cachedAfterSuccess !== undefined,
+                successDesktopFile: cachedAfterSuccess ? cachedAfterSuccess.desktopFile : "",
+                retriesAfterSuccess: retriesAfterSuccess !== undefined,
+                hasCachedAfter3Fails: cachedAfter3Fails !== undefined
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "CACHE_EDGE_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                # Single failure must not cache empty metadata, must increment retry
+                self.assertFalse(data["cachedAfter1Fail"])
+                self.assertEqual(data["retriesAfter1Fail"], 1)
+
+                # Window closed during in-flight query must be discarded
+                self.assertFalse(data["closedCached"])
+
+                # Subsequent success populates cache and clears retries
+                self.assertTrue(data["hasCachedAfterSuccess"])
+                self.assertEqual(data["successDesktopFile"], "org.mozilla.firefox")
+                self.assertFalse(data["retriesAfterSuccess"])
+
+                # 3 consecutive failures safely caches empty metadata to prevent infinite loop
+                self.assertTrue(data["hasCachedAfter3Fails"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()

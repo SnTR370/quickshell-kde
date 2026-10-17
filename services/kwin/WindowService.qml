@@ -40,6 +40,7 @@ Singleton {
     }
 
     property var metadataCache: ({})
+    property var metaRetries: ({})
     property string lastScannerRawText: ""
 
     // Process to query open windows directly from /WindowsRunner (fast, 1 process)
@@ -66,10 +67,22 @@ Singleton {
             onRead: data => { metaProc.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && metaProc.buf.length > 0) {
+            if (metaProc.buf.length > 0) {
                 root.parseMetaOutput(metaProc.buf);
             }
             metaProc.buf = "";
+
+            // Check if any active window still needs metadata (e.g. appeared while metaProc was busy or pending retry)
+            const pending = [];
+            for (let i = 0; i < root.windows.length; i++) {
+                const w = root.windows[i];
+                if (w && w.id && !root.metadataCache[w.id]) {
+                    pending.push(w.id);
+                }
+            }
+            if (pending.length > 0) {
+                root.queryNewWindowMetadata(pending);
+            }
         }
     }
 
@@ -90,12 +103,20 @@ Singleton {
             }
         }
 
-        // Prune closed windows from cache
+        // Prune closed windows from cache and retry tracker
         const cachedKeys = Object.keys(root.metadataCache);
         for (let i = 0; i < cachedKeys.length; i++) {
             const k = cachedKeys[i];
             if (!activeWids[k]) {
                 delete root.metadataCache[k];
+                delete root.metaRetries[k];
+            }
+        }
+        const retryKeys = Object.keys(root.metaRetries);
+        for (let i = 0; i < retryKeys.length; i++) {
+            const rk = retryKeys[i];
+            if (!activeWids[rk]) {
+                delete root.metaRetries[rk];
             }
         }
 
@@ -109,7 +130,7 @@ Singleton {
         if (!wids || wids.length === 0) return;
         const script = "for wid in \"$@\"; do " +
             "uuid=\"${wid#0_}\"; " +
-            "info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null); " +
+            "if info=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.getWindowInfo \"$uuid\" 2>/dev/null) && [ -n \"$info\" ]; then " +
             "df=\"\"; rc=\"\"; rn=\"\"; " +
             "while IFS= read -r line; do " +
             "case \"$line\" in " +
@@ -119,6 +140,9 @@ Singleton {
             "esac; " +
             "done <<EOF\n$info\nEOF\n" +
             "printf \"===KWIN_META:%s\\t%s\\t%s\\t%s===\\n\" \"$wid\" \"$df\" \"$rc\" \"$rn\"; " +
+            "else " +
+            "printf \"===KWIN_META_FAIL:%s===\\n\" \"$wid\"; " +
+            "fi; " +
             "done";
         metaProc.buf = "";
         metaProc.command = ["sh", "-c", script, "--"].concat(wids);
@@ -127,20 +151,47 @@ Singleton {
 
     function parseMetaOutput(text) {
         if (!text) return;
+        const activeSet = {};
+        for (let i = 0; i < root.windows.length; i++) {
+            if (root.windows[i]) activeSet[root.windows[i].id] = true;
+        }
+
+        let updated = false;
+
+        // Parse successful metadata queries
         const metaRe = /===KWIN_META:([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)===/g;
         let m;
-        let updated = false;
         while ((m = metaRe.exec(text)) !== null) {
             const mWid = m[1];
-            if (mWid) {
-                root.metadataCache[mWid] = {
-                    desktopFile: (m[2] || "").trim(),
-                    resourceClass: (m[3] || "").trim(),
-                    resourceName: (m[4] || "").trim()
+            if (!mWid || !activeSet[mWid]) continue; // Ignore if window closed while metaProc was running
+            root.metadataCache[mWid] = {
+                desktopFile: (m[2] || "").trim(),
+                resourceClass: (m[3] || "").trim(),
+                resourceName: (m[4] || "").trim()
+            };
+            delete root.metaRetries[mWid];
+            updated = true;
+        }
+
+        // Parse failed metadata queries
+        const failRe = /===KWIN_META_FAIL:([^=\r\n]*)===/g;
+        let fm;
+        while ((fm = failRe.exec(text)) !== null) {
+            const fWid = fm[1];
+            if (!fWid || !activeSet[fWid]) continue;
+            const retries = (root.metaRetries[fWid] || 0) + 1;
+            root.metaRetries[fWid] = retries;
+            if (retries >= 3) {
+                // Permanently cache empty metadata after 3 failed attempts to prevent infinite polling
+                root.metadataCache[fWid] = {
+                    desktopFile: "",
+                    resourceClass: "",
+                    resourceName: ""
                 };
                 updated = true;
             }
         }
+
         if (updated && root.lastScannerRawText.length > 0) {
             root.parseWindowsOutput(root.lastScannerRawText);
         }
