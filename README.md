@@ -43,18 +43,9 @@ Most Quickshell, AGS, and Waybar desktop suites target `wlroots` or standalone t
 ## Screenshots & Visual Showcase
 
 > [!NOTE]
-> Repository screenshots are currently pending capture on the Milestone 3A (`feat/composable-shell-ux`) UI. In accordance with project documentation standards, no mockups or synthetic images are included.
-
-### Screenshot Capture Checklist (Maintainer Reference)
-
-To complete the visual gallery under `docs/screenshots/`, capture the following 6 views at `1920x1080` (or `2560x1440` @ 100%/125% scale) in PNG format:
-
-- [ ] `01-desktop-overview.png`: Floating Top Bar (`height: 30`, `edgeOffset: 8`) + Floating Bottom Dock with active app indicators, KWin hardware blur, and a tiled/floating window layout.
-- [ ] `02-anchored-popups.png`: `AudioPopup` or `BrightnessPopup` anchored beneath the Top Bar showing per-device sliders and KCM quick-open actions.
-- [ ] `03-tray-overflow.png`: `TrayModule` chevron expanded with the overflow popup open and a native SNI right-click context menu displayed.
-- [ ] `04-dock-window-actions.png`: `DockMenu` right-click context menu on a multi-window app showing per-window **Focus**, **Move to `<Output>`**, and **Close** actions alongside `WindowChooserPopup`.
-- [ ] `05-launcher-spotlight.png`: Fullscreen `LauncherWindow` overlay with category filter chips and live search results.
-- [ ] `06-settings-themes.png`: `SettingsWindow` open on the Tray Visibility / Surface Configuration tab, or a 2x2 grid comparing *Breeze Dark*, *Catppuccin Mocha*, *Nord*, and *Tokyo Night*.
+> Repository screenshots are pending capture on a live desktop session following Milestone 3A (`feat/composable-shell-ux`) UI stabilization. In accordance with project documentation standards, no simulated mockups or synthetic placeholders are used.
+>
+> Maintainers and contributors: see the [Screenshot Capture Checklist & Repository Metadata Guide](docs/MAINTAINER.md) for required views, resolutions, and GitHub repository configuration.
 
 ---
 
@@ -97,7 +88,7 @@ Capabilities are categorized below by their verification level in the repository
 | :--- | :--- | :--- | :--- | :--- |
 | **quickshell-kde** *(This Project)* | **KDE Plasma 6 (KWin Wayland)** | Quickshell (Qt6 / QML) + Python XDG scanner + KWin D-Bus / JS scripts | **Purpose-Built**: Native KWin `/VirtualDesktopManager`, `/WindowsRunner`, `getWindowInfo`, `org.kde.ScreenBrightness`, `kcmshell6`, and KWin 6 scripting. | Focused on composable Bar, Dock, Launcher, Popups, OSD, and Settings inside a KDE Plasma session. Does not replace KDE's lock screen, Polkit agent, or display daemon. |
 | [**KDE Plasma Native Panels**](https://invent.kde.org/plasma/plasma-workspace) (`plasma-workspace`) | **KDE Plasma 6 (KWin Wayland & X11)** | Qt6 / QML, Kirigami, C++ Plasma Frameworks (`plasmashell`) | **First-Class Reference**: Uses internal compositor protocols (`org_kde_plasma_surface`, `KWin::ThumbnailItem`) unavailable to external layer-shell clients. | Complete desktop environment with live window thumbnails, widgets (Plasmoids), and full Alt+Tab/Show Desktop panel persistence, but tied to `plasmashell` containment architecture. |
-| [**Noctalia**](https://github.com/noctalia-dev/noctalia) ([Docs](https://docs.noctalia.dev)) | **Hyprland, Niri**, Sway, Labwc, MangoWC, Scroll | Custom Wayland + OpenGL ES shell (no Qt/GTK dependency in current mainline; legacy v4 used Quickshell) | **Guest / Experimental**: Layer-shell surfaces render on KWin and workspaces map via `org_kde_plasma_virtual_desktop` / scripting bridges, but features relying on `wlr-data-control` (e.g. clipboard history) have limitations on stock KWin. | Comprehensive standalone Wayland shell including bar, dock, launcher, lock screen, wallpaper daemon, control center, and desktop widgets. |
+| [**Noctalia**](https://github.com/noctalia-dev/noctalia) ([Docs](https://docs.noctalia.dev)) | Hyprland, Niri, Sway, Labwc, MangoWC, Scroll, **KDE Plasma** | Custom Wayland + OpenGL ES shell (no Qt/GTK dependency in current mainline; legacy v4 used Quickshell) | **Documented Support (Non-First-Class)**: Officially documents KDE Plasma settings ([KDE Docs](https://docs.noctalia.dev/noctalia/compositor-settings/kde/)). Bars, dock, OSD, launcher, control center, workspaces (`org_kde_plasma_virtual_desktop`), taskbar (`KWin` scripting bridge), and system tray work via layer-shell; features requiring `wlroots` protocols (clipboard history, auto-paste, screenshots, lock screen backdrop, and night light) are unavailable on stock KWin. | Comprehensive standalone Wayland shell including bar, dock, launcher, lock screen, wallpaper daemon, control center, and desktop widgets. |
 | [**DankMaterialShell**](https://github.com/AvengeMedia/DankMaterialShell) ([Docs](https://danklinux.com/docs)) | **Niri, Hyprland, Sway**, MangoWC, labwc, Scroll, Miracle WM | Quickshell (QtQuick/QML) + Go backend (`dms` CLI) | **Not Targeted**: Designed to replace `waybar`, `swaylock`, `swayidle`, `mako`, `fuzzel`, and `polkit` on standalone Wayland compositors rather than KWin/Plasma. | Full Material 3 desktop suite with Go system daemons, dynamic wallpaper theming (`matugen`), lock screen, and distro packaging. |
 | [**Caelestia Shell**](https://github.com/caelestia-dots/shell) | **Hyprland** | Quickshell (`quickshell-git`) + C++/CMake QML plugins + `caelestia-cli` | **Not Targeted Upstream**: Relies on `hyprctl` IPC and Hyprland global shortcuts (separate third-party community ports exist for KDE). | Fluid morphing shell tightly integrated with the Caelestia Hyprland dotfiles, Cava audio visualizer, and Material 3 shapes. |
 | [**HyprPanel**](https://github.com/Jas-SinghFSU/HyprPanel) | **Hyprland** | Astal / AGS (GTK3, GJS/TypeScript) | **Not Supported**: Explicitly coupled to Hyprland IPC sockets, workspaces, and client state. | Feature-rich Hyprland bar/panel; currently in maintenance mode as upstream development transitions to [Wayle](https://github.com/wayle-rs/wayle) (Rust/GTK4). |
@@ -113,7 +104,7 @@ Capabilities are categorized below by their verification level in the repository
 * **Fast, Low-Overhead Window Scanning**: `WindowService` caches KWin `getWindowInfo` metadata per immutable window UUID so steady-state 1000ms scans spawn only a single `/WindowsRunner` query without per-window D-Bus process storms or unbounded failure retry loops.
 
 ### Current Limitations (Truthful Capabilities)
-* **No Live Window Preview Thumbnails in Dock**: KWin Wayland does not expose an unprivileged public Wayland protocol for live window textures (`zwlr_screencopy_v1` is wlroots-specific, and PipeWire screencasting triggers interactive portal permission dialogs per window). Clicking an app with multiple open windows opens `WindowChooserPopup` displaying accurate window titles, icons, and focus/close actions instead of mocked thumbnails.
+* **No Live Window Preview Thumbnails in Dock**: KWin Wayland does not expose an unprivileged public Wayland protocol for live window textures (`zwlr_screencopy_v1` is wlroots-specific, and PipeWire screencasting triggers interactive portal permission dialogs per window). Clicking an app with multiple open windows opens `WindowChooserPopup` displaying accurate window titles, icons, and activation / new-window actions instead of mocked thumbnails (per-window Close and Move to Screen actions are available in the `DockMenu` right-click context menu).
 * **Floating Surface Behavior During `Alt+Tab` and `Show Desktop`**: When `reserveSpace: false` (`exclusiveZone: 0`), KWin's full-screen `TabBox` (`Alt+Tab`) and `ShowDesktop` (`Meta+D`) effects treat unreserved `WlrLayer.Top` layer-shell windows as floating surfaces and temporarily hide or occlude them. Moving panels to `WlrLayer.Overlay` was rejected because it would render panels over screen lockers and Spectacle screenshot selectors. Users who prefer persistent panel struts can enable `reserveSpace: true`.
 * **Polling Fallback for Window Enumeration**: Because standard KWin Wayland restricts external clients from binding `zwlr_foreign_toplevel_manager_v1`, window list synchronization uses a 1000ms `/WindowsRunner` D-Bus poll (supplemented by immediate 180ms reconciliation after dock window actions).
 * **Manual Multi-Monitor & Native Grab Verification**: While multi-monitor filtering and popup coordinate mapping are covered by automated QML unit tests, physical multi-monitor hardware hotplugging and real-mouse Wayland native menu grabs (`QsWindow` / SNI `DbusMenu`) must be verified interactively on a live desktop session.
@@ -366,17 +357,7 @@ Switch themes live in the Settings UI or via `activeTheme` in `theme_config.json
 * [Module Reference](docs/MODULES.md) — Slot module identifiers, interactions, and contextual popups.
 * [Configuration Guide](docs/CONFIGURATION.md) — Full JSON schema for `bar_config.json`, `dock_config.json`, `theme_config.json`, and migration rules.
 * [Development Guide](DEVELOPMENT.md) — Service contracts, coding standards, and verification workflows.
-
----
-
-## Repository Metadata (Maintainer Reference)
-
-* **Suggested GitHub About Description**:
-  `Composable, KDE-native desktop shell (Bar, Dock, Launcher, OSD & Popups) built with Quickshell (Qt6/QML) for KDE Plasma 6 and KWin Wayland.`
-* **Suggested GitHub Topics**:
-  `quickshell` · `kde-plasma-6` · `kwin` · `wayland` · `qml` · `qt6` · `linux-desktop` · `desktop-shell` · `wayland-layer-shell` · `kde`
-* **Social Preview Specification (`1280x640` PNG)**:
-  Dark Breeze/Catppuccin canvas (`#181825`) featuring the floating Top Bar and Bottom Dock over a blurred KDE Plasma 6 desktop, titled **"quickshell-kde — Composable Quickshell UX for KDE Plasma 6 & KWin Wayland"**.
+* [Maintainer & Showcase Guide](docs/MAINTAINER.md) — Screenshot capture checklist and GitHub repository metadata.
 
 ---
 
