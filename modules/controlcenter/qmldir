@@ -1,0 +1,7 @@
+ControlCenter 1.0 ControlCenter.qml
+ControlCenterPopup 1.0 ControlCenterPopup.qml
+QuickTile 1.0 QuickTile.qml
+VolumeControl 1.0 VolumeControl.qml
+BrightnessControl 1.0 BrightnessControl.qml
+MediaControl 1.0 MediaControl.qml
+SessionRow 1.0 SessionRow.qml
