@@ -16,9 +16,30 @@ Item {
     property bool isPinned: ConfigService.isDockPinned(root.appId)
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
     readonly property int windowCount: appWindows.length
+    readonly property bool isCurrentAppActive: WindowService.activeWindowId !== "" && appWindows.some(w => w.id === WindowService.activeWindowId)
     property real baseSize: ConfigService.dockIconSize
     property bool menuOpen: false
     property bool chooserOpen: false
+    readonly property bool isPopupOpen: menuOpen || chooserOpen
+    property bool tooltipActive: false
+
+    Timer {
+        id: tooltipDwellTimer
+        interval: 320
+        repeat: false
+        onTriggered: {
+            if (dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup)) {
+                root.tooltipActive = true;
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: clickBounceAnim
+        NumberAnimation { target: iconContainer; property: "scale"; to: 0.88; duration: 80; easing.type: Easing.OutQuad }
+        NumberAnimation { target: iconContainer; property: "scale"; to: 1.18; duration: 110; easing.type: Easing.OutQuad }
+        NumberAnimation { target: iconContainer; property: "scale"; to: (dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0; duration: 100; easing.type: Easing.OutCubic }
+    }
 
     onMenuOpenChanged: {
         if (menuOpen && chooserOpen) {
@@ -71,11 +92,22 @@ Item {
         width: root.baseSize
         height: root.baseSize
         radius: Theme.radiusSmall
-        color: dockItemMouse.containsMouse ? Theme.hover : "transparent"
-        scale: dockItemMouse.pressed ? 0.92 : (dockItemMouse.containsMouse ? 1.16 : 1.0)
+        color: dockItemMouse.pressed ? Theme.alpha(Theme.primary, 0.28)
+             : root.isPopupOpen ? Theme.alpha(Theme.primary, 0.22)
+             : dockItemMouse.containsMouse ? Theme.hover
+             : "transparent"
+        border.width: root.isPopupOpen ? 1 : 0
+        border.color: Theme.alpha(Theme.primary, 0.45)
+        scale: dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)
 
-        Behavior on scale { NumberAnimation { duration: Theme.animDurationFast; easing.type: Theme.animEasingBack } }
+        Behavior on scale {
+            NumberAnimation {
+                duration: iconContainer.scale > 1.0 ? 160 : 130
+                easing.type: iconContainer.scale > 1.0 ? Easing.OutBack : Easing.OutCubic
+            }
+        }
         Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+        Behavior on border.color { ColorAnimation { duration: Theme.animDurationFast } }
 
         SvgIcon {
             anchors.centerIn: parent
@@ -90,13 +122,17 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 2
             visible: root.isRunning
+            opacity: root.isRunning ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
 
             // Dot 1 (Single window or first of multi)
             Rectangle {
-                width: root.windowCount >= 3 ? 3 : (root.windowCount === 2 ? 4 : 6)
+                width: root.isCurrentAppActive ? 10 : (root.windowCount >= 3 ? 3 : (root.windowCount === 2 ? 4 : 6))
                 height: 3
                 radius: 1.5
-                color: Theme.primary
+                color: root.isCurrentAppActive ? Theme.accent : Theme.primary
+                Behavior on width { NumberAnimation { duration: Theme.animDurationFast; easing.type: Easing.OutCubic } }
+                Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
             }
 
             // Dot 2 (for 2+ windows)
@@ -125,7 +161,7 @@ Item {
         edge: ConfigService.dockEdge
         offset: 4
         text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : "")
-        show: dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.menuOpen && !root.chooserOpen
+        show: root.tooltipActive && dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup) && (root.parentWindowRef ? root.parentWindowRef.isRevealed : true)
     }
 
     // Lazy-loaded Multi-Window Chooser Popup
@@ -169,12 +205,23 @@ Item {
 
         onEntered: {
             WindowService.refreshActiveWindow();
+            if (!root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup)) {
+                tooltipDwellTimer.restart();
+            }
+        }
+
+        onExited: {
+            tooltipDwellTimer.stop();
+            root.tooltipActive = false;
         }
 
         onClicked: mouse => {
+            tooltipDwellTimer.stop();
+            root.tooltipActive = false;
             if (mouse.button === Qt.RightButton) {
                 root.menuOpen = !root.menuOpen;
             } else if (mouse.button === Qt.MiddleButton) {
+                clickBounceAnim.restart();
                 root.chooserOpen = false;
                 root.menuOpen = false;
                 if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
@@ -182,6 +229,7 @@ Item {
                 }
                 ApplicationService.launchAppId(root.appId);
             } else {
+                clickBounceAnim.restart();
                 if (root.windowCount === 0) {
                     root.menuOpen = false;
                     root.chooserOpen = false;

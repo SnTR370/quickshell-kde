@@ -69,6 +69,7 @@ AnchoredPopup {
                 implicitHeight: 34
                 radius: Theme.radiusSmall
                 color: winMouse.containsMouse ? Theme.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
                 RowLayout {
                     anchors.fill: parent
@@ -118,6 +119,7 @@ AnchoredPopup {
             implicitHeight: 28
             radius: Theme.radiusSmall
             color: newWinMouse.containsMouse ? Theme.hover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
             RowLayout {
                 anchors.fill: parent

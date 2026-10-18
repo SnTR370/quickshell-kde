@@ -76,6 +76,7 @@ AnchoredPopup {
                     implicitHeight: 28
                     radius: Theme.radiusSmall
                     color: winActivateMouse.containsMouse ? Theme.hover : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
                     RowLayout {
                         anchors.fill: parent
@@ -133,6 +134,8 @@ AnchoredPopup {
                                 color: moveOutMouse.containsMouse ? Theme.alpha(Theme.primary, 0.22) : Theme.alpha(Theme.surface, 0.6)
                                 border.width: 1
                                 border.color: moveOutMouse.containsMouse ? Theme.primary : Theme.border
+                                Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+                                Behavior on border.color { ColorAnimation { duration: Theme.animDurationFast } }
 
                                 Text {
                                     id: moveOutLabel
@@ -163,6 +166,7 @@ AnchoredPopup {
                             implicitHeight: 22
                             radius: Theme.radiusSmall
                             color: closeWinMouse.containsMouse ? Theme.alpha(Theme.error, 0.22) : "transparent"
+                            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
                             SvgIcon {
                                 anchors.centerIn: parent
@@ -201,6 +205,7 @@ AnchoredPopup {
             implicitHeight: 28
             radius: Theme.radiusSmall
             color: launchMouse.containsMouse ? Theme.hover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
             RowLayout {
                 anchors.fill: parent
@@ -240,6 +245,7 @@ AnchoredPopup {
             implicitHeight: 28
             radius: Theme.radiusSmall
             color: pinMouse.containsMouse ? Theme.hover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
             RowLayout {
                 anchors.fill: parent

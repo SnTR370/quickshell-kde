@@ -123,8 +123,8 @@ Variants {
                 horizontalCenter: !dockWindow.isVertical ? parent.horizontalCenter : undefined
                 verticalCenter: dockWindow.isVertical ? parent.verticalCenter : undefined
             }
-            height: dockWindow.isVertical ? Math.max(160, dockSurface.implicitHeight) : 6
-            width: dockWindow.isVertical ? 6 : Math.max(160, dockSurface.implicitWidth)
+            height: dockWindow.isVertical ? Math.max(180, dockSurface.implicitHeight) : 8
+            width: dockWindow.isVertical ? 8 : Math.max(180, dockSurface.implicitWidth)
 
             HoverHandler {
                 id: edgeTriggerHover
@@ -155,9 +155,9 @@ Variants {
             }
             width: dockWindow.isVertical
                 ? (dockSurface.implicitWidth + (dockWindow.isFloating ? dockWindow.offset : 0))
-                : Math.max(dockSurface.implicitWidth, 160)
+                : Math.max(dockSurface.implicitWidth + 24, 180)
             height: dockWindow.isVertical
-                ? Math.max(dockSurface.implicitHeight, 160)
+                ? Math.max(dockSurface.implicitHeight + 24, 180)
                 : (dockSurface.implicitHeight + (dockWindow.isFloating ? dockWindow.offset : 0))
 
             HoverHandler {
@@ -212,12 +212,27 @@ Variants {
                     return 0;
                 }
 
-                Behavior on y { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
-                Behavior on x { NumberAnimation { duration: Theme.animDurationNormal; easing.type: Theme.animEasing } }
+                Behavior on y {
+                    NumberAnimation {
+                        duration: dockWindow.isRevealed ? 180 : 220
+                        easing.type: dockWindow.isRevealed ? Easing.OutCubic : Easing.InOutQuad
+                    }
+                }
+                Behavior on x {
+                    NumberAnimation {
+                        duration: dockWindow.isRevealed ? 180 : 220
+                        easing.type: dockWindow.isRevealed ? Easing.OutCubic : Easing.InOutQuad
+                    }
+                }
             }
 
             opacity: (!dockWindow.autoHide || dockWindow.isRevealed) ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: Theme.animDurationNormal } }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: dockWindow.isRevealed ? 160 : 200
+                    easing.type: Easing.OutQuad
+                }
+            }
 
             HoverHandler {
                 id: dockHoverHandler
@@ -250,6 +265,7 @@ Variants {
                     iconColor: Theme.primary
                     backgroundColor: Theme.alpha(Theme.primary, 0.12)
                     tooltip: "Applications"
+                    active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
                     onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
                 }
 
@@ -295,6 +311,7 @@ Variants {
                     icon: "preferences-system"
                     iconColor: Theme.foreground
                     tooltip: "Settings"
+                    active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
                     onClicked: ConfigService.toggleSettings(dockWindow.modelData)
                 }
             }
@@ -315,6 +332,7 @@ Variants {
                     iconColor: Theme.primary
                     backgroundColor: Theme.alpha(Theme.primary, 0.12)
                     tooltip: "Applications"
+                    active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
                     onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
                 }
 
@@ -360,6 +378,7 @@ Variants {
                     icon: "preferences-system"
                     iconColor: Theme.foreground
                     tooltip: "Settings"
+                    active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
                     onClicked: ConfigService.toggleSettings(dockWindow.modelData)
                 }
             }
