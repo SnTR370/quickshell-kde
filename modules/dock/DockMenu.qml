@@ -11,6 +11,7 @@ AnchoredPopup {
     property var app: null
     property bool isRunning: false
     property bool isPinned: false
+    accessibleName: ApplicationService.cleanAppName(root.app ? root.app.name : root.appId) + " context menu"
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
     readonly property var appActions: {
         const _apps = ApplicationService.applications;
@@ -192,6 +193,8 @@ AnchoredPopup {
 
                             MouseArea {
                                 id: winActivateMouse
+                                Accessible.role: Accessible.MenuItem
+                                Accessible.name: "Activate window: " + ((winItem.modelData && winItem.modelData.title) ? winItem.modelData.title : (root.app ? root.app.name : root.appId))
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
@@ -231,6 +234,8 @@ AnchoredPopup {
 
                                 MouseArea {
                                     id: moveOutMouse
+                                    Accessible.role: Accessible.MenuItem
+                                    Accessible.name: "Move window to screen " + moveOutBtn.modelData
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
@@ -262,6 +267,8 @@ AnchoredPopup {
 
                             MouseArea {
                                 id: closeWinMouse
+                                Accessible.role: Accessible.MenuItem
+                                Accessible.name: "Close window"
                                 anchors.fill: parent
                                 enabled: winItem.canClose
                                 hoverEnabled: true
@@ -310,6 +317,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: minimizeWinMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: minimizeWinLabel.text
                             anchors.fill: parent
                             enabled: winItem.canMinimize
                             hoverEnabled: true
@@ -349,6 +358,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: maximizeWinMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: maximizeWinLabel.text
                             anchors.fill: parent
                             enabled: winItem.canMaximize
                             hoverEnabled: true
@@ -388,6 +399,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: fullscreenWinMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: fullscreenWinLabel.text
                             anchors.fill: parent
                             enabled: winItem.canFullScreen
                             hoverEnabled: true
@@ -427,6 +440,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: keepAboveWinMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: keepAboveWinLabel.text
                             anchors.fill: parent
                             enabled: winItem.canKeepAbove
                             hoverEnabled: true
@@ -473,6 +488,8 @@ AnchoredPopup {
 
                             MouseArea {
                                 id: moveDeskMouse
+                                Accessible.role: Accessible.MenuItem
+                                Accessible.name: "Move window to desktop " + (moveDeskBtn.modelData ? moveDeskBtn.modelData.name : "")
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
@@ -507,6 +524,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: allDesksMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: "Move window to all desktops"
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
@@ -561,6 +580,8 @@ AnchoredPopup {
 
             MouseArea {
                 id: launchMouse
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: root.isRunning ? "New Window" : "Open"
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
@@ -609,6 +630,8 @@ AnchoredPopup {
 
                 MouseArea {
                     id: quickActionMouse
+                    Accessible.role: Accessible.MenuItem
+                    Accessible.name: quickActionRow.modelData ? quickActionRow.modelData.name : ""
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
@@ -653,6 +676,8 @@ AnchoredPopup {
 
             MouseArea {
                 id: moveLeftMouse
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: root.isVerticalDock ? "Move Up" : "Move Left"
                 anchors.fill: parent
                 enabled: root.canMoveLeft
                 hoverEnabled: true
@@ -695,6 +720,8 @@ AnchoredPopup {
 
             MouseArea {
                 id: moveRightMouse
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: root.isVerticalDock ? "Move Down" : "Move Right"
                 anchors.fill: parent
                 enabled: root.canMoveRight
                 hoverEnabled: true
@@ -735,6 +762,8 @@ AnchoredPopup {
 
             MouseArea {
                 id: pinMouse
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: root.isPinned ? "Unpin from Dock" : "Pin to Dock"
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor

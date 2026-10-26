@@ -66,3 +66,29 @@
   - Full Python unittest suite (58 tests in `tests/` + 9 in `modules/controlcenter/`): 67 passed, 0 failed.
 - **Remaining Risks:**
   - None identified; field codes without file/URL context (`%f`, `%F`, `%u`, `%U`) are stripped per Freedesktop spec for context-menu invocation.
+
+---
+
+## Phase 3 — P0 #7: Keyboard Accessibility
+
+- **Changed Components:**
+  - `modules/dock/DockKeyboardNav.qml` (new), `modules/dock/qmldir`
+  - `modules/dock/Dock.qml`, `modules/dock/DockItem.qml`, `modules/dock/DockMenu.qml`, `modules/dock/WindowChooserPopup.qml`, `modules/dock/DockSeparator.qml`
+  - `components/IconButton.qml`, `components/AnchoredPopup.qml`
+  - `tests/test_dock_keyboard.py` (new)
+- **Implemented Functionality:**
+  - Deterministic focus order (launcher, pinned, unpinned running, settings); separators/hidden/disabled items skipped.
+  - Horizontal: Left/Right (wrapping). Vertical: Up/Down (wrapping). Home/End. Tab/Shift+Tab walk the Dock and hand focus back at either end (no trap).
+  - Enter/Space = left click; Menu / Shift+F10 = context menu; Escape closes popup (focus stays on the item), a second Escape leaves the Dock.
+  - Popups (xdg_popup, no keyboard grab) are driven by the focused DockItem, which forwards keys to `AnchoredPopup.handleKeyEvent`: Up/Down/Left/Right/Tab/Shift+Tab/Home/End move over *enabled* actions, Enter/Space activate, Escape closes. Focus ring on the current action.
+  - Accessible roles/names: Dock items and buttons (Button), popup (PopupMenu), every menu/chooser action (MenuItem), separators ignored. Visible focus ring on Dock items and buttons.
+  - Mouse, drag & drop, wheel cycling and middle click are unchanged (click logic only extracted into `activateItem` / `toggleContextMenu` / `launchNewInstance`).
+- **How keyboard entry is reached (local only):**
+  - `qs ipc call dock focus` (first screen; other screens: `dock-<screen name>`) and `qs ipc call dock release`. Bind it to a key yourself if wanted; this change does **not** register or edit any KDE global shortcut.
+  - `WlrLayershell.keyboardFocus` is `None` by default and becomes `OnDemand` only while `keyboardNavActive`. The Dock never requests focus on its own, and releases it on Escape, Tab past either end, Dock hide, or when the compositor activates another window.
+  - The Dock stays revealed while keyboard-active and re-arms the autohide timer on release.
+- **Verification layers:**
+  - STATIC: source contracts (`tests/test_dock_keyboard.py::TestDockKeyboardStatic`).
+  - OFFSCREEN (simulated QtTest key/mouse events, isolated `XDG_CONFIG_HOME`, `WindowService` overrides): real DockItem/IconButton/DockKeyboardNav/DockMenu/WindowChooserPopup. The harness window only mirrors the thin Dock window API because `PanelWindow` has no offscreen backend.
+  - PHYSICAL Wayland: **not verified**. Whether KWin grants `OnDemand` keyboard focus to the Dock surface on request, and screen-reader output, were not tested on a real session.
+- **Performance:** no timers/processes/polling added. Focus lists and popup action lists are computed only on key presses; one small non-visual `DockKeyboardNav` per Dock window.

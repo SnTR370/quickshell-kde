@@ -9,6 +9,7 @@ AnchoredPopup {
 
     property string appId: ""
     property var app: null
+    accessibleName: ApplicationService.cleanAppName(root.app ? root.app.name : root.appId) + " windows"
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
 
     signal windowSelected()
@@ -105,6 +106,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: winMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: "Activate window: " + (winRow.modelData.title || (root.app ? root.app.name : root.appId))
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
@@ -133,6 +136,8 @@ AnchoredPopup {
 
                         MouseArea {
                             id: chooserCloseMouse
+                            Accessible.role: Accessible.MenuItem
+                            Accessible.name: "Close window"
                             anchors.fill: parent
                             enabled: winRow.canClose
                             hoverEnabled: true
@@ -185,6 +190,8 @@ AnchoredPopup {
 
             MouseArea {
                 id: newWinMouse
+                Accessible.role: Accessible.MenuItem
+                Accessible.name: "New Window"
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor

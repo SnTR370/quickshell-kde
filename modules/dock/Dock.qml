@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import "../../services"
 import "../../components"
@@ -29,6 +30,58 @@ Variants {
         readonly property bool hasActivePopup: activePopupItem !== null
         property var activeDragItem: null
         readonly property bool isDragging: activeDragItem !== null
+
+        // Keyboard accessibility (local to this Dock surface). The Dock never requests
+        // keyboard focus by itself: keyboardNavActive is only set through the explicit
+        // requestKeyboardFocus() entry point (IPC: `qs ipc call dock focus`).
+        property bool keyboardNavActive: false
+        property var focusedDockItem: null
+        onFocusedDockItemChanged: {
+            if (focusedDockItem) dockNav.lastItem = focusedDockItem;
+        }
+        onKeyboardNavActiveChanged: {
+            if (!keyboardNavActive && autoHide && !hasActivePopup && !isDragging && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered) {
+                hideTimer.restart();
+            }
+        }
+
+        function getFocusableDockItems() { return dockNav.items(); }
+        function moveDockFocus(from, step) { return dockNav.move(from, step); }
+        function focusDockBoundary(last) { return dockNav.boundary(last); }
+
+        // Tab / Shift+Tab: walk the Dock; leaving either end hands focus back (no trap).
+        function tabDockFocus(from, step) {
+            if (dockNav.tabStep(from, step)) return true;
+            dockWindow.releaseKeyboardFocus();
+            return false;
+        }
+
+        function requestKeyboardFocus() {
+            if (!dockWindow.visible) return false;
+            dockWindow.keyboardNavActive = true;
+            return dockNav.focusInitial();
+        }
+
+        function releaseKeyboardFocus() {
+            if (dockWindow.focusedDockItem) {
+                dockWindow.focusedDockItem.focus = false;
+            }
+            dockWindow.focusedDockItem = null;
+            dockWindow.activePopupItem = null;
+            dockWindow.keyboardNavActive = false;
+        }
+
+        DockKeyboardNav {
+            id: dockNav
+            layout: dockWindow.isVertical ? colLayout : rowLayout
+        }
+
+        IpcHandler {
+            // First screen: `dock`; additional screens: `dock-<screen name>`.
+            target: (Quickshell.screens.length > 0 && Quickshell.screens[0] === dockWindow.modelData) ? "dock" : ("dock-" + (dockWindow.modelData ? dockWindow.modelData.name : "unknown"))
+            function focus(): bool { return dockWindow.requestKeyboardFocus(); }
+            function release(): bool { dockWindow.releaseKeyboardFocus(); return true; }
+        }
         onHasActivePopupChanged: {
             if (!hasActivePopup && !isDragging && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
                 hideTimer.restart();
@@ -49,6 +102,8 @@ Variants {
                 dockWindow.activeDragItem = null;
                 dockWindow.activePopupItem = null;
                 dockWindow.hoverRevealed = false;
+                dockWindow.keyboardNavActive = false;
+                dockWindow.focusedDockItem = null;
             }
         }
         Connections {
@@ -60,7 +115,7 @@ Variants {
                 if (ConfigService.settingsVisible) dockWindow.activePopupItem = null;
             }
         }
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging || keyboardNavActive
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
@@ -115,6 +170,8 @@ Variants {
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:dock"
+        // None by default (never steals focus). OnDemand only after an explicit local request.
+        WlrLayershell.keyboardFocus: keyboardNavActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         // Disable blur region completely when dock is hidden to prevent ghost blur artifacts
         BackgroundEffect.blurRegion: Region {
@@ -267,6 +324,13 @@ Variants {
                 NumberAnimation {
                     duration: dockWindow.isRevealed ? 160 : 200
                     easing.type: Easing.OutQuad
+                }
+            }
+
+            // Compositor moved keyboard focus elsewhere (click on another window): drop nav state.
+            Window.onActiveChanged: {
+                if (!Window.active && dockWindow.keyboardNavActive) {
+                    dockWindow.releaseKeyboardFocus();
                 }
             }
 

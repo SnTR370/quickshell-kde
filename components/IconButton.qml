@@ -120,6 +120,10 @@ Item {
         } else if (event.key === Qt.Key_End) {
             event.accepted = true;
             root.focusBoundarySibling(true);
+        } else if ((event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+                   && root.parentWindow && typeof root.parentWindow.tabDockFocus === "function") {
+            event.accepted = true;
+            root.parentWindow.tabDockFocus(root, event.key === Qt.Key_Tab ? 1 : -1);
         } else if (event.key === Qt.Key_Escape) {
             event.accepted = true;
             if (root.parentWindow && root.parentWindow.activePopupItem) {

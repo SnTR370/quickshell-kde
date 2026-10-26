@@ -33,6 +33,32 @@ Item {
     readonly property real targetScale: (dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)) * root.bounceScale
     z: root.dragging ? 10 : (root.dropTargeted ? 5 : 0)
 
+    // Keyboard accessibility
+    readonly property string accessibleLabel: root.appName
+        + (root.windowCount > 1 ? (", " + root.windowCount + " windows")
+           : (root.windowCount === 1 ? ", running" : ""))
+        + (root.isPinned ? ", pinned" : "")
+    readonly property bool isVerticalDock: root.parentWindowRef && root.parentWindowRef.isVertical !== undefined
+        ? root.parentWindowRef.isVertical
+        : (ConfigService.dockEdge === "left" || ConfigService.dockEdge === "right")
+    activeFocusOnTab: root.visible && root.enabled && !root.dragging && (root.isPinned || root.isRunning)
+    Accessible.role: Accessible.Button
+    Accessible.name: root.accessibleLabel
+    Accessible.description: root.menuOpen ? "Context menu open" : (root.chooserOpen ? "Window chooser open" : "")
+    Accessible.focusable: true
+    Accessible.focused: root.activeFocus
+    Accessible.onPressAction: root.activateItem()
+
+    onActiveFocusChanged: {
+        if (root.parentWindowRef && root.parentWindowRef.focusedDockItem !== undefined) {
+            if (root.activeFocus) {
+                root.parentWindowRef.focusedDockItem = root;
+            } else if (root.parentWindowRef.focusedDockItem === root) {
+                root.parentWindowRef.focusedDockItem = null;
+            }
+        }
+    }
+
     Timer {
         id: tooltipDwellTimer
         interval: 320
@@ -338,6 +364,18 @@ Item {
         Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
         Behavior on border.color { ColorAnimation { duration: Theme.animDurationFast } }
 
+        // Visible keyboard focus indicator
+        Rectangle {
+            id: focusRing
+            anchors.fill: parent
+            anchors.margins: -2
+            radius: Theme.radiusSmall + 2
+            color: "transparent"
+            border.width: 2
+            border.color: Theme.accent
+            visible: root.activeFocus
+        }
+
         SvgIcon {
             anchors.centerIn: parent
             icon: root.appIcon || "application-x-executable"
@@ -425,6 +463,120 @@ Item {
         }
     }
 
+    // Primary activation (left click / Enter / Space): launch, toggle window, or window chooser.
+    function activateItem() {
+        if (root.dragging) return false;
+        clickBounceAnim.restart();
+        if (root.windowCount === 0) {
+            root.menuOpen = false;
+            root.chooserOpen = false;
+            if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                root.parentWindowRef.activePopupItem = null;
+            }
+            if (root.app) {
+                ApplicationService.launch(root.app);
+            } else {
+                ApplicationService.launchAppId(root.appId);
+            }
+        } else if (root.windowCount === 1) {
+            root.menuOpen = false;
+            root.chooserOpen = false;
+            if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                root.parentWindowRef.activePopupItem = null;
+            }
+            WindowService.toggleWindow(root.appWindows[0].id);
+        } else {
+            const activeWin = WindowService.getActiveWindowForApp(root.appId);
+            if (activeWin && !root.chooserOpen) {
+                root.menuOpen = false;
+                if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+                    root.parentWindowRef.activePopupItem = null;
+                }
+                WindowService.toggleWindow(activeWin.id);
+            } else {
+                root.chooserOpen = !root.chooserOpen;
+            }
+        }
+        return true;
+    }
+
+    function toggleContextMenu() {
+        if (root.dragging) return false;
+        root.menuOpen = !root.menuOpen;
+        return true;
+    }
+
+    function launchNewInstance() {
+        clickBounceAnim.restart();
+        root.chooserOpen = false;
+        root.menuOpen = false;
+        if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
+            root.parentWindowRef.activePopupItem = null;
+        }
+        ApplicationService.launchAppId(root.appId);
+    }
+
+    function currentPopupItem() {
+        if (root.menuOpen && menuLoader.item) return menuLoader.item;
+        if (root.chooserOpen && chooserLoader.item) return chooserLoader.item;
+        return null;
+    }
+
+    // Popups are xdg_popups without keyboard grab, so the focused Dock item forwards keys to them.
+    function startPopupKeyboardNav() {
+        Qt.callLater(function() {
+            const popup = root.currentPopupItem();
+            if (popup && popup.focusFirstKeyboardAction) popup.focusFirstKeyboardAction();
+        });
+    }
+
+    function handleKeyEvent(event) {
+        if (root.isPopupOpen) {
+            const popup = root.currentPopupItem();
+            if (popup && popup.handleKeyEvent && popup.handleKeyEvent(event)) {
+                event.accepted = true;
+                return true;
+            }
+        }
+        const win = root.parentWindowRef;
+        const canNav = win && typeof win.moveDockFocus === "function";
+        const key = event.key;
+        if (key === Qt.Key_Return || key === Qt.Key_Enter || key === Qt.Key_Space) {
+            event.accepted = true;
+            if (!event.isAutoRepeat) {
+                root.activateItem();
+                if (root.isPopupOpen) root.startPopupKeyboardNav();
+            }
+        } else if (key === Qt.Key_Menu || (key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+            event.accepted = true;
+            if (root.toggleContextMenu() && root.isPopupOpen) root.startPopupKeyboardNav();
+        } else if (canNav && ((!root.isVerticalDock && key === Qt.Key_Right) || (root.isVerticalDock && key === Qt.Key_Down))) {
+            event.accepted = true;
+            win.moveDockFocus(root, 1);
+        } else if (canNav && ((!root.isVerticalDock && key === Qt.Key_Left) || (root.isVerticalDock && key === Qt.Key_Up))) {
+            event.accepted = true;
+            win.moveDockFocus(root, -1);
+        } else if (canNav && (key === Qt.Key_Home || key === Qt.Key_End)) {
+            event.accepted = true;
+            win.focusDockBoundary(key === Qt.Key_End);
+        } else if (canNav && typeof win.tabDockFocus === "function" && (key === Qt.Key_Tab || key === Qt.Key_Backtab)) {
+            event.accepted = true;
+            win.tabDockFocus(root, key === Qt.Key_Tab ? 1 : -1);
+        } else if (key === Qt.Key_Escape) {
+            event.accepted = true;
+            if (win && win.activePopupItem) {
+                win.activePopupItem = null;
+            } else if (win && typeof win.releaseKeyboardFocus === "function") {
+                win.releaseKeyboardFocus();
+            } else {
+                root.focus = false;
+            }
+        }
+        return event.accepted;
+    }
+
+    Keys.onPressed: event => root.handleKeyEvent(event)
+
     function handleWheel(delta) {
         if (!delta) return false;
         tooltipDwellTimer.stop();
@@ -507,47 +659,11 @@ Item {
                 return;
             }
             if (mouse.button === Qt.RightButton) {
-                root.menuOpen = !root.menuOpen;
+                root.toggleContextMenu();
             } else if (mouse.button === Qt.MiddleButton) {
-                clickBounceAnim.restart();
-                root.chooserOpen = false;
-                root.menuOpen = false;
-                if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
-                    root.parentWindowRef.activePopupItem = null;
-                }
-                ApplicationService.launchAppId(root.appId);
+                root.launchNewInstance();
             } else {
-                clickBounceAnim.restart();
-                if (root.windowCount === 0) {
-                    root.menuOpen = false;
-                    root.chooserOpen = false;
-                    if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
-                        root.parentWindowRef.activePopupItem = null;
-                    }
-                    if (root.app) {
-                        ApplicationService.launch(root.app);
-                    } else {
-                        ApplicationService.launchAppId(root.appId);
-                    }
-                } else if (root.windowCount === 1) {
-                    root.menuOpen = false;
-                    root.chooserOpen = false;
-                    if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
-                        root.parentWindowRef.activePopupItem = null;
-                    }
-                    WindowService.toggleWindow(root.appWindows[0].id);
-                } else {
-                    const activeWin = WindowService.getActiveWindowForApp(root.appId);
-                    if (activeWin && !root.chooserOpen) {
-                        root.menuOpen = false;
-                        if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
-                            root.parentWindowRef.activePopupItem = null;
-                        }
-                        WindowService.toggleWindow(activeWin.id);
-                    } else {
-                        root.chooserOpen = !root.chooserOpen;
-                    }
-                }
+                root.activateItem();
             }
         }
     }
