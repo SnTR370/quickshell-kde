@@ -42,7 +42,7 @@ Surface {
 
             Badge {
                 text: MprisService.isPlaying ? "Playing" : "Paused"
-                color: MprisService.isPlaying ? Theme.success : Theme.foregroundMuted
+                badgeColor: MprisService.isPlaying ? Theme.success : Theme.foregroundMuted
             }
         }
 

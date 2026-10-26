@@ -89,7 +89,7 @@ Rectangle {
         // Optional Trailing Badge
         Badge {
             text: root.badgeText
-            color: root.badgeColor
+            badgeColor: root.badgeColor
             visible: root.badgeText.length > 0
         }
     }

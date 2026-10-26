@@ -12,3 +12,4 @@ PowerPopup 1.0 PowerPopup.qml
 AudioPopup 1.0 AudioPopup.qml
 BrightnessModule 1.0 BrightnessModule.qml
 BrightnessPopup 1.0 BrightnessPopup.qml
+ControlCenterButton 1.0 ControlCenterButton.qml

@@ -66,8 +66,15 @@ Singleton {
         {
             id: "brightness",
             name: "Display Brightness",
-            icon: "display-brightness-high",
+            icon: "brightness-high",
             description: "Display backlight level indicator and per-display adjuster",
+            defaultSlot: "right"
+        },
+        {
+            id: "controlcenter",
+            name: "Control Center",
+            icon: "configure",
+            description: "Unified quick settings popup for network, audio, brightness, media, and session",
             defaultSlot: "right"
         },
         {

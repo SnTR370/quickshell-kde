@@ -20,10 +20,8 @@ Surface {
     border.width: 1
 
     readonly property string iconName: {
-        if (displayRatio > 0.66) return "display-brightness-high";
-        if (displayRatio > 0.33) return "display-brightness-medium";
-        if (displayRatio > 0.0) return "display-brightness-low";
-        return "display-brightness-off";
+        if (displayRatio > 0.5) return "brightness-high";
+        return "brightness-low";
     }
 
     RowLayout {

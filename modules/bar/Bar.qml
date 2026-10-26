@@ -20,6 +20,7 @@ Variants {
     Component { id: modBattery; BatteryModule {} }
     Component { id: modAudio; AudioModule {} }
     Component { id: modBrightness; BrightnessModule {} }
+    Component { id: modControlCenter; ControlCenterButton {} }
     Component { id: modPower; PowerButton {} }
 
     function getModuleComponent(name) {
@@ -33,6 +34,7 @@ Variants {
             case "battery": return modBattery;
             case "audio": return modAudio;
             case "brightness": return modBrightness;
+            case "controlcenter": return modControlCenter;
             case "power": return modPower;
             default: return null;
         }

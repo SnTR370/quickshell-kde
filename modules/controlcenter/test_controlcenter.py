@@ -127,6 +127,139 @@ class TestControlCenterModule(unittest.TestCase):
             self.assertNotIn("org.freedesktop.Notifications", code)
             self.assertNotIn("dbus-monitor", code)
 
+    def test_08_badge_color_api_and_scroll_support(self):
+        """Static check: Verify Badge uses badgeColor property and ControlCenter includes ScrollView."""
+        for filename in ["QuickTile.qml", "BrightnessControl.qml", "MediaControl.qml"]:
+            filepath = os.path.join(MODULE_DIR, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                code = f.read()
+            self.assertIn("badgeColor:", code, f"{filename} must use Badge.badgeColor")
+
+        cc_path = os.path.join(MODULE_DIR, "ControlCenter.qml")
+        with open(cc_path, "r", encoding="utf-8") as f:
+            cc_code = f.read()
+        self.assertIn("ScrollView", cc_code, "ControlCenter must wrap body in ScrollView for smaller screens")
+        self.assertIn("property real maxHeight:", cc_code, "ControlCenter must support maxHeight bounding")
+
+    def test_09_live_qml_runtime_controlcenter_and_bar_integration(self):
+        """Real QML Runtime Test (via quickshell): Verify ControlCenterButton starts closed, ModuleRegistry slot preservation, Badge coloring, small-screen height clamping, and safe dry-run session actions."""
+        import json
+        import tempfile
+        repo_dir = os.path.dirname(os.path.dirname(MODULE_DIR))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            env["QUICKSHELL_TEST_MODE"] = "1"
+            probe_path = os.path.join(repo_dir, "_test_controlcenter_runtime_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+import "./components"
+import "./modules/bar"
+import "./modules/controlcenter"
+
+Scope {
+    ControlCenterButton { id: ccBtn }
+    ControlCenter { id: ccStandalone; maxHeight: 320 }
+    QuickTile {
+        id: testTile
+        title: "Wi-Fi"
+        subtitle: "HomeNet"
+        active: true
+        badgeText: "88%"
+        badgeColor: "#123456"
+    }
+    SessionRow {
+        id: sessionRow
+        dryRun: true
+    }
+
+    property int tileClicks: 0
+    property int closeRequests: 0
+    property var sessionActions: []
+
+    Connections {
+        target: testTile
+        function onClicked() { tileClicks++; }
+    }
+    Connections {
+        target: ccStandalone
+        function onCloseRequested() { closeRequests++; }
+    }
+    Connections {
+        target: sessionRow
+        function onSessionActionRequested(act) { sessionActions.push(act); }
+        function onActionTriggered() { closeRequests++; }
+    }
+
+    Timer {
+        interval: 200
+        running: true
+        repeat: false
+        onTriggered: {
+            // 1. Verify ControlCenterButton starts with popup closed
+            const startsClosed = (ccBtn.popupOpen === false);
+
+            // 2. Verify ModuleRegistry registers "controlcenter" and preserves custom slots
+            const isRegistered = ModuleRegistry.isValidModule("controlcenter");
+            const sanitizedCustom = ModuleRegistry.sanitizeSlotList(["clock", "controlcenter", "invalid_mod"], []);
+
+            // 3. Verify QuickTile click & Badge color propagation
+            testTile.clicked();
+
+            // 4. Verify small-screen height clamping on ControlCenter
+            const clampedHeight = ccStandalone.implicitHeight;
+            const naturalHeight = ccStandalone.naturalHeight;
+
+            // 5. Verify SessionRow dry-run actions fire signals without executing destructive commands
+            sessionRow.dispatchSessionAction("lock", []);
+            sessionRow.dispatchSessionAction("logout", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logout"]);
+            sessionRow.dispatchSessionAction("reboot", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndReboot"]);
+            sessionRow.dispatchSessionAction("shutdown", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndShutdown"]);
+
+            console.log("CC_RUNTIME_RESULT:" + JSON.stringify({
+                startsClosed: startsClosed,
+                isRegistered: isRegistered,
+                sanitizedCustom: sanitizedCustom,
+                tileClicks: tileClicks,
+                clampedHeight: clampedHeight,
+                naturalHeight: naturalHeight,
+                sessionActions: sessionActions,
+                closeRequests: closeRequests
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=repo_dir,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "CC_RUNTIME_RESULT:"
+                self.assertIn(marker, combined, f"Missing runtime marker:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertTrue(data["startsClosed"], "ControlCenter popup must not start visible automatically")
+                self.assertTrue(data["isRegistered"], "ModuleRegistry must include 'controlcenter'")
+                self.assertEqual(data["sanitizedCustom"], ["clock", "controlcenter"])
+                self.assertEqual(data["tileClicks"], 1)
+                self.assertLessEqual(data["clampedHeight"], 320, "ControlCenter height must clamp to maxHeight on smaller screens")
+                self.assertGreater(data["naturalHeight"], 200)
+                self.assertEqual(data["sessionActions"], ["lock", "logout", "reboot", "shutdown"])
+                self.assertEqual(data["closeRequests"], 4)
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 
 if __name__ == "__main__":
     unittest.main()

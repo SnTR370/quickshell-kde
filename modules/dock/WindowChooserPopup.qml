@@ -47,7 +47,7 @@ AnchoredPopup {
 
             Badge {
                 text: root.appWindows.length + (root.appWindows.length === 1 ? " window" : " windows")
-                color: Theme.primary
+                badgeColor: Theme.primary
             }
         }
 

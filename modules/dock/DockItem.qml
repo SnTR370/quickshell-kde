@@ -22,6 +22,8 @@ Item {
     property bool chooserOpen: false
     readonly property bool isPopupOpen: menuOpen || chooserOpen
     property bool tooltipActive: false
+    property real bounceScale: 1.0
+    readonly property real targetScale: (dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)) * root.bounceScale
 
     Timer {
         id: tooltipDwellTimer
@@ -36,9 +38,9 @@ Item {
 
     SequentialAnimation {
         id: clickBounceAnim
-        NumberAnimation { target: iconContainer; property: "scale"; to: 0.88; duration: 80; easing.type: Easing.OutQuad }
-        NumberAnimation { target: iconContainer; property: "scale"; to: 1.18; duration: 110; easing.type: Easing.OutQuad }
-        NumberAnimation { target: iconContainer; property: "scale"; to: (dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0; duration: 100; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "bounceScale"; to: 0.86; duration: 80; easing.type: Easing.OutQuad }
+        NumberAnimation { target: root; property: "bounceScale"; to: 1.04; duration: 110; easing.type: Easing.OutQuad }
+        NumberAnimation { target: root; property: "bounceScale"; to: 1.0; duration: 100; easing.type: Easing.OutCubic }
     }
 
     onMenuOpenChanged: {
@@ -98,9 +100,10 @@ Item {
              : "transparent"
         border.width: root.isPopupOpen ? 1 : 0
         border.color: Theme.alpha(Theme.primary, 0.45)
-        scale: dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)
+        scale: root.targetScale
 
         Behavior on scale {
+            enabled: !clickBounceAnim.running
             NumberAnimation {
                 duration: iconContainer.scale > 1.0 ? 160 : 130
                 easing.type: iconContainer.scale > 1.0 ? Easing.OutBack : Easing.OutCubic

@@ -7,7 +7,24 @@ import "../../components"
 RowLayout {
     id: root
 
+    property bool dryRun: false
     signal actionTriggered()
+    signal sessionActionRequested(string action)
+
+    function dispatchSessionAction(action, cmd) {
+        root.sessionActionRequested(action);
+        root.actionTriggered();
+        if (root.dryRun || Quickshell.env("QUICKSHELL_TEST_MODE") === "1") {
+            return;
+        }
+        if (action === "lock") {
+            KWinService.lockSession();
+        } else if (action === "settings") {
+            KWinService.toggleKdeSettings("");
+        } else if (cmd && cmd.length > 0) {
+            Quickshell.execDetached(cmd);
+        }
+    }
 
     spacing: 8
     Layout.fillWidth: true
@@ -18,10 +35,7 @@ RowLayout {
         iconSize: 18
         iconColor: Theme.foreground
         tooltip: "KDE System Settings"
-        onClicked: {
-            root.actionTriggered();
-            KWinService.toggleKdeSettings("");
-        }
+        onClicked: root.dispatchSessionAction("settings", [])
     }
 
     Item {
@@ -34,10 +48,7 @@ RowLayout {
         iconSize: 18
         iconColor: Theme.foreground
         tooltip: "Lock Screen"
-        onClicked: {
-            root.actionTriggered();
-            KWinService.lockSession();
-        }
+        onClicked: root.dispatchSessionAction("lock", [])
     }
 
     IconButton {
@@ -46,10 +57,7 @@ RowLayout {
         iconSize: 18
         iconColor: Theme.foreground
         tooltip: "Log Out"
-        onClicked: {
-            root.actionTriggered();
-            Quickshell.execDetached(["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logout"]);
-        }
+        onClicked: root.dispatchSessionAction("logout", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logout"])
     }
 
     IconButton {
@@ -58,10 +66,7 @@ RowLayout {
         iconSize: 18
         iconColor: Theme.warning
         tooltip: "Restart"
-        onClicked: {
-            root.actionTriggered();
-            Quickshell.execDetached(["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndReboot"]);
-        }
+        onClicked: root.dispatchSessionAction("reboot", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndReboot"])
     }
 
     IconButton {
@@ -70,9 +75,6 @@ RowLayout {
         iconSize: 18
         iconColor: Theme.error
         tooltip: "Shut Down"
-        onClicked: {
-            root.actionTriggered();
-            Quickshell.execDetached(["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndShutdown"]);
-        }
+        onClicked: root.dispatchSessionAction("shutdown", ["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logoutAndShutdown"])
     }
 }

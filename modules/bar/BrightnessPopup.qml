@@ -22,7 +22,7 @@ AnchoredPopup {
             spacing: 8
 
             SvgIcon {
-                icon: "display-brightness-high"
+                icon: "brightness-high"
                 size: 20
                 color: Theme.warning
             }
@@ -87,7 +87,7 @@ AnchoredPopup {
 
                     Badge {
                         text: displayRow.modelData.isInternal ? "Internal" : "External"
-                        color: displayRow.modelData.isInternal ? Theme.primary : Theme.accent
+                        badgeColor: displayRow.modelData.isInternal ? Theme.primary : Theme.accent
                     }
 
                     Text {

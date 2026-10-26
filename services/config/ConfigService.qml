@@ -23,12 +23,13 @@ Singleton {
     property int barHeight: 30
     property var barLeft: ["launcher", "workspaces"]
     property var barCenter: ["clock"]
-    property var barRight: ["media", "tray", "network", "battery", "audio", "brightness", "power"]
+    property var barRight: ["media", "tray", "network", "battery", "audio", "brightness", "controlcenter", "power"]
     property real barOpacity: 0.92
     property var barMonitors: "all"
     property bool blurEnabled: true
     property bool notificationsEnabled: false
     property var trayItemPolicies: ({})
+    property bool controlCenterMigrated: false
 
     // --- Dock Surface State ---
     property bool dockEnabled: true
@@ -196,12 +197,13 @@ Singleton {
             "height": 44,
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
-            "right": ["media", "tray", "network", "battery", "audio", "brightness", "power"],
+            "right": ["media", "tray", "network", "battery", "audio", "brightness", "controlcenter", "power"],
             "opacity": 0.92,
             "monitors": "all",
             "blur": true,
             "notificationsEnabled": false,
-            "trayItemPolicies": {}
+            "trayItemPolicies": {},
+            "controlCenterMigrated": true
         })
         onLoadedValue: (parsed, _) => {
             if (parsed.enabled !== undefined) root.barEnabled = parsed.enabled;
@@ -214,6 +216,24 @@ Singleton {
             if (parsed.left) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
             if (parsed.center) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
             if (parsed.right) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
+            if (parsed.controlCenterMigrated !== undefined) {
+                root.controlCenterMigrated = parsed.controlCenterMigrated;
+            } else {
+                const hasCC = (root.barLeft.indexOf("controlcenter") !== -1) ||
+                              (root.barCenter.indexOf("controlcenter") !== -1) ||
+                              (root.barRight.indexOf("controlcenter") !== -1);
+                if (!hasCC) {
+                    const nextRight = root.barRight.slice();
+                    const pIdx = nextRight.indexOf("power");
+                    if (pIdx !== -1) {
+                        nextRight.splice(pIdx, 0, "controlcenter");
+                    } else {
+                        nextRight.push("controlcenter");
+                    }
+                    root.barRight = nextRight;
+                }
+                root.controlCenterMigrated = true;
+            }
             if (parsed.opacity !== undefined) root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
             if (parsed.monitors !== undefined) {
                 root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
@@ -309,7 +329,8 @@ Singleton {
             "monitors": root.barMonitors,
             "blur": root.blurEnabled,
             "notificationsEnabled": root.notificationsEnabled,
-            "trayItemPolicies": root.trayItemPolicies || {}
+            "trayItemPolicies": root.trayItemPolicies || {},
+            "controlCenterMigrated": true
         });
     }
 

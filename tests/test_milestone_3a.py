@@ -28,7 +28,7 @@ class TestMilestone3A(unittest.TestCase):
     def test_01_qml_syntax_lint(self):
         """Verify all QML files in the repository pass qmllint without errors."""
         res = subprocess.run(
-            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml", "services/kwin/WindowService.qml", "services/applications/ApplicationService.qml", "modules/dock/DockMenu.qml", "modules/dock/WindowChooserPopup.qml"],
+            ["qmllint", "shell.qml", "components/AnchoredPopup.qml", "services/core/ModuleRegistry.qml", "modules/bar/PowerPopup.qml", "modules/bar/TrayModule.qml", "modules/bar/ControlCenterButton.qml", "modules/controlcenter/ControlCenter.qml", "modules/controlcenter/ControlCenterPopup.qml", "services/config/ConfigService.qml", "modules/settings/SettingsWindow.qml", "services/kwin/WindowService.qml", "services/applications/ApplicationService.qml", "modules/dock/DockMenu.qml", "modules/dock/WindowChooserPopup.qml"],
             cwd=REPO_DIR,
             capture_output=True,
             text=True
@@ -208,7 +208,7 @@ class TestMilestone3A(unittest.TestCase):
         with open(os.path.join(REPO_DIR, "services/core/ModuleRegistry.qml")) as f:
             mod_content = f.read()
 
-        required_modules = ["launcher", "workspaces", "clock", "media", "tray", "network", "battery", "audio", "brightness", "power"]
+        required_modules = ["launcher", "workspaces", "clock", "media", "tray", "network", "battery", "audio", "brightness", "controlcenter", "power"]
         for mod in required_modules:
             self.assertIn(f'id: "{mod}"', mod_content)
 

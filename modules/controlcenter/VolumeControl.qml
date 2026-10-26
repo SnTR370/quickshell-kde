@@ -6,6 +6,8 @@ import "../../components"
 Surface {
     id: root
 
+    signal actionTriggered()
+
     Layout.fillWidth: true
     implicitHeight: mainLayout.implicitHeight + 20
     radius: Theme.radiusMedium
@@ -51,7 +53,10 @@ Surface {
                 icon: "preferences-system"
                 iconSize: 14
                 tooltip: "Audio Settings"
-                onClicked: AudioService.openVolumeControl()
+                onClicked: {
+                    root.actionTriggered();
+                    AudioService.openVolumeControl();
+                }
             }
         }
 

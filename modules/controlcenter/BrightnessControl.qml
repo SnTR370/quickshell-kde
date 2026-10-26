@@ -7,6 +7,7 @@ Surface {
     id: root
 
     property bool showWhenUnsupported: true
+    signal actionTriggered()
 
     visible: BrightnessService.supported || showWhenUnsupported
     Layout.fillWidth: true
@@ -27,7 +28,7 @@ Surface {
             spacing: 8
 
             SvgIcon {
-                icon: "display-brightness-high"
+                icon: BrightnessService.brightness > 0.5 ? "brightness-high" : "brightness-low"
                 size: 16
                 color: BrightnessService.supported ? Theme.warning : Theme.foregroundMuted
             }
@@ -60,7 +61,10 @@ Surface {
                 icon: "preferences-system"
                 iconSize: 14
                 tooltip: "Display Settings"
-                onClicked: KWinService.toggleKdeSettings("kcm_kscreen")
+                onClicked: {
+                    root.actionTriggered();
+                    KWinService.toggleKdeSettings("kcm_kscreen");
+                }
             }
         }
 
@@ -80,7 +84,7 @@ Surface {
 
             Badge {
                 text: "Unsupported"
-                color: Theme.foregroundMuted
+                badgeColor: Theme.foregroundMuted
             }
         }
 
@@ -115,7 +119,7 @@ Surface {
 
                         Badge {
                             text: dispItem.modelData.isInternal ? "Internal" : "External"
-                            color: dispItem.modelData.isInternal ? Theme.primary : Theme.accent
+                            badgeColor: dispItem.modelData.isInternal ? Theme.primary : Theme.accent
                         }
 
                         Text {
@@ -167,7 +171,7 @@ Surface {
 
                 Badge {
                     text: "Telemetry Only"
-                    color: Theme.foregroundMuted
+                    badgeColor: Theme.foregroundMuted
                 }
 
                 Text {
