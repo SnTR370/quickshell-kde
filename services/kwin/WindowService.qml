@@ -375,6 +375,16 @@ Singleton {
         root.windows = list;
         root.windowCount = list.length;
         root.runningAppIds = appIdsList;
+
+        const cycleKeys = Object.keys(root.appCycleIndices || {});
+        for (let c = 0; c < cycleKeys.length; c++) {
+            const ck = cycleKeys[c];
+            if (!root.isAppRunning(ck)) {
+                delete root.appCycleIndices[ck];
+                delete root.appCycleWindowIds[ck];
+            }
+        }
+
         root.windowsUpdated();
     }
 
@@ -569,6 +579,14 @@ Singleton {
     }
 
     property var appCycleIndices: ({})
+    property var appCycleWindowIds: ({})
+
+    function normalizeCycleAppKey(appId) {
+        if (!appId) return "";
+        const app = ApplicationService.getAppById(appId);
+        const raw = (app && app.id) ? String(app.id) : String(appId);
+        return raw.trim().toLowerCase().replace(/\.desktop$/, "");
+    }
 
     function activateWindow(windowId) {
         if (!isValidWindowUuid(windowId)) return false;
@@ -577,6 +595,17 @@ Singleton {
         const clean = cleanWindowId(win.id);
         Log.info("WindowService", "Activating window: " + win.id);
         root.activeWindowId = clean;
+        if (win.appId) {
+            const normKey = normalizeCycleAppKey(win.appId);
+            const appWins = getWindowsForApp(win.appId);
+            for (let i = 0; i < appWins.length; i++) {
+                if (cleanWindowId(appWins[i].id) === clean) {
+                    root.appCycleIndices[normKey] = i;
+                    root.appCycleWindowIds[normKey] = clean;
+                    break;
+                }
+            }
+        }
         root.lastExecutedAction = { action: "activate", windowId: win.id, cleanId: clean };
         if (KWinService.isKWin && root.outputsOverride === null) {
             Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", win.id, ""]);
@@ -655,26 +684,77 @@ Singleton {
         }
     }
 
-    function cycleAppWindows(appId) {
+    function cycleAppWindows(appId, reverse) {
+        if (!appId) return false;
+        const normAppId = normalizeCycleAppKey(appId);
         const wins = getWindowsForApp(appId);
         if (wins.length === 0) {
-            ApplicationService.launchAppId(appId);
-            return;
+            if (normAppId) {
+                delete root.appCycleIndices[normAppId];
+                delete root.appCycleWindowIds[normAppId];
+            }
+            return false;
         }
         if (wins.length === 1) {
-            activateWindow(wins[0].id);
-            return;
+            root.appCycleIndices[normAppId] = 0;
+            root.appCycleWindowIds[normAppId] = cleanWindowId(wins[0].id);
+            return activateWindow(wins[0].id);
         }
 
-        const normAppId = appId.toLowerCase().replace(/\.desktop$/, "");
-        const curIdx = (root.appCycleIndices[normAppId] !== undefined) ? root.appCycleIndices[normAppId] : 0;
-        const validIdx = curIdx % wins.length;
-        const targetWin = wins[validIdx];
+        const isReverse = (reverse === true || reverse === -1 ||
+                           reverse === "reverse" || reverse === "backward" ||
+                           reverse === "prev" || reverse === "previous");
+        const step = isReverse ? -1 : 1;
 
-        // Advance to next window index for next click
-        root.appCycleIndices[normAppId] = (validIdx + 1) % wins.length;
+        let activeIdx = -1;
+        if (root.activeWindowId) {
+            for (let i = 0; i < wins.length; i++) {
+                if (cleanWindowId(wins[i].id) === root.activeWindowId) {
+                    activeIdx = i;
+                    break;
+                }
+            }
+        }
 
-        activateWindow(targetWin.id);
+        let targetIdx = 0;
+        if (activeIdx !== -1) {
+            targetIdx = (activeIdx + step + wins.length) % wins.length;
+        } else {
+            const lastWid = root.appCycleWindowIds[normAppId] || "";
+            let lastWidIdx = -1;
+            if (lastWid) {
+                for (let i = 0; i < wins.length; i++) {
+                    if (cleanWindowId(wins[i].id) === lastWid) {
+                        lastWidIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (lastWidIdx !== -1) {
+                targetIdx = (lastWidIdx + step + wins.length) % wins.length;
+            } else if (root.appCycleIndices[normAppId] !== undefined) {
+                const rawIdx = Number(root.appCycleIndices[normAppId]);
+                if (Number.isFinite(rawIdx)) {
+                    const clamped = ((Math.trunc(rawIdx) % wins.length) + wins.length) % wins.length;
+                    targetIdx = isReverse
+                        ? ((clamped - 1 + wins.length) % wins.length)
+                        : clamped;
+                } else {
+                    targetIdx = isReverse ? (wins.length - 1) : 0;
+                }
+            } else {
+                targetIdx = isReverse ? (wins.length - 1) : 0;
+            }
+        }
+
+        const targetWin = wins[targetIdx];
+        if (!targetWin) return false;
+
+        root.appCycleIndices[normAppId] = targetIdx;
+        root.appCycleWindowIds[normAppId] = cleanWindowId(targetWin.id);
+
+        return activateWindow(targetWin.id);
     }
 
     Component.onCompleted: {

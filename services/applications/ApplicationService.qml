@@ -20,10 +20,16 @@ Singleton {
             return [];
         }
         const valid = [];
+        const seenCanon = {};
         for (let i = 0; i < raw.length; i++) {
             const id = raw[i];
-            if (id && root.getAppById(id) !== null) {
-                valid.push(id);
+            const app = id ? root.getAppById(id) : null;
+            if (app !== null) {
+                const canon = (app.id || String(id)).toLowerCase().replace(/\.desktop$/, "");
+                if (!seenCanon[canon]) {
+                    seenCanon[canon] = true;
+                    valid.push(id);
+                }
             }
         }
         return valid;
@@ -320,12 +326,106 @@ Singleton {
         }
     }
 
+    function resolvePinnedKey(appId) {
+        if (!appId || typeof appId !== "string") return "";
+        const norm = ConfigService.normalizeDockAppId(appId);
+        if (!norm) return "";
+        const raw = ConfigService.dockPinned || [];
+        const directIdx = ConfigService.findDockPinnedIndex(norm, raw);
+        if (directIdx !== -1) {
+            return raw[directIdx];
+        }
+        if (root.applications && root.applications.length > 0) {
+            const app = root.getAppById(norm);
+            if (app) {
+                for (let i = 0; i < raw.length; i++) {
+                    const pinnedApp = root.getAppById(raw[i]);
+                    if (pinnedApp && pinnedApp.id === app.id) {
+                        return raw[i];
+                    }
+                }
+            }
+        }
+        return norm;
+    }
+
     function isPinned(appId) {
-        return ConfigService.isDockPinned(appId);
+        const key = resolvePinnedKey(appId);
+        return ConfigService.isDockPinned(key);
     }
 
     function togglePin(appId) {
-        ConfigService.toggleDockPinned(appId);
+        if (!appId || typeof appId !== "string") return false;
+        const norm = ConfigService.normalizeDockAppId(appId);
+        if (!norm || isIgnoredAlias(norm)) return false;
+        const key = resolvePinnedKey(norm);
+        return ConfigService.toggleDockPinned(key);
+    }
+
+    function getPinnedIndex(appId) {
+        const key = resolvePinnedKey(appId);
+        if (!key) return -1;
+        const list = (root.applications && root.applications.length > 0)
+            ? root.pinnedApps
+            : (ConfigService.dockPinned || []);
+        return ConfigService.findDockPinnedIndex(key, list);
+    }
+
+    function canMovePinned(appId, direction) {
+        const step = ConfigService.resolveMoveStep(direction);
+        if (step === 0) return false;
+        const list = (root.applications && root.applications.length > 0)
+            ? root.pinnedApps
+            : (ConfigService.dockPinned || []);
+        const idx = getPinnedIndex(appId);
+        if (idx === -1) return false;
+        const targetIdx = idx + step;
+        return targetIdx >= 0 && targetIdx < list.length;
+    }
+
+    function movePinnedApp(appId, direction) {
+        const step = ConfigService.resolveMoveStep(direction);
+        if (step === 0) return false;
+        const key = resolvePinnedKey(appId);
+        if (!key || !ConfigService.isDockPinned(key)) return false;
+
+        if (root.applications && root.applications.length > 0) {
+            const visible = root.pinnedApps;
+            const visIdx = ConfigService.findDockPinnedIndex(key, visible);
+            if (visIdx === -1) return false;
+            const targetVisIdx = visIdx + step;
+            if (targetVisIdx < 0 || targetVisIdx >= visible.length) return false;
+            return ConfigService.reorderDockPinnedByAppId(key, visible[targetVisIdx]);
+        }
+        return ConfigService.moveDockPinned(key, step);
+    }
+
+    function movePinnedLeft(appId) {
+        return movePinnedApp(appId, "left");
+    }
+
+    function movePinnedRight(appId) {
+        return movePinnedApp(appId, "right");
+    }
+
+    function reorderPinnedApps(fromIndexOrAppId, toIndexOrAppId) {
+        if (typeof fromIndexOrAppId === "number" && typeof toIndexOrAppId === "number") {
+            if (!Number.isInteger(fromIndexOrAppId) || !Number.isInteger(toIndexOrAppId)) return false;
+            if (root.applications && root.applications.length > 0) {
+                const visible = root.pinnedApps;
+                if (fromIndexOrAppId < 0 || fromIndexOrAppId >= visible.length ||
+                    toIndexOrAppId < 0 || toIndexOrAppId >= visible.length ||
+                    fromIndexOrAppId === toIndexOrAppId) {
+                    return false;
+                }
+                return ConfigService.reorderDockPinnedByAppId(visible[fromIndexOrAppId], visible[toIndexOrAppId]);
+            }
+            return ConfigService.reorderDockPinned(fromIndexOrAppId, toIndexOrAppId);
+        }
+        if (typeof fromIndexOrAppId === "string" && typeof toIndexOrAppId === "string") {
+            return ConfigService.reorderDockPinnedByAppId(resolvePinnedKey(fromIndexOrAppId), resolvePinnedKey(toIndexOrAppId));
+        }
+        return false;
     }
 
     Component.onCompleted: {

@@ -303,7 +303,25 @@ Singleton {
             if (parsed.monitors !== undefined) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
             }
-            if (parsed.pinned) root.dockPinned = parsed.pinned;
+            if (parsed.pinned) root.dockPinned = root.sanitizeDockPinned(parsed.pinned);
+        }
+        property bool saveInFlight: false
+        property bool savePending: false
+        onSavedValue: {
+            dockStore.saveInFlight = false;
+            if (dockStore.savePending) {
+                dockStore.savePending = false;
+                root.saveDockConfig();
+            }
+        }
+        onFailed: (phase, _, __) => {
+            if (phase === "write" || phase === "serialize") {
+                dockStore.saveInFlight = false;
+                if (dockStore.savePending) {
+                    dockStore.savePending = false;
+                    root.saveDockConfig();
+                }
+            }
         }
     }
 
@@ -547,7 +565,59 @@ Singleton {
     }
 
     // --- Dock Operations ---
+    function normalizeDockAppId(appId) {
+        if (!appId || typeof appId !== "string") return "";
+        const norm = appId.trim().replace(/\.desktop$/i, "");
+        if (norm.length <= 1 || !/^[a-zA-Z0-9._-]+$/.test(norm)) return "";
+        const lower = norm.toLowerCase();
+        if (lower === "env" || lower === "sh" || lower === "bash" || lower === "application-x-executable") {
+            return "";
+        }
+        return norm;
+    }
+
+    function dockAppIdsMatch(idA, idB) {
+        const normA = normalizeDockAppId(idA).toLowerCase();
+        const normB = normalizeDockAppId(idB).toLowerCase();
+        return normA.length > 0 && normA === normB;
+    }
+
+    function sanitizeDockPinned(list) {
+        if (!list || typeof list === "string" || list.length === undefined) return [];
+        const clean = [];
+        const seen = {};
+        for (let i = 0; i < list.length; i++) {
+            const norm = normalizeDockAppId(list[i]);
+            if (!norm) continue;
+            const key = norm.toLowerCase();
+            if (!seen[key]) {
+                seen[key] = true;
+                clean.push(norm);
+            }
+        }
+        return clean;
+    }
+
+    function findDockPinnedIndex(appId, list) {
+        const norm = normalizeDockAppId(appId).toLowerCase();
+        if (!norm) return -1;
+        const arr = (list !== undefined && list !== null) ? list : (root.dockPinned || []);
+        if (!arr || typeof arr === "string" || arr.length === undefined) return -1;
+        for (let i = 0; i < arr.length; i++) {
+            if (normalizeDockAppId(arr[i]).toLowerCase() === norm) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     function saveDockConfig() {
+        root.dockPinned = sanitizeDockPinned(root.dockPinned);
+        if (dockStore.saveInFlight) {
+            dockStore.savePending = true;
+            return;
+        }
+        dockStore.saveInFlight = true;
         dockStore.save({
             "enabled": root.dockEnabled,
             "floating": root.dockFloating,
@@ -658,19 +728,90 @@ Singleton {
 
     function isDockPinned(appId) {
         if (!appId || !root.dockPinned) return false;
-        return root.dockPinned.indexOf(appId) !== -1;
+        return findDockPinnedIndex(appId, root.dockPinned) !== -1;
     }
 
     function toggleDockPinned(appId) {
-        if (!appId) return;
-        const current = root.dockPinned ? root.dockPinned.slice() : [];
-        const idx = current.indexOf(appId);
+        const norm = normalizeDockAppId(appId);
+        if (!norm) return false;
+        const current = sanitizeDockPinned(root.dockPinned);
+        const idx = findDockPinnedIndex(norm, current);
         if (idx !== -1) {
             current.splice(idx, 1);
         } else {
-            current.push(appId);
+            current.push(norm);
         }
         root.dockPinned = current;
         saveDockConfig();
+        return true;
+    }
+
+    function resolveMoveStep(direction) {
+        if (direction === -1 || direction === "left" || direction === "up" ||
+            direction === "backward" || direction === "prev" || direction === "previous") {
+            return -1;
+        }
+        if (direction === 1 || direction === "right" || direction === "down" ||
+            direction === "forward" || direction === "next") {
+            return 1;
+        }
+        return 0;
+    }
+
+    function canMoveDockPinned(appId, direction) {
+        const step = resolveMoveStep(direction);
+        if (step === 0) return false;
+        const current = sanitizeDockPinned(root.dockPinned);
+        const idx = findDockPinnedIndex(appId, current);
+        if (idx === -1) return false;
+        const targetIdx = idx + step;
+        return targetIdx >= 0 && targetIdx < current.length;
+    }
+
+    function reorderDockPinned(fromIndex, toIndex) {
+        if (typeof fromIndex !== "number" || typeof toIndex !== "number" ||
+            !Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) {
+            return false;
+        }
+        const current = sanitizeDockPinned(root.dockPinned);
+        if (fromIndex < 0 || fromIndex >= current.length ||
+            toIndex < 0 || toIndex >= current.length ||
+            fromIndex === toIndex) {
+            return false;
+        }
+        const moved = current.splice(fromIndex, 1)[0];
+        current.splice(toIndex, 0, moved);
+        root.dockPinned = current;
+        saveDockConfig();
+        return true;
+    }
+
+    function reorderDockPinnedByAppId(fromAppId, toAppId) {
+        const current = sanitizeDockPinned(root.dockPinned);
+        const fromIdx = findDockPinnedIndex(fromAppId, current);
+        const toIdx = findDockPinnedIndex(toAppId, current);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+            return false;
+        }
+        return reorderDockPinned(fromIdx, toIdx);
+    }
+
+    function moveDockPinned(appId, direction) {
+        const step = resolveMoveStep(direction);
+        if (step === 0) return false;
+        const current = sanitizeDockPinned(root.dockPinned);
+        const fromIdx = findDockPinnedIndex(appId, current);
+        if (fromIdx === -1) return false;
+        const toIdx = fromIdx + step;
+        if (toIdx < 0 || toIdx >= current.length) return false;
+        return reorderDockPinned(fromIdx, toIdx);
+    }
+
+    function moveDockPinnedLeft(appId) {
+        return moveDockPinned(appId, "left");
+    }
+
+    function moveDockPinnedRight(appId) {
+        return moveDockPinned(appId, "right");
     }
 }

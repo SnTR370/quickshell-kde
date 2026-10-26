@@ -12,10 +12,13 @@ Item {
     property string appName: ApplicationService.cleanAppName(app ? app.name : appId)
     property string appIcon: app ? app.icon : appId
     property bool isRunning: WindowService.isAppRunning(root.appId)
-    property bool isPinned: ConfigService.isDockPinned(root.appId)
+    property bool isPinned: ApplicationService.isPinned(root.appId)
+    readonly property int pinnedIndex: ApplicationService.getPinnedIndex(root.appId)
+    readonly property bool canMoveLeft: isPinned && ApplicationService.canMovePinned(root.appId, "left")
+    readonly property bool canMoveRight: isPinned && ApplicationService.canMovePinned(root.appId, "right")
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
     readonly property int windowCount: appWindows.length
-    readonly property bool isCurrentAppActive: WindowService.activeWindowId !== "" && appWindows.some(w => w.id === WindowService.activeWindowId)
+    readonly property bool isCurrentAppActive: WindowService.activeWindowId !== "" && appWindows.some(w => WindowService.cleanWindowId(w.id) === WindowService.activeWindowId || w.id === WindowService.activeWindowId)
     property real baseSize: ConfigService.dockIconSize
     property bool menuOpen: false
     property bool chooserOpen: false
@@ -200,12 +203,27 @@ Item {
         }
     }
 
+    function handleWheel(delta) {
+        if (!delta) return false;
+        tooltipDwellTimer.stop();
+        root.tooltipActive = false;
+        if (root.windowCount === 0) return false;
+        return WindowService.cycleAppWindows(root.appId, delta < 0);
+    }
+
     MouseArea {
         id: dockItemMouse
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+
+        onWheel: wheel => {
+            const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+            if (delta === 0) return;
+            wheel.accepted = true;
+            root.handleWheel(delta);
+        }
 
         onEntered: {
             WindowService.refreshActiveWindow();

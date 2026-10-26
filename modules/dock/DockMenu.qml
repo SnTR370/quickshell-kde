@@ -12,8 +12,29 @@ AnchoredPopup {
     property bool isRunning: false
     property bool isPinned: false
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
+    readonly property bool isVerticalDock: root.edge === "left" || root.edge === "right"
+    readonly property bool canMoveLeft: root.isPinned && ApplicationService.canMovePinned(root.appId, "left")
+    readonly property bool canMoveRight: root.isPinned && ApplicationService.canMovePinned(root.appId, "right")
 
     signal actionTriggered()
+
+    function moveLeft() {
+        if (!root.canMoveLeft) return false;
+        const ok = ApplicationService.movePinnedApp(root.appId, "left");
+        if (ok) {
+            root.actionTriggered();
+        }
+        return ok;
+    }
+
+    function moveRight() {
+        if (!root.canMoveRight) return false;
+        const ok = ApplicationService.movePinnedApp(root.appId, "right");
+        if (ok) {
+            root.actionTriggered();
+        }
+        return ok;
+    }
 
     Component.onCompleted: {
         WindowService.refreshWindowOutputs();
@@ -235,6 +256,90 @@ AnchoredPopup {
                 onClicked: {
                     ApplicationService.launchAppId(root.appId);
                     root.actionTriggered();
+                }
+            }
+        }
+
+        // Action: Move Left / Up (for pinned apps)
+        Rectangle {
+            id: moveLeftRow
+            visible: root.isPinned
+            Layout.fillWidth: true
+            implicitHeight: 28
+            radius: Theme.radiusSmall
+            color: (root.canMoveLeft && moveLeftMouse.containsMouse) ? Theme.hover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 8
+
+                SvgIcon {
+                    icon: root.isVerticalDock ? "go-up" : "go-previous"
+                    size: 14
+                    color: root.canMoveLeft ? Theme.foreground : Theme.foregroundMuted
+                }
+
+                Text {
+                    text: root.isVerticalDock ? "Move Up" : "Move Left"
+                    color: root.canMoveLeft ? Theme.foreground : Theme.foregroundMuted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+
+            MouseArea {
+                id: moveLeftMouse
+                anchors.fill: parent
+                enabled: root.canMoveLeft
+                hoverEnabled: true
+                cursorShape: root.canMoveLeft ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    root.moveLeft();
+                }
+            }
+        }
+
+        // Action: Move Right / Down (for pinned apps)
+        Rectangle {
+            id: moveRightRow
+            visible: root.isPinned
+            Layout.fillWidth: true
+            implicitHeight: 28
+            radius: Theme.radiusSmall
+            color: (root.canMoveRight && moveRightMouse.containsMouse) ? Theme.hover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 8
+
+                SvgIcon {
+                    icon: root.isVerticalDock ? "go-down" : "go-next"
+                    size: 14
+                    color: root.canMoveRight ? Theme.foreground : Theme.foregroundMuted
+                }
+
+                Text {
+                    text: root.isVerticalDock ? "Move Down" : "Move Right"
+                    color: root.canMoveRight ? Theme.foreground : Theme.foregroundMuted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+
+            MouseArea {
+                id: moveRightMouse
+                anchors.fill: parent
+                enabled: root.canMoveRight
+                hoverEnabled: true
+                cursorShape: root.canMoveRight ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    root.moveRight();
                 }
             }
         }
