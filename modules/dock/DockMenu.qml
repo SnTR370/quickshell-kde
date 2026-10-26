@@ -12,11 +12,34 @@ AnchoredPopup {
     property bool isRunning: false
     property bool isPinned: false
     readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
+    readonly property var appActions: {
+        const _apps = ApplicationService.applications;
+        return ApplicationService.getAppActions(root.app || root.appId);
+    }
+    readonly property bool hasCustomNewWindowAction: {
+        const acts = root.appActions || [];
+        for (let i = 0; i < acts.length; i++) {
+            const aid = String(acts[i].id || "").toLowerCase();
+            const aname = String(acts[i].name || "").toLowerCase();
+            if (aid === "new-window" || aname === "new window") {
+                return true;
+            }
+        }
+        return false;
+    }
     readonly property bool isVerticalDock: root.edge === "left" || root.edge === "right"
     readonly property bool canMoveLeft: root.isPinned && ApplicationService.canMovePinned(root.appId, "left")
     readonly property bool canMoveRight: root.isPinned && ApplicationService.canMovePinned(root.appId, "right")
 
     signal actionTriggered()
+
+    function triggerQuickAction(actionId) {
+        const ok = ApplicationService.launchAppAction(root.app || root.appId, actionId);
+        if (ok) {
+            root.actionTriggered();
+        }
+        return ok;
+    }
 
     function moveLeft() {
         if (!root.canMoveLeft) return false;
@@ -506,8 +529,10 @@ AnchoredPopup {
             visible: root.appWindows.length > 0
         }
 
-        // Action: Launch / New Window
+        // Action: Launch / New Window (hidden only when running and an explicit desktop 'New Window' quick action replaces it)
         Rectangle {
+            id: launchRow
+            visible: !root.isRunning || !root.hasCustomNewWindowAction
             Layout.fillWidth: true
             implicitHeight: 28
             radius: Theme.radiusSmall
@@ -542,6 +567,56 @@ AnchoredPopup {
                 onClicked: {
                     ApplicationService.launchAppId(root.appId);
                     root.actionTriggered();
+                }
+            }
+        }
+
+        // XDG Desktop Entry Quick Actions (in declared Actions= order)
+        Repeater {
+            id: quickActionsRepeater
+            model: root.appActions
+
+            Rectangle {
+                id: quickActionRow
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: 28
+                radius: Theme.radiusSmall
+                color: quickActionMouse.containsMouse ? Theme.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    spacing: 8
+
+                    SvgIcon {
+                        icon: (quickActionRow.modelData && quickActionRow.modelData.icon) ? quickActionRow.modelData.icon : "list-add"
+                        size: 14
+                        color: Theme.foreground
+                    }
+
+                    Text {
+                        text: quickActionRow.modelData ? quickActionRow.modelData.name : ""
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+
+                MouseArea {
+                    id: quickActionMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (quickActionRow.modelData) {
+                            root.triggerQuickAction(quickActionRow.modelData.id);
+                        }
+                    }
                 }
             }
         }

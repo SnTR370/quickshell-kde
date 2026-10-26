@@ -42,3 +42,27 @@
   - Full Python unittest suite (57 tests in `tests/` + 9 in `modules/controlcenter/`): 66 passed, 0 failed.
 - **Remaining Risks:**
   - Physical multi-monitor and live KWin compositor window transitions are verified via isolated QML runtime probes and script dry-runs; physical desktop window manipulation was intentionally not executed against the developer's active session.
+
+---
+
+## Phase 2 — P0 #6: XDG Desktop Quick Actions
+
+- **Changed Components:**
+  - `services/applications/scan_apps.py`
+  - `services/applications/ApplicationService.qml`
+  - `modules/dock/DockMenu.qml`
+  - `tests/fixtures/applications/org.mozilla.firefox.desktop`
+  - `tests/fixtures/applications/org.kde.dolphin.desktop`
+  - `tests/fixtures/applications/org.example.hidden.desktop`
+  - `tests/test_dock_blitz.py`
+- **Implemented Functionality:**
+  - Implemented Freedesktop Desktop Entry quick action parsing (`Actions=...` and `[Desktop Action <id>]`) in `scan_apps.py` preserving declared ordering, deduplicating repeated action IDs, respecting localized `Name[locale]=` keys, filtering `OnlyShowIn`/`NotShowIn`, excluding missing/invalid/undeclared action groups, and safely tokenizing `Exec=` arguments (`execArgs`) without shell evaluation.
+  - Strictly isolated action binaries, icons, and names from application identity aliases (`generate_aliases` and `ApplicationService.rebuildAliasMap`).
+  - Added duplicate scanner process protection (`scanProc.scanPending`) and `getAppActions` / `launchAppAction` in `ApplicationService.qml`.
+  - Exposed application quick actions in `DockMenu.qml`, prioritizing desktop-defined `"New Window"` actions when running while preserving normal application launching and apps without quick actions.
+- **Verified Results:**
+  - `qmllint` on all modified QML files: 0 errors.
+  - `TestDockBlitz.test_20_xdg_desktop_quick_actions_fixtures_and_runtime`: passed.
+  - Full Python unittest suite (58 tests in `tests/` + 9 in `modules/controlcenter/`): 67 passed, 0 failed.
+- **Remaining Risks:**
+  - None identified; field codes without file/URL context (`%f`, `%F`, `%u`, `%U`) are stripped per Freedesktop spec for context-menu invocation.

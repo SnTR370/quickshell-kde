@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Hidden Utility
+NoDisplay=true
+Exec=hidden-util
+Actions=act1;
+
+[Desktop Action act1]
+Name=Hidden Action
+Exec=hidden-util --act

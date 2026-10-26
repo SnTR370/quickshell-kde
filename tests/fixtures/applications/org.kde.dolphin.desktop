@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dolphin
+GenericName=File Manager
+Icon=system-file-manager
+Exec=dolphin %u
+StartupWMClass=org.kde.dolphin
+Categories=Qt;KDE;System;FileTools;FileManager;

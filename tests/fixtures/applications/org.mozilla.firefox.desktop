@@ -1,0 +1,49 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Firefox Web Browser
+GenericName=Web Browser
+Comment=Browse the World Wide Web
+Icon=org.mozilla.firefox
+Exec=firefox %u
+StartupWMClass=org.mozilla.firefox
+Categories=Network;WebBrowser;
+Actions=new-window;new-private-window;missing-section;bad-quote-action;gnome-only-action;no-name-action;no-exec-action;new-window;profile-manager;
+
+[Desktop Action new-window]
+Name=New Window
+Name[tr]=Yeni Pencere
+Icon=window-new
+Exec=firefox --new-window %u
+
+[Desktop Action new-private-window]
+Name=New Private Window
+Name[tr_TR]=Yeni Gizli Pencere
+Icon=view-private
+Exec=firefox --private-window "https://example.org/?progress=100%%" %F
+
+[Desktop Action bad-quote-action]
+Name=Broken Quotes
+Exec=firefox "unterminated quote
+
+[Desktop Action gnome-only-action]
+Name=GNOME Action
+OnlyShowIn=GNOME;
+Exec=firefox --gnome
+
+[Desktop Action no-name-action]
+Exec=firefox --unnamed
+
+[Desktop Action no-exec-action]
+Name=Empty Exec Action
+
+[Desktop Action undeclared-action]
+Name=Undeclared Hijack
+Icon=hijack-icon
+Exec=hijack-binary --steal
+
+[Desktop Action profile-manager]
+Name=Profile Manager
+Name[tr]=Profil Yöneticisi
+Icon=user-identity
+Exec=FOO=1 firefox --ProfileManager %i %c

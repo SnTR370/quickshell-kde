@@ -2272,5 +2272,180 @@ Scope {
                 if os.path.exists(probe_path):
                     os.remove(probe_path)
 
+    def test_20_xdg_desktop_quick_actions_fixtures_and_runtime(self):
+        """Phase 2 (P0 #6): Verify XDG Desktop Entry Quick Actions parsing, ordering, localization, field code safety, identity isolation, and DockMenu runtime execution."""
+        import json
+        import sys
+        import tempfile
+
+        apps_dir = os.path.join(REPO_DIR, "services", "applications")
+        if apps_dir not in sys.path:
+            sys.path.insert(0, apps_dir)
+        import importlib
+        import scan_apps
+        importlib.reload(scan_apps)
+
+        fixture_dir = os.path.join(REPO_DIR, "tests", "fixtures", "applications")
+        apps_en = scan_apps.scan_all(extra_dirs=[fixture_dir], locale="C")
+        apps_tr = scan_apps.scan_all(extra_dirs=[fixture_dir], locale="tr_TR.UTF-8")
+
+        by_id_en = {a["id"]: a for a in apps_en}
+        by_id_tr = {a["id"]: a for a in apps_tr}
+
+        self.assertIn("org.mozilla.firefox", by_id_en)
+        self.assertIn("org.kde.dolphin", by_id_en)
+        self.assertNotIn("org.example.hidden", by_id_en)
+
+        ff_en = by_id_en["org.mozilla.firefox"]
+        ff_tr = by_id_tr["org.mozilla.firefox"]
+        dolphin_en = by_id_en["org.kde.dolphin"]
+
+        # 1. Exact action ordering & invalid/undeclared/GNOME-only filtering
+        self.assertEqual([a["id"] for a in ff_en["actions"]], ["new-window", "new-private-window", "profile-manager"])
+        self.assertEqual([a["name"] for a in ff_en["actions"]], ["New Window", "New Private Window", "Profile Manager"])
+
+        # 2. Localized action names (tr_TR.UTF-8 falls back from [tr_TR] to [tr] to default)
+        self.assertEqual([a["name"] for a in ff_tr["actions"]], ["Yeni Pencere", "Yeni Gizli Pencere", "Profil Yöneticisi"])
+
+        # 3. Field codes & quoting safety
+        self.assertEqual(ff_en["actions"][0]["execArgs"], ["firefox", "--new-window"])
+        self.assertEqual(ff_en["actions"][1]["execArgs"], ["firefox", "--private-window", "https://example.org/?progress=100%"])
+        self.assertEqual(ff_en["actions"][2]["execArgs"], ["firefox", "--ProfileManager", "--icon", "user-identity", "Profile Manager"])
+
+        # 4. Applications without quick actions have empty actions list
+        self.assertEqual(dolphin_en["actions"], [])
+
+        # 5. Action commands / icons / names are never added to application identity aliases
+        for forbidden_alias in ["hijack-binary", "hijack-icon", "window-new", "view-private", "user-identity", "profile manager"]:
+            self.assertNotIn(forbidden_alias, ff_en["aliases"])
+
+        # 6. Live QML Runtime Test with ApplicationService & DockMenu
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_phase2_quick_actions_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+Scope {
+    DockMenu {
+        id: ffMenu
+        appId: "org.mozilla.firefox"
+        isRunning: true
+        isPinned: true
+    }
+
+    DockMenu {
+        id: dolphinMenu
+        appId: "org.kde.dolphin"
+        isRunning: false
+        isPinned: true
+    }
+
+    Timer {
+        interval: 200
+        running: true
+        repeat: false
+        onTriggered: {
+            ApplicationService.launchDryRun = true;
+            ApplicationService.applications = """ + json.dumps(apps_en) + """;
+            ApplicationService.loading = false;
+
+            const ffActions = ApplicationService.getAppActions("org.mozilla.firefox");
+            const dolphinActions = ApplicationService.getAppActions("org.kde.dolphin");
+            const unknownActions = ApplicationService.getAppActions("nonexistent.app");
+
+            // Verify action names/binaries are not mistaken for app identities
+            const hijackLookup = ApplicationService.getAppById("hijack-binary");
+            const actionIconLookup = ApplicationService.findAppByTitleOrIcon("Some Title", "view-private", "", "", "");
+
+            // Trigger valid quick action via DockMenu
+            const privOk = ffMenu.triggerQuickAction("new-private-window");
+            const privCmd = ApplicationService.lastLaunchedCommand;
+
+            const profOk = ffMenu.triggerQuickAction("profile-manager");
+            const profCmd = ApplicationService.lastLaunchedCommand;
+
+            // Reject invalid / nonexistent quick actions
+            const badActOk = ffMenu.triggerQuickAction("undeclared-action");
+            const dolphinActOk = dolphinMenu.triggerQuickAction("new-window");
+
+            // Normal app launch still works
+            const normalDolphinOk = ApplicationService.launchAppId("org.kde.dolphin");
+            const normalDolphinCmd = ApplicationService.lastLaunchedCommand;
+
+            // Verify parseExecArguments rejects unbalanced quotes in QML as well
+            const unbalancedParsed = ApplicationService.parseExecArguments('firefox "unterminated');
+
+            console.log("PHASE2_QUICK_ACTIONS_RESULT:" + JSON.stringify({
+                ffActionIds: ffActions.map(a => a.id),
+                ffMenuActionIds: (ffMenu.appActions || []).map(a => a.id),
+                ffHasCustomNewWin: ffMenu.hasCustomNewWindowAction,
+                dolphinHasCustomNewWin: dolphinMenu.hasCustomNewWindowAction,
+                dolphinActionsLen: dolphinActions.length,
+                unknownActionsLen: unknownActions.length,
+                hijackLookupNull: hijackLookup === null,
+                actionIconLookupNull: actionIconLookup === null,
+                privOk: privOk,
+                privCmd: privCmd,
+                profOk: profOk,
+                profCmd: profCmd,
+                badActOk: badActOk,
+                dolphinActOk: dolphinActOk,
+                normalDolphinOk: normalDolphinOk,
+                normalDolphinCmd: normalDolphinCmd,
+                unbalancedLen: unbalancedParsed.length
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "PHASE2_QUICK_ACTIONS_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertEqual(data["ffActionIds"], ["new-window", "new-private-window", "profile-manager"])
+                self.assertEqual(data["ffMenuActionIds"], ["new-window", "new-private-window", "profile-manager"])
+                self.assertTrue(data["ffHasCustomNewWin"])
+                self.assertFalse(data["dolphinHasCustomNewWin"])
+                self.assertEqual(data["dolphinActionsLen"], 0)
+                self.assertEqual(data["unknownActionsLen"], 0)
+                self.assertTrue(data["hijackLookupNull"])
+                self.assertTrue(data["actionIconLookupNull"])
+
+                self.assertTrue(data["privOk"])
+                self.assertEqual(data["privCmd"]["type"], "action")
+                self.assertEqual(data["privCmd"]["actionId"], "new-private-window")
+                self.assertEqual(data["privCmd"]["args"], ["firefox", "--private-window", "https://example.org/?progress=100%"])
+
+                self.assertTrue(data["profOk"])
+                self.assertEqual(data["profCmd"]["args"], ["firefox", "--ProfileManager", "--icon", "user-identity", "Profile Manager"])
+
+                self.assertFalse(data["badActOk"])
+                self.assertFalse(data["dolphinActOk"])
+
+                self.assertTrue(data["normalDolphinOk"])
+                self.assertEqual(data["normalDolphinCmd"]["type"], "app")
+                self.assertEqual(data["normalDolphinCmd"]["appId"], "org.kde.dolphin")
+                self.assertEqual(data["unbalancedLen"], 0)
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()

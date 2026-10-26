@@ -49,11 +49,17 @@ Singleton {
     ]
 
     function scanApplications() {
+        if (scanProc.running) {
+            scanProc.scanPending = true;
+            return false;
+        }
+        scanProc.scanPending = false;
         root.loading = true;
         scanProc.buf = "";
         const scriptPath = Qt.resolvedUrl("scan_apps.py").toString().replace(/^file:\/\//, "");
         scanProc.command = ["python3", scriptPath];
         scanProc.running = true;
+        return true;
     }
 
     function cleanAppName(name) {
@@ -189,6 +195,7 @@ Singleton {
     Process {
         id: scanProc
         property string buf: ""
+        property bool scanPending: false
         stdout: SplitParser {
             onRead: data => { scanProc.buf += data; }
         }
@@ -206,6 +213,10 @@ Singleton {
             }
             root.loading = false;
             scanProc.buf = "";
+            if (scanProc.scanPending) {
+                scanProc.scanPending = false;
+                root.scanApplications();
+            }
         }
     }
 
@@ -331,59 +342,225 @@ Singleton {
         return null;
     }
 
-    function parseExecArguments(execStr) {
-        if (!execStr || execStr.trim().length === 0) return [];
-        // Strip freedesktop field codes (%f, %F, %u, %U, %d, %D, %n, %N, %i, %c, %k, %v, %m)
-        const sanitized = execStr.replace(/%[a-zA-Z]/g, "").trim();
-        const args = [];
+    property bool launchDryRun: false
+    property var lastLaunchedCommand: null
+
+    function parseExecArguments(execStr, iconName, appName, desktopFile) {
+        if (!execStr || typeof execStr !== "string" || execStr.trim().length === 0) return [];
+        const raw = execStr.trim();
+        const rawTokens = [];
         let current = "";
         let inQuote = false;
         let quoteChar = "";
+        let hadQuotedEmpty = false;
 
-        for (let i = 0; i < sanitized.length; i++) {
-            const ch = sanitized[i];
+        for (let i = 0; i < raw.length; i++) {
+            const ch = raw[i];
+            if (ch === "\\" && i + 1 < raw.length && quoteChar !== "'") {
+                current += raw[i + 1];
+                i += 1;
+                continue;
+            }
             if ((ch === '"' || ch === "'") && !inQuote) {
                 inQuote = true;
                 quoteChar = ch;
+                if (i + 1 < raw.length && raw[i + 1] === ch && current.length === 0) {
+                    hadQuotedEmpty = true;
+                }
             } else if (ch === quoteChar && inQuote) {
                 inQuote = false;
                 quoteChar = "";
-            } else if (ch === ' ' && !inQuote) {
-                if (current.length > 0) {
-                    args.push(current);
+            } else if ((ch === ' ' || ch === '\t') && !inQuote) {
+                if (current.length > 0 || hadQuotedEmpty) {
+                    rawTokens.push(current);
                     current = "";
+                    hadQuotedEmpty = false;
                 }
             } else {
                 current += ch;
             }
         }
-        if (current.length > 0) {
-            args.push(current);
+        if (inQuote) {
+            // Reject unbalanced quotes
+            return [];
         }
+        if (current.length > 0 || hadQuotedEmpty) {
+            rawTokens.push(current);
+        }
+
+        const args = [];
+        const pctPlaceholder = "\u0000LITERAL_PCT\u0000";
+        for (let t = 0; t < rawTokens.length; t++) {
+            const tok = rawTokens[t];
+            if (tok === "%i") {
+                if (iconName && String(iconName).trim().length > 0) {
+                    args.push("--icon");
+                    args.push(String(iconName).trim());
+                }
+                continue;
+            }
+            if (tok === "%f" || tok === "%F" || tok === "%u" || tok === "%U" ||
+                tok === "%d" || tok === "%D" || tok === "%n" || tok === "%N" ||
+                tok === "%v" || tok === "%m") {
+                continue;
+            }
+            if (tok === "%c") {
+                if (appName && String(appName).trim().length > 0) {
+                    args.push(String(appName).trim());
+                }
+                continue;
+            }
+            if (tok === "%k") {
+                if (desktopFile && String(desktopFile).trim().length > 0) {
+                    args.push(String(desktopFile).trim());
+                }
+                continue;
+            }
+            let cleaned = tok.replace(/%%/g, pctPlaceholder);
+            cleaned = cleaned.replace(/%c/g, appName ? String(appName) : "");
+            cleaned = cleaned.replace(/%k/g, desktopFile ? String(desktopFile) : "");
+            cleaned = cleaned.replace(/%[a-zA-Z]/g, "");
+            cleaned = cleaned.replace(new RegExp(pctPlaceholder, "g"), "%");
+            if (cleaned.length > 0) {
+                args.push(cleaned);
+            }
+        }
+
+        while (args.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(args[0])) {
+            args.shift();
+        }
+        if (args.length === 0 || args[0].trim().length === 0) return [];
         return args;
     }
 
-    function launch(app) {
-        if (!app) return;
-        Log.info("ApplicationService", "Launching app: " + (app.name || app.id));
-        if (app.desktopFile && app.desktopFile.length > 0) {
-            Quickshell.execDetached(["gio", "launch", app.desktopFile]);
-        } else if (app.id && app.id.length > 0) {
-            Quickshell.execDetached(["gtk-launch", app.id]);
-        } else if (app.exec && app.exec.length > 0) {
-            const args = parseExecArguments(app.exec);
-            if (args.length > 0) {
-                Quickshell.execDetached(args);
+    function getAppActions(appIdOrApp) {
+        if (!appIdOrApp) return [];
+        const app = (typeof appIdOrApp === "object" && appIdOrApp !== null)
+            ? appIdOrApp
+            : root.getAppById(String(appIdOrApp));
+        if (!app || !app.actions || !Array.isArray(app.actions)) return [];
+        const valid = [];
+        const seen = {};
+        for (let i = 0; i < app.actions.length; i++) {
+            const act = app.actions[i];
+            if (!act || typeof act !== "object") continue;
+            const id = String(act.id || "").trim();
+            const name = String(act.name || "").trim();
+            if (!id || !name || !/^[A-Za-z0-9._-]+$/.test(id) || seen[id]) continue;
+            const icon = String(act.icon || "").trim();
+            let args = [];
+            if (Array.isArray(act.execArgs) && act.execArgs.length > 0) {
+                for (let a = 0; a < act.execArgs.length; a++) {
+                    const tok = String(act.execArgs[a] !== undefined ? act.execArgs[a] : "");
+                    if (a === 0 && tok.trim().length === 0) {
+                        args = [];
+                        break;
+                    }
+                    args.push(tok);
+                }
+            }
+            if (args.length === 0 && act.exec && typeof act.exec === "string") {
+                args = root.parseExecArguments(act.exec, icon || app.icon || "", name, app.desktopFile || "");
+            }
+            if (args.length === 0) continue;
+            seen[id] = true;
+            valid.push({
+                id: id,
+                name: name,
+                icon: icon,
+                exec: String(act.exec || args.join(" ")),
+                execArgs: args
+            });
+        }
+        return valid;
+    }
+
+    function launchAppAction(appIdOrApp, actionIdOrAction) {
+        if (!appIdOrApp || !actionIdOrAction) return false;
+        const app = (typeof appIdOrApp === "object" && appIdOrApp !== null && appIdOrApp.id)
+            ? appIdOrApp
+            : root.getAppById(String(appIdOrApp));
+        if (!app) return false;
+        const targetId = (typeof actionIdOrAction === "object" && actionIdOrAction !== null)
+            ? String(actionIdOrAction.id || "").trim()
+            : String(actionIdOrAction).trim();
+        if (!targetId) return false;
+
+        const actions = root.getAppActions(app);
+        let matched = null;
+        for (let i = 0; i < actions.length; i++) {
+            if (actions[i].id === targetId) {
+                matched = actions[i];
+                break;
             }
         }
+        if (!matched || !matched.execArgs || matched.execArgs.length === 0) return false;
+
+        Log.info("ApplicationService", "Launching quick action '" + matched.id + "' for app: " + (app.name || app.id));
+        root.lastLaunchedCommand = {
+            type: "action",
+            appId: app.id,
+            actionId: matched.id,
+            name: matched.name,
+            args: matched.execArgs.slice()
+        };
+        if (!root.launchDryRun) {
+            Quickshell.execDetached(matched.execArgs);
+        }
+        return true;
+    }
+
+    function launch(app) {
+        if (!app) return false;
+        Log.info("ApplicationService", "Launching app: " + (app.name || app.id));
+        if (app.desktopFile && app.desktopFile.length > 0) {
+            const cmd = ["gio", "launch", app.desktopFile];
+            root.lastLaunchedCommand = { type: "app", appId: app.id || "", args: cmd };
+            if (!root.launchDryRun) {
+                Quickshell.execDetached(cmd);
+            }
+            return true;
+        } else if (app.id && app.id.length > 0 && (!app.exec || app.exec.length === 0)) {
+            const cmd = ["gtk-launch", app.id];
+            root.lastLaunchedCommand = { type: "app", appId: app.id, args: cmd };
+            if (!root.launchDryRun) {
+                Quickshell.execDetached(cmd);
+            }
+            return true;
+        } else if (app.exec && app.exec.length > 0) {
+            const args = (Array.isArray(app.execArgs) && app.execArgs.length > 0)
+                ? app.execArgs.slice()
+                : parseExecArguments(app.exec, app.icon || "", app.name || "", app.desktopFile || "");
+            if (args.length > 0) {
+                root.lastLaunchedCommand = { type: "app", appId: app.id || "", args: args };
+                if (!root.launchDryRun) {
+                    Quickshell.execDetached(args);
+                }
+                return true;
+            }
+        } else if (app.id && app.id.length > 0) {
+            const cmd = ["gtk-launch", app.id];
+            root.lastLaunchedCommand = { type: "app", appId: app.id, args: cmd };
+            if (!root.launchDryRun) {
+                Quickshell.execDetached(cmd);
+            }
+            return true;
+        }
+        return false;
     }
 
     function launchAppId(appId) {
+        if (!appId || typeof appId !== "string") return false;
         const app = getAppById(appId);
         if (app) {
-            launch(app);
+            return launch(app);
         } else {
-            Quickshell.execDetached(["gtk-launch", appId]);
+            const cmd = ["gtk-launch", appId];
+            root.lastLaunchedCommand = { type: "app", appId: appId, args: cmd };
+            if (!root.launchDryRun) {
+                Quickshell.execDetached(cmd);
+            }
+            return true;
         }
     }
 
