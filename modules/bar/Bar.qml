@@ -52,6 +52,23 @@ Variants {
         readonly property bool isVertical: edge === "left" || edge === "right"
         readonly property bool isFloating: ConfigService.barFloating
         readonly property int offset: isFloating ? ConfigService.barEdgeOffset : 0
+        property var activePopupItem: null
+
+        onVisibleChanged: {
+            if (!barWindow.visible) {
+                barWindow.activePopupItem = null;
+            }
+        }
+
+        Connections {
+            target: ConfigService
+            function onLauncherVisibleChanged() {
+                if (ConfigService.launcherVisible) barWindow.activePopupItem = null;
+            }
+            function onSettingsVisibleChanged() {
+                if (ConfigService.settingsVisible) barWindow.activePopupItem = null;
+            }
+        }
 
         anchors {
             top: barWindow.isVertical || barWindow.edge === "top"
@@ -112,7 +129,26 @@ Variants {
                             Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -136,7 +172,26 @@ Variants {
                             Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -160,7 +215,26 @@ Variants {
                             Layout.fillHeight: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -190,7 +264,26 @@ Variants {
                             Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -214,7 +307,26 @@ Variants {
                             Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -238,7 +350,26 @@ Variants {
                             Layout.fillWidth: true
                             onLoaded: {
                                 if (item && item.hasOwnProperty("barWindowRef")) item.barWindowRef = barWindow;
-                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = barWindow.edge;
+                                if (item && item.hasOwnProperty("surfaceEdge")) item.surfaceEdge = Qt.binding(() => barWindow.edge);
+                            }
+                            Connections {
+                                target: item
+                                ignoreUnknownSignals: true
+                                function onPopupOpenChanged() {
+                                    if (item.popupOpen) {
+                                        barWindow.activePopupItem = item;
+                                    } else if (barWindow.activePopupItem === item) {
+                                        barWindow.activePopupItem = null;
+                                    }
+                                }
+                            }
+                            Connections {
+                                target: barWindow
+                                function onActivePopupItemChanged() {
+                                    if (item && item.hasOwnProperty("popupOpen") && barWindow.activePopupItem !== item && item.popupOpen) {
+                                        item.popupOpen = false;
+                                    }
+                                }
                             }
                         }
                     }

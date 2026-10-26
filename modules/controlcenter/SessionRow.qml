@@ -8,6 +8,7 @@ RowLayout {
     id: root
 
     property bool dryRun: false
+    property var parentWindow: null
     signal actionTriggered()
     signal sessionActionRequested(string action)
 
@@ -30,6 +31,7 @@ RowLayout {
     Layout.fillWidth: true
 
     IconButton {
+        parentWindow: root.parentWindow
         size: 34
         icon: "preferences-system"
         iconSize: 18
@@ -43,6 +45,7 @@ RowLayout {
     }
 
     IconButton {
+        parentWindow: root.parentWindow
         size: 34
         icon: "system-lock-screen"
         iconSize: 18
@@ -52,6 +55,7 @@ RowLayout {
     }
 
     IconButton {
+        parentWindow: root.parentWindow
         size: 34
         icon: "system-log-out"
         iconSize: 18
@@ -61,6 +65,7 @@ RowLayout {
     }
 
     IconButton {
+        parentWindow: root.parentWindow
         size: 34
         icon: "system-reboot"
         iconSize: 18
@@ -70,6 +75,7 @@ RowLayout {
     }
 
     IconButton {
+        parentWindow: root.parentWindow
         size: 34
         icon: "system-shutdown"
         iconSize: 18

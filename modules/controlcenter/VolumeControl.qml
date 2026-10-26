@@ -6,6 +6,7 @@ import "../../components"
 Surface {
     id: root
 
+    property var parentWindow: null
     signal actionTriggered()
 
     Layout.fillWidth: true
@@ -49,6 +50,7 @@ Surface {
             }
 
             IconButton {
+                parentWindow: root.parentWindow
                 size: 24
                 icon: "preferences-system"
                 iconSize: 14
@@ -66,6 +68,7 @@ Surface {
             spacing: 8
 
             IconButton {
+                parentWindow: root.parentWindow
                 size: 28
                 icon: AudioService.muted ? "audio-volume-muted" : (AudioService.volume > 0.5 ? "audio-volume-high" : (AudioService.volume > 0 ? "audio-volume-low" : "audio-volume-muted"))
                 iconSize: 16
@@ -98,7 +101,8 @@ Surface {
         // Separator for input
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            Layout.preferredHeight: 1
+            implicitHeight: 1
             color: Theme.alpha(Theme.border, 0.4)
         }
 
@@ -108,6 +112,7 @@ Surface {
             spacing: 8
 
             IconButton {
+                parentWindow: root.parentWindow
                 size: 28
                 icon: AudioService.inputMuted ? "microphone-sensitivity-muted" : "audio-input-microphone"
                 iconSize: 16

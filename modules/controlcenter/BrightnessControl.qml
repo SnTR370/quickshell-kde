@@ -7,6 +7,8 @@ Surface {
     id: root
 
     property bool showWhenUnsupported: true
+    property var parentWindow: null
+    readonly property bool showHeaderDisplayName: BrightnessService.supported && (!BrightnessService.displays || BrightnessService.displays.length <= 1) && BrightnessService.controlledDisplayName.length > 0
     signal actionTriggered()
 
     visible: BrightnessService.supported || showWhenUnsupported
@@ -48,15 +50,16 @@ Surface {
                 font.pixelSize: Theme.fontSizeSmall - 1
                 elide: Text.ElideRight
                 Layout.fillWidth: true
-                visible: BrightnessService.controlledDisplayName.length > 0
+                visible: root.showHeaderDisplayName
             }
 
             Item {
                 Layout.fillWidth: true
-                visible: !BrightnessService.controlledDisplayName || BrightnessService.controlledDisplayName.length === 0
+                visible: !root.showHeaderDisplayName
             }
 
             IconButton {
+                parentWindow: root.parentWindow
                 size: 24
                 icon: "preferences-system"
                 iconSize: 14

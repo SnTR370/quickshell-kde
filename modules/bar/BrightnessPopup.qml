@@ -42,8 +42,8 @@ AnchoredPopup {
                 iconSize: 16
                 tooltip: "Display Settings"
                 onClicked: {
-                    Quickshell.execDetached(["kcmshell6", "kcm_kscreen"]);
                     root.close();
+                    KWinService.toggleKdeSettings("kcm_kscreen");
                 }
             }
         }

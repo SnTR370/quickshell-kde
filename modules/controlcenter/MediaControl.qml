@@ -60,8 +60,11 @@ Surface {
                 clip: true
 
                 Image {
+                    id: artImage
                     anchors.fill: parent
                     source: MprisService.trackArtUrl
+                    sourceSize: Qt.size(88, 88)
+                    asynchronous: true
                     visible: source.toString().length > 0 && status === Image.Ready
                     fillMode: Image.PreserveAspectCrop
                 }
@@ -71,7 +74,7 @@ Surface {
                     icon: "audio-x-generic"
                     size: 22
                     color: Theme.foregroundMuted
-                    visible: !MprisService.trackArtUrl || MprisService.trackArtUrl.length === 0
+                    visible: !artImage.visible
                 }
             }
 

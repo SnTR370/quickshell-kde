@@ -216,8 +216,8 @@ Singleton {
             if (parsed.left) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
             if (parsed.center) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
             if (parsed.right) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
-            if (parsed.controlCenterMigrated !== undefined) {
-                root.controlCenterMigrated = parsed.controlCenterMigrated;
+            if (parsed.controlCenterMigrated === true) {
+                root.controlCenterMigrated = true;
             } else {
                 const hasCC = (root.barLeft.indexOf("controlcenter") !== -1) ||
                               (root.barCenter.indexOf("controlcenter") !== -1) ||
@@ -330,7 +330,7 @@ Singleton {
             "blur": root.blurEnabled,
             "notificationsEnabled": root.notificationsEnabled,
             "trayItemPolicies": root.trayItemPolicies || {},
-            "controlCenterMigrated": true
+            "controlCenterMigrated": root.controlCenterMigrated
         });
     }
 

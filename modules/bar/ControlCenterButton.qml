@@ -7,8 +7,44 @@ Item {
     id: root
 
     property var barWindowRef: null
-    property string surfaceEdge: "top"
+    property string surfaceEdge: barWindowRef ? barWindowRef.edge : ConfigService.barEdge
     property bool popupOpen: false
+
+    onPopupOpenChanged: {
+        if (barWindowRef && barWindowRef.activePopupItem !== undefined) {
+            if (popupOpen) {
+                barWindowRef.activePopupItem = root;
+            } else if (barWindowRef.activePopupItem === root) {
+                barWindowRef.activePopupItem = null;
+            }
+        }
+    }
+
+    onVisibleChanged: {
+        if (!root.visible && root.popupOpen) {
+            root.popupOpen = false;
+        }
+    }
+
+    Connections {
+        target: ConfigService
+        function onLauncherVisibleChanged() {
+            if (ConfigService.launcherVisible && root.popupOpen) {
+                root.popupOpen = false;
+            }
+        }
+        function onSettingsVisibleChanged() {
+            if (ConfigService.settingsVisible && root.popupOpen) {
+                root.popupOpen = false;
+            }
+        }
+    }
+
+    Component.onDestruction: {
+        if (barWindowRef && barWindowRef.activePopupItem === root) {
+            barWindowRef.activePopupItem = null;
+        }
+    }
 
     implicitWidth: Math.max(20, ConfigService.barHeight - 6)
     implicitHeight: Math.max(20, ConfigService.barHeight - 6)
@@ -24,7 +60,7 @@ Item {
         active: root.popupOpen
         activeColor: Theme.primary
         hoverColor: Theme.alpha(Theme.primary, 0.15)
-        tooltip: "Control Center"
+        tooltip: root.popupOpen ? "" : "Control Center"
         onClicked: root.popupOpen = !root.popupOpen
     }
 

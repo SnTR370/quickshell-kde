@@ -3,6 +3,7 @@ import QtTest
 import "."
 
 TestCase {
+    id: root
     name: "ControlCenterModuleTest"
     width: 600
     height: 800
@@ -54,7 +55,7 @@ TestCase {
         compare(tile.subtitle, "Connected", "QuickTile subtitle matches");
         compare(tile.active, true, "QuickTile active state matches");
 
-        var clickedFired = false;
+        let clickedFired = false;
         tile.clicked.connect(function() {
             clickedFired = true;
         });
@@ -66,7 +67,7 @@ TestCase {
         const row = createTemporaryObject(sessionRowComp, null);
         verify(row !== null, "SessionRow component instantiated");
 
-        var actionFired = false;
+        let actionFired = false;
         row.actionTriggered.connect(function() {
             actionFired = true;
         });
@@ -97,7 +98,7 @@ TestCase {
         compare(cc.implicitWidth, 360, "ControlCenter has compact width suitable for desktop popup");
         verify(cc.implicitHeight > 200, "ControlCenter has responsive height");
 
-        var closeFired = false;
+        let closeFired = false;
         cc.closeRequested.connect(function() {
             closeFired = true;
         });

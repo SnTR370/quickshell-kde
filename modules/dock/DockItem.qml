@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import "../../services"
 import "../../components"
 import "."
@@ -80,6 +79,8 @@ Item {
     }
 
     Component.onDestruction: {
+        tooltipDwellTimer.stop();
+        clickBounceAnim.stop();
         if (parentWindowRef && parentWindowRef.activePopupItem === root) {
             parentWindowRef.activePopupItem = null;
         }
@@ -119,7 +120,7 @@ Item {
         }
 
         // Multi-window / Running indicator
-        RowLayout {
+        Row {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 2
             anchors.horizontalCenter: parent.horizontalCenter

@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import "../../services"
 import "../../components"
 import "."
@@ -22,6 +21,7 @@ AnchoredPopup {
         id: controlCenter
         anchors.fill: parent
         embeddedInPopup: true
+        parentWindow: root.visible ? root : null
         maxHeight: root.screenMaxHeight
         onCloseRequested: root.close()
     }

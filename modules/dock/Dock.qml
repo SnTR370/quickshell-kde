@@ -32,6 +32,21 @@ Variants {
                 hideTimer.restart();
             }
         }
+        onVisibleChanged: {
+            if (!dockWindow.visible) {
+                dockWindow.activePopupItem = null;
+                dockWindow.hoverRevealed = false;
+            }
+        }
+        Connections {
+            target: ConfigService
+            function onLauncherVisibleChanged() {
+                if (ConfigService.launcherVisible) dockWindow.activePopupItem = null;
+            }
+            function onSettingsVisibleChanged() {
+                if (ConfigService.settingsVisible) dockWindow.activePopupItem = null;
+            }
+        }
         readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup
 
         readonly property var unpinnedRunningApps: {

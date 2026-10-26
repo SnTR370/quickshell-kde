@@ -9,6 +9,7 @@ Surface {
     id: root
 
     property bool embeddedInPopup: false
+    property var parentWindow: null
     property real maxHeight: 0
     signal closeRequested()
 
@@ -47,6 +48,7 @@ Surface {
             }
 
             IconButton {
+                parentWindow: root.parentWindow
                 size: 24
                 icon: "window-close"
                 iconSize: 14
@@ -77,6 +79,7 @@ Surface {
 
                     // 1. Network Tile
                     QuickTile {
+                        parentWindow: root.parentWindow
                         icon: !NetworkService.connected ? "network-disconnect" : (NetworkService.connectionType === "ethernet" ? "network-wired" : "network-wireless")
                         iconColor: NetworkService.connected ? Theme.primary : Theme.error
                         title: "Network"
@@ -94,6 +97,7 @@ Surface {
 
                     // 2. Power / Battery Tile
                     QuickTile {
+                        parentWindow: root.parentWindow
                         icon: PowerService.isCharging ? "battery-charging" : (PowerService.percentage > 0.8 ? "battery-100" : (PowerService.percentage > 0.6 ? "battery-080" : (PowerService.percentage > 0.4 ? "battery-060" : (PowerService.percentage > 0.2 ? "battery-040" : "battery-020"))))
                         iconColor: PowerService.isCharging ? Theme.success : (PowerService.percentage <= 0.2 ? Theme.error : (PowerService.percentage <= 0.4 ? Theme.warning : Theme.foreground))
                         title: PowerService.isPresent ? "Battery" : "Power"
@@ -109,6 +113,7 @@ Surface {
 
                     // 3. Audio Tile
                     QuickTile {
+                        parentWindow: root.parentWindow
                         icon: AudioService.isHeadphone ? "audio-headphones" : "audio-speakers"
                         iconColor: AudioService.muted ? Theme.error : Theme.primary
                         title: "Audio"
@@ -124,6 +129,7 @@ Surface {
 
                     // 4. Display Tile
                     QuickTile {
+                        parentWindow: root.parentWindow
                         icon: "video-display"
                         iconColor: Theme.warning
                         title: "Display"
@@ -141,11 +147,13 @@ Surface {
                 // Sliders
                 VolumeControl {
                     Layout.fillWidth: true
+                    parentWindow: root.parentWindow
                     onActionTriggered: root.closeRequested()
                 }
 
                 BrightnessControl {
                     Layout.fillWidth: true
+                    parentWindow: root.parentWindow
                     onActionTriggered: root.closeRequested()
                 }
 
@@ -157,13 +165,15 @@ Surface {
                 // Footer Separator
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 1
+                    Layout.preferredHeight: 1
+                    implicitHeight: 1
                     color: Theme.alpha(Theme.border, 0.4)
                 }
 
                 // Session and Power Controls
                 SessionRow {
                     Layout.fillWidth: true
+                    parentWindow: root.parentWindow
                     onActionTriggered: root.closeRequested()
                 }
             }
