@@ -103,6 +103,33 @@ Item {
         if (!root.isRunning && !root.isPinned && root.dragging) {
             root.cancelDrag();
         }
+        if (!root.isRunning && root.chooserOpen) {
+            root.chooserOpen = false;
+        }
+    }
+
+    onWindowCountChanged: {
+        if (root.windowCount <= 1 && root.chooserOpen) {
+            root.chooserOpen = false;
+        }
+    }
+
+    onIsPinnedChanged: {
+        if (root.dragging) {
+            root.cancelDrag();
+        }
+    }
+
+    onAppIdChanged: {
+        if (root.dragging) {
+            root.cancelDrag();
+        }
+    }
+
+    onAppChanged: {
+        if (root.dragging && !root.app && !root.isRunning) {
+            root.cancelDrag();
+        }
     }
 
     Component.onDestruction: {
@@ -168,21 +195,32 @@ Item {
     }
 
     function commitDrop(info) {
-        if (!info || !root.appId || !root.visible || !root.enabled) return false;
+        if (!info || root.dragCancelled || !root.appId || !root.visible || !root.enabled) return false;
         if (root.isPinned) {
             if (!ApplicationService.isPinned(root.appId)) return false;
+            if (info.targetAppId) {
+                if (!ApplicationService.isPinned(info.targetAppId)) return false;
+                return ApplicationService.reorderPinnedApps(root.appId, info.targetAppId);
+            }
             if (typeof info.targetIndex === "number" && info.targetIndex >= 0) {
                 const fromIdx = ApplicationService.getPinnedIndex(root.appId);
                 if (fromIdx >= 0 && fromIdx !== info.targetIndex) {
                     return ApplicationService.reorderPinnedApps(fromIdx, info.targetIndex);
                 }
             }
-            if (info.targetAppId) {
-                return ApplicationService.reorderPinnedApps(root.appId, info.targetAppId);
-            }
             return false;
         } else if (root.isRunning) {
-            return ApplicationService.pinAppAt(root.appId, info.targetIndex);
+            if (!WindowService.isAppRunning(root.appId) || ApplicationService.isPinned(root.appId)) return false;
+            let resolvedIdx = info.targetIndex;
+            if (info.targetAppId) {
+                if (!ApplicationService.isPinned(info.targetAppId)) return false;
+                const baseIdx = ApplicationService.getPinnedIndex(info.targetAppId);
+                if (baseIdx < 0) return false;
+                resolvedIdx = info.insertAfter ? (baseIdx + 1) : baseIdx;
+            } else if (info.targetAppId === "") {
+                resolvedIdx = ApplicationService.pinnedApps.length;
+            }
+            return ApplicationService.pinAppAt(root.appId, resolvedIdx);
         }
         return false;
     }
@@ -240,13 +278,15 @@ Item {
                 const isVert = root.parentWindowRef ? root.parentWindowRef.isVertical : (ConfigService.dockEdge === "left" || ConfigService.dockEdge === "right");
                 const pos = isVert ? drop.y : drop.x;
                 const span = isVert ? height : width;
-                if (span > 0 && pos > span * 0.75) {
+                const insertAfter = (span > 0 && pos > span * 0.75);
+                if (insertAfter) {
                     targetIdx = targetIdx + 1;
                 }
                 if (src.acceptDropTarget) {
                     src.acceptDropTarget({
                         targetIndex: targetIdx,
-                        targetAppId: root.appId
+                        targetAppId: root.appId,
+                        insertAfter: insertAfter
                     });
                     drop.accept(Qt.MoveAction);
                 } else {

@@ -73,7 +73,22 @@ Singleton {
         if (!alias) return true;
         const a = String(alias).trim().toLowerCase();
         return (a.length <= 1 || a === "env" || a === "sh" || a === "bash" ||
+                a === "flatpak" || a === "snap" || a === "xdg-open" ||
+                a === "gio" || a === "gtk-launch" || a === "electron" ||
                 a.indexOf("@@") === 0 || a === "application-x-executable");
+    }
+
+    function resolveCanonicalAppId(appId) {
+        if (!appId || typeof appId !== "string") return "";
+        const norm = ConfigService.normalizeDockAppId(appId);
+        if (!norm || isIgnoredAlias(norm)) return "";
+        if (root.applications && root.applications.length > 0) {
+            const app = root.getAppById(norm);
+            if (app && app.id) {
+                return ConfigService.normalizeDockAppId(app.id).toLowerCase();
+            }
+        }
+        return norm.toLowerCase();
     }
 
     function rebuildAliasMap() {
@@ -105,14 +120,18 @@ Singleton {
             }
         }
 
-        // Pass 3: Icon, Exec binary, clean Name, and secondary aliases
+        // Pass 3: Reverse-DNS basename of canonical ID and Exec binary
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
             if (!app) continue;
-            if (app.icon) {
-                const cleanIcon = app.icon.toLowerCase().replace(/\.desktop$/, "");
-                if (!isIgnoredAlias(cleanIcon) && !map[cleanIcon]) {
-                    map[cleanIcon] = app;
+            if (app.id) {
+                const cleanId = app.id.toLowerCase().replace(/\.desktop$/, "");
+                const dotParts = cleanId.split(".");
+                if (dotParts.length > 1) {
+                    const lastPart = dotParts[dotParts.length - 1];
+                    if (!isIgnoredAlias(lastPart) && !map[lastPart]) {
+                        map[lastPart] = app;
+                    }
                 }
             }
             if (app.execBinary) {
@@ -121,22 +140,50 @@ Singleton {
                     map[eb] = app;
                 }
             }
+        }
+
+        // Pass 4: Clean Name and Icon
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app) continue;
             if (app.name) {
                 const cleanName = app.name.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
                 if (!isIgnoredAlias(cleanName) && !map[cleanName]) {
                     map[cleanName] = app;
                 }
             }
-            if (app.aliases && Array.isArray(app.aliases)) {
-                for (let a = 0; a < app.aliases.length; a++) {
-                    const alias = app.aliases[a].toLowerCase();
-                    if (!isIgnoredAlias(alias) && !map[alias]) {
-                        map[alias] = app;
-                    }
+            if (app.icon) {
+                const cleanIcon = app.icon.toLowerCase().replace(/\.desktop$/, "");
+                if (!isIgnoredAlias(cleanIcon) && !map[cleanIcon]) {
+                    map[cleanIcon] = app;
+                }
+            }
+        }
+
+        // Pass 5: Secondary aliases
+        for (let i = 0; i < root.applications.length; i++) {
+            const app = root.applications[i];
+            if (!app || !app.aliases || !Array.isArray(app.aliases)) continue;
+            for (let a = 0; a < app.aliases.length; a++) {
+                const alias = app.aliases[a].toLowerCase();
+                if (!isIgnoredAlias(alias) && !map[alias]) {
+                    map[alias] = app;
                 }
             }
         }
         root.aliasMap = map;
+
+        if (typeof ConfigService.canonicalAppIdResolver !== "function") {
+            ConfigService.canonicalAppIdResolver = function(rawId) {
+                return root.resolveCanonicalAppId(rawId);
+            };
+        }
+        if (root.applications.length > 0 && ConfigService.dockPinned && ConfigService.dockPinned.length > 1) {
+            const deduped = ConfigService.sanitizeDockPinned(ConfigService.dockPinned);
+            if (deduped.length !== ConfigService.dockPinned.length) {
+                ConfigService.dockPinned = deduped;
+            }
+        }
     }
 
     Process {
@@ -225,6 +272,10 @@ Singleton {
         const cleanNeedle = needle.replace(/\.desktop$/, "");
         if (isIgnoredAlias(cleanNeedle)) return null;
 
+        if (root.applications.length > 0 && (!root.aliasMap || Object.keys(root.aliasMap).length === 0)) {
+            root.rebuildAliasMap();
+        }
+
         // 1. Direct aliasMap index lookup (O(1))
         if (root.aliasMap) {
             if (root.aliasMap[needle]) return root.aliasMap[needle];
@@ -247,8 +298,8 @@ Singleton {
         for (let i = 0; i < root.applications.length; i++) {
             const app = root.applications[i];
             if (!app) continue;
-            if (app.icon && app.icon.toLowerCase().replace(/\.desktop$/, "") === cleanNeedle) return app;
             if (app.execBinary && app.execBinary.toLowerCase() === cleanNeedle) return app;
+            if (app.icon && app.icon.toLowerCase().replace(/\.desktop$/, "") === cleanNeedle) return app;
             if (app.aliases && app.aliases.indexOf(cleanNeedle) !== -1) return app;
         }
         return null;
@@ -258,13 +309,23 @@ Singleton {
         if (!root.applications || root.applications.length === 0) return null;
 
         // Window titles are content, never application identity.
-        // Resolve strictly from KWin metadata: desktopFile -> resourceClass -> resourceName -> iconName
-        const candidates = [desktopFile, resourceClass, resourceName, iconName];
-        for (let i = 0; i < candidates.length; i++) {
-            const raw = String(candidates[i] || "").trim().toLowerCase();
+        // Resolve strictly from KWin metadata: desktopFile -> resourceClass -> resourceName.
+        // Only fall back to iconName when KWin metadata is absent/empty so an unknown app
+        // with explicit metadata never hijacks an unrelated app via a shared generic icon.
+        const metaCandidates = [desktopFile, resourceClass, resourceName];
+        let hadValidMeta = false;
+        for (let i = 0; i < metaCandidates.length; i++) {
+            const raw = String(metaCandidates[i] || "").trim().toLowerCase();
             if (!raw || isIgnoredAlias(raw)) continue;
+            hadValidMeta = true;
             const matched = getAppById(raw);
             if (matched) return matched;
+        }
+        if (hadValidMeta) return null;
+
+        const rawIcon = String(iconName || "").trim().toLowerCase();
+        if (rawIcon && !isIgnoredAlias(rawIcon)) {
+            return getAppById(rawIcon);
         }
 
         return null;
@@ -374,19 +435,41 @@ Singleton {
 
     function pinAppAt(appId, targetIndex) {
         if (!appId || typeof appId !== "string") return false;
+        const norm = ConfigService.normalizeDockAppId(appId);
+        if (!norm || isIgnoredAlias(norm)) return false;
         if (isPinned(appId)) return false;
         if (!getAppById(appId)) return false;
+
+        const visibleBefore = (root.applications && root.applications.length > 0)
+            ? root.pinnedApps.slice()
+            : ConfigService.sanitizeDockPinned(ConfigService.dockPinned);
+        if (targetIndex !== undefined && targetIndex !== null) {
+            if (typeof targetIndex !== "number" || !Number.isInteger(targetIndex) ||
+                targetIndex < 0 || targetIndex > visibleBefore.length) {
+                return false;
+            }
+        }
+
+        const rawBefore = ConfigService.sanitizeDockPinned(ConfigService.dockPinned);
         if (!togglePin(appId)) return false;
         if (typeof targetIndex === "number" && Number.isInteger(targetIndex)) {
             const newIdx = getPinnedIndex(appId);
-            if (newIdx > 0) {
-                const clamped = Math.max(0, Math.min(newIdx, targetIndex));
-                if (clamped !== newIdx) {
-                    reorderPinnedApps(newIdx, clamped);
-                }
+            if (newIdx < 0) {
+                ConfigService.dockPinned = rawBefore;
+                ConfigService.saveDockConfig();
+                return false;
+            }
+            const clamped = Math.max(0, Math.min(newIdx, targetIndex));
+            if (newIdx > 0 && clamped !== newIdx) {
+                reorderPinnedApps(newIdx, clamped);
+            }
+            if (getPinnedIndex(appId) !== clamped) {
+                ConfigService.dockPinned = rawBefore;
+                ConfigService.saveDockConfig();
+                return false;
             }
         }
-        return true;
+        return isPinned(appId);
     }
 
     function getPinnedIndex(appId) {
@@ -450,12 +533,26 @@ Singleton {
             return ConfigService.reorderDockPinned(fromIndexOrAppId, toIndexOrAppId);
         }
         if (typeof fromIndexOrAppId === "string" && typeof toIndexOrAppId === "string") {
-            return ConfigService.reorderDockPinnedByAppId(resolvePinnedKey(fromIndexOrAppId), resolvePinnedKey(toIndexOrAppId));
+            const fromKey = resolvePinnedKey(fromIndexOrAppId);
+            const toKey = resolvePinnedKey(toIndexOrAppId);
+            if (!fromKey || !toKey) return false;
+            if (root.applications && root.applications.length > 0) {
+                const visible = root.pinnedApps;
+                const fromVisIdx = ConfigService.findDockPinnedIndex(fromKey, visible);
+                const toVisIdx = ConfigService.findDockPinnedIndex(toKey, visible);
+                if (fromVisIdx === -1 || toVisIdx === -1 || fromVisIdx === toVisIdx) {
+                    return false;
+                }
+            }
+            return ConfigService.reorderDockPinnedByAppId(fromKey, toKey);
         }
         return false;
     }
 
     Component.onCompleted: {
+        ConfigService.canonicalAppIdResolver = function(rawId) {
+            return root.resolveCanonicalAppId(rawId);
+        };
         scanApplications();
     }
 }

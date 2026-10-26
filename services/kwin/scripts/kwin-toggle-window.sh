@@ -9,39 +9,41 @@
 TARGET_ID="$1"
 [ -z "$TARGET_ID" ] && exit 0
 
-CLEAN_ID=$(echo "$TARGET_ID" | sed 's/^0_//; s/[{}]//g' | tr '[:upper:]' '[:lower:]')
+CLEAN_ID=$(printf '%s' "$TARGET_ID" | sed 's/^0_//; s/[{}]//g' | tr '[:upper:]' '[:lower:]')
+case "$CLEAN_ID" in
+    ''|*[!0-9a-f-]*)
+        exit 1
+        ;;
+esac
 FORMATTED_ID="{$CLEAN_ID}"
 
-if command -v kdotool >/dev/null 2>&1; then
-    ACTIVE_WIN=$(kdotool getactivewindow 2>/dev/null | tr '[:upper:]' '[:lower:]')
-    if [ "$ACTIVE_WIN" = "$FORMATTED_ID" ]; then
-        kdotool windowminimize "$FORMATTED_ID" 2>/dev/null
-    else
-        kdotool windowactivate "$FORMATTED_ID" 2>/dev/null
-    fi
-    exit 0
-fi
-
-TMP_SCRIPT="/tmp/kwin_toggle_${CLEAN_ID}_$$.js"
-PLUGIN_NAME="toggle_${CLEAN_ID}_$$"
-
-cat << SCRIPT_EOF > "$TMP_SCRIPT"
-var target = "${CLEAN_ID}";
+JS_CODE="var target = \"${CLEAN_ID}\";
 var wins = workspace.windowList();
 for (var i = 0; i < wins.length; i++) {
     var w = wins[i];
-    var wid = w.internalId.toString().replace(/[{}]/g, "").toLowerCase();
+    var wid = w.internalId.toString().replace(/[{}]/g, \"\").toLowerCase();
     if (wid === target) {
         if (w.active && !w.minimized) {
-            w.minimized = true;
+            if (w.minimizable !== false) {
+                w.minimized = true;
+            }
         } else {
             w.minimized = false;
             workspace.activeWindow = w;
         }
         break;
     }
-}
-SCRIPT_EOF
+}"
+
+if command -v kdotool >/dev/null 2>&1; then
+    kdotool kwinscript --inline "$JS_CODE" >/dev/null 2>&1 && exit 0
+fi
+
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+TMP_SCRIPT="${RUNTIME_DIR}/kwin_toggle_${CLEAN_ID}_$$.js"
+PLUGIN_NAME="toggle_${CLEAN_ID}_$$"
+
+printf '%s\n' "$JS_CODE" > "$TMP_SCRIPT"
 
 SCRIPT_ID=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$TMP_SCRIPT" "$PLUGIN_NAME" 2>/dev/null || true)
 if [ -n "$SCRIPT_ID" ] && [ "$SCRIPT_ID" -ge 0 ] 2>/dev/null; then

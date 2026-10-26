@@ -93,14 +93,15 @@ Singleton {
             onRead: data => { activeWindowProc.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0) {
-                const wid = activeWindowProc.buf.trim();
+            const raw = activeWindowProc.buf.trim();
+            activeWindowProc.buf = "";
+            if (exitCode === 0) {
+                const wid = (raw === "null") ? "" : raw;
                 if (root.activeWindowId !== wid) {
                     root.activeWindowId = wid;
                     root.activeWindowChanged(wid);
                 }
             }
-            activeWindowProc.buf = "";
         }
     }
 

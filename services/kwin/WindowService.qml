@@ -27,7 +27,9 @@ Singleton {
             root.refreshWindows();
         }
         function onActiveWindowChanged(windowId) {
-            root.activeWindowId = root.cleanWindowId(windowId);
+            if (root.outputsOverride === null) {
+                root.handleActiveWindowOutput(windowId);
+            }
         }
     }
 
@@ -35,6 +37,10 @@ Singleton {
     Connections {
         target: ApplicationService
         function onApplicationsChanged() {
+            ApplicationService.rebuildAliasMap();
+            if (root.lastScannerRawText && root.lastScannerRawText.length > 0) {
+                root.parseWindowsOutput(root.lastScannerRawText);
+            }
             root.refreshWindows();
         }
     }
@@ -50,14 +56,22 @@ Singleton {
         id: windowScanner
         command: ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Match", ""]
         property string buf: ""
+        property bool scanPending: false
         stdout: SplitParser {
             onRead: data => { windowScanner.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && windowScanner.buf.length > 0 && root.outputsOverride === null) {
-                root.handleScannerOutput(windowScanner.buf);
-            }
+            const raw = windowScanner.buf;
             windowScanner.buf = "";
+            if (exitCode === 0 && raw.length > 0 && root.outputsOverride === null) {
+                root.handleScannerOutput(raw);
+            }
+            if (windowScanner.scanPending && exitCode === 0 && KWinService.isKWin && root.outputsOverride === null) {
+                windowScanner.scanPending = false;
+                windowScanner.running = true;
+            } else {
+                windowScanner.scanPending = false;
+            }
         }
     }
 
@@ -75,6 +89,7 @@ Singleton {
                 root.parseMetaOutput(raw);
             } else if (root.inFlightWids && root.inFlightWids.length > 0) {
                 // Empty output or process failure: count failure for in-flight windows
+                let updated = false;
                 for (let i = 0; i < root.inFlightWids.length; i++) {
                     const wid = root.inFlightWids[i];
                     if (!wid || !root.isWindowStillActive(wid)) continue;
@@ -86,11 +101,27 @@ Singleton {
                             resourceClass: "",
                             resourceName: ""
                         };
+                        updated = true;
                     }
+                }
+                if (updated && root.lastScannerRawText.length > 0) {
+                    root.parseWindowsOutput(root.lastScannerRawText);
                 }
             }
             root.inFlightWids = [];
-            // Retries happen on subsequent controlled scanner ticks, preventing busy loops
+            if (exitCode === 0 && root.outputsOverride === null && root.latestRunnerWids) {
+                const activeKeys = Object.keys(root.latestRunnerWids);
+                const newlyUncached = [];
+                for (let i = 0; i < activeKeys.length; i++) {
+                    const k = activeKeys[i];
+                    if (!root.metadataCache[k] && !root.metaRetries[k]) {
+                        newlyUncached.push(k);
+                    }
+                }
+                if (newlyUncached.length > 0) {
+                    root.queryNewWindowMetadata(newlyUncached);
+                }
+            }
         }
     }
 
@@ -110,13 +141,11 @@ Singleton {
         const re = /\[Argument:\s*\(sssida\{sv\}\)\s*"([^"]*)"/g;
         let m;
         const activeWids = {};
-        const activeCleanWids = {};
         const uncached = [];
         while ((m = re.exec(text)) !== null) {
             const wid = m[1];
             if (!wid) continue;
             activeWids[wid] = true;
-            activeCleanWids[root.cleanWindowId(wid)] = true;
             if (!root.metadataCache[wid]) {
                 uncached.push(wid);
             }
@@ -124,41 +153,6 @@ Singleton {
         root.latestRunnerWids = activeWids;
 
         root.parseWindowsOutput(text);
-
-        if (root.activeWindowId && !activeCleanWids[root.activeWindowId]) {
-            root.activeWindowId = "";
-        }
-
-        // Prune closed windows from cache, retry tracker, and output map
-        const cachedKeys = Object.keys(root.metadataCache);
-        for (let i = 0; i < cachedKeys.length; i++) {
-            const k = cachedKeys[i];
-            if (!activeWids[k]) {
-                delete root.metadataCache[k];
-                delete root.metaRetries[k];
-            }
-        }
-        const retryKeys = Object.keys(root.metaRetries);
-        for (let i = 0; i < retryKeys.length; i++) {
-            const rk = retryKeys[i];
-            if (!activeWids[rk]) {
-                delete root.metaRetries[rk];
-            }
-        }
-        const outKeys = Object.keys(root.windowOutputs || {});
-        let outPruned = false;
-        const nextOuts = {};
-        for (let i = 0; i < outKeys.length; i++) {
-            const ok = outKeys[i];
-            if (activeCleanWids[ok]) {
-                nextOuts[ok] = root.windowOutputs[ok];
-            } else {
-                outPruned = true;
-            }
-        }
-        if (outPruned) {
-            root.windowOutputs = nextOuts;
-        }
 
         // Fetch metadata for new windows only (on controlled ticks, not tight loops)
         if (uncached.length > 0 && !metaProc.running) {
@@ -193,13 +187,16 @@ Singleton {
     function parseMetaOutput(text) {
         if (!text) return;
         let updated = false;
+        const handledWids = {};
 
         // Parse successful metadata queries
         const metaRe = /===KWIN_META:([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)\t([^\t\r\n]*)===/g;
         let m;
         while ((m = metaRe.exec(text)) !== null) {
             const mWid = m[1];
-            if (!mWid || !root.isWindowStillActive(mWid)) continue; // Discard closed windows
+            if (!mWid) continue;
+            handledWids[mWid] = true;
+            if (!root.isWindowStillActive(mWid)) continue; // Discard closed windows
             root.metadataCache[mWid] = {
                 desktopFile: (m[2] || "").trim(),
                 resourceClass: (m[3] || "").trim(),
@@ -214,7 +211,9 @@ Singleton {
         let fm;
         while ((fm = failRe.exec(text)) !== null) {
             const fWid = fm[1];
-            if (!fWid || !root.isWindowStillActive(fWid)) continue;
+            if (!fWid) continue;
+            handledWids[fWid] = true;
+            if (!root.isWindowStillActive(fWid)) continue;
             const retries = (root.metaRetries[fWid] || 0) + 1;
             root.metaRetries[fWid] = retries;
             if (retries >= 3) {
@@ -228,9 +227,53 @@ Singleton {
             }
         }
 
+        if (root.inFlightWids && root.inFlightWids.length > 0) {
+            for (let i = 0; i < root.inFlightWids.length; i++) {
+                const wid = root.inFlightWids[i];
+                if (!wid || handledWids[wid] || !root.isWindowStillActive(wid)) continue;
+                const retries = (root.metaRetries[wid] || 0) + 1;
+                root.metaRetries[wid] = retries;
+                if (retries >= 3) {
+                    root.metadataCache[wid] = {
+                        desktopFile: "",
+                        resourceClass: "",
+                        resourceName: ""
+                    };
+                    updated = true;
+                }
+            }
+        }
+
         if (updated && root.lastScannerRawText.length > 0) {
             root.parseWindowsOutput(root.lastScannerRawText);
         }
+    }
+
+    function handleActiveWindowOutput(rawText) {
+        const trimmed = String(rawText || "").trim();
+        if (!trimmed || trimmed === "null") {
+            if (root.activeWindowId !== "") {
+                root.activeWindowId = "";
+            }
+            return "";
+        }
+        const wid = root.cleanWindowId(trimmed);
+        if (!wid || !root.isValidWindowUuid(wid)) {
+            if (root.activeWindowId !== "") {
+                root.activeWindowId = "";
+            }
+            return "";
+        }
+        if (root.windows && root.windows.length > 0 && !root.findWindowById(wid)) {
+            if (root.activeWindowId !== "") {
+                root.activeWindowId = "";
+            }
+            return "";
+        }
+        if (root.activeWindowId !== wid) {
+            root.activeWindowId = wid;
+        }
+        return wid;
     }
 
     // Process to query active window from KWin via kdotool
@@ -242,13 +285,11 @@ Singleton {
             onRead: data => { activeWindowProc.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0 && root.outputsOverride === null) {
-                const wid = root.cleanWindowId(activeWindowProc.buf.trim());
-                if (wid.length > 0 && root.activeWindowId !== wid) {
-                    root.activeWindowId = wid;
-                }
-            }
+            const raw = activeWindowProc.buf;
             activeWindowProc.buf = "";
+            if (exitCode === 0 && root.outputsOverride === null) {
+                root.handleActiveWindowOutput(raw);
+            }
         }
     }
 
@@ -264,13 +305,14 @@ Singleton {
         }
     }
 
-    // Prompt reconciliation timer after user-initiated close/move actions
+    // Prompt reconciliation timer after user-initiated activate/toggle/close/move actions
     Timer {
         id: actionReconcileTimer
         interval: 180
         repeat: false
         onTriggered: {
             root.refreshWindows();
+            root.refreshActiveWindow();
             root.refreshWindowOutputs();
         }
     }
@@ -285,10 +327,13 @@ Singleton {
 
     function refreshWindows() {
         if (!KWinService.isKWin || root.outputsOverride !== null) return;
-        if (!windowScanner.running) {
-            windowScanner.buf = "";
-            windowScanner.running = true;
+        if (windowScanner.running) {
+            windowScanner.scanPending = true;
+            return;
         }
+        windowScanner.scanPending = false;
+        windowScanner.buf = "";
+        windowScanner.running = true;
     }
 
     function parseWindowsOutput(text, metaOverride) {
@@ -318,13 +363,16 @@ Singleton {
         let match;
         const list = [];
         const seenIds = {};
+        const activeCleanWids = {};
         const appIdsSet = {};
         const appIdsList = [];
+        const prevWindows = root.windows ? root.windows.slice() : [];
 
         while ((match = re.exec(text)) !== null) {
             const wid = match[1];
             if (!wid || seenIds[wid]) continue;
             seenIds[wid] = true;
+            activeCleanWids[root.cleanWindowId(wid)] = true;
 
             const title = match[2].replace(/\\"/g, '"');
             const icon = match[3];
@@ -333,7 +381,7 @@ Singleton {
             const resourceClass = (meta.resourceClass || "").trim();
             const resourceName = (meta.resourceName || "").trim();
 
-            if (!title && !icon && !desktopFile && !resourceClass) continue;
+            if (!title && !icon && !desktopFile && !resourceClass && !resourceName) continue;
 
             const app = ApplicationService.findAppByTitleOrIcon(title, icon, desktopFile, resourceClass, resourceName);
             const rawMetaClass = (desktopFile || resourceClass || resourceName).toLowerCase().replace(/\.desktop$/, "");
@@ -372,16 +420,124 @@ Singleton {
             }
         }
 
+        root.latestRunnerWids = seenIds;
         root.windows = list;
         root.windowCount = list.length;
         root.runningAppIds = appIdsList;
 
-        const cycleKeys = Object.keys(root.appCycleIndices || {});
-        for (let c = 0; c < cycleKeys.length; c++) {
-            const ck = cycleKeys[c];
+        if (root.activeWindowId && !activeCleanWids[root.activeWindowId]) {
+            root.activeWindowId = "";
+        }
+
+        // Prune closed windows from cache, retry tracker, and output map before emitting windowsUpdated
+        const cachedKeys = Object.keys(root.metadataCache);
+        for (let i = 0; i < cachedKeys.length; i++) {
+            const k = cachedKeys[i];
+            if (!seenIds[k]) {
+                delete root.metadataCache[k];
+                delete root.metaRetries[k];
+            }
+        }
+        const retryKeys = Object.keys(root.metaRetries);
+        for (let i = 0; i < retryKeys.length; i++) {
+            const rk = retryKeys[i];
+            if (!seenIds[rk]) {
+                delete root.metaRetries[rk];
+            }
+        }
+        const outKeys = Object.keys(root.windowOutputs || {});
+        let outPruned = false;
+        const nextOuts = {};
+        for (let i = 0; i < outKeys.length; i++) {
+            const ok = outKeys[i];
+            if (activeCleanWids[ok]) {
+                nextOuts[ok] = root.windowOutputs[ok];
+            } else {
+                outPruned = true;
+            }
+        }
+        if (outPruned) {
+            root.windowOutputs = nextOuts;
+        }
+
+        // Reconcile window cycling state across window open/close and late app resolution
+        const rawCycleKeys = Object.keys(root.appCycleIndices || {});
+        const rawWidKeys = Object.keys(root.appCycleWindowIds || {});
+        for (let i = 0; i < rawWidKeys.length; i++) {
+            if (rawCycleKeys.indexOf(rawWidKeys[i]) === -1) {
+                rawCycleKeys.push(rawWidKeys[i]);
+            }
+        }
+        for (let c = 0; c < rawCycleKeys.length; c++) {
+            const oldKey = rawCycleKeys[c];
+            let ck = oldKey;
+            if (oldKey.indexOf("window-") === 0) {
+                const stripped = oldKey.substring(7);
+                const resolvedCanon = root.normalizeCycleAppKey(stripped);
+                if (resolvedCanon && resolvedCanon !== oldKey && root.isAppRunning(resolvedCanon)) {
+                    if (root.appCycleIndices[resolvedCanon] === undefined && root.appCycleIndices[oldKey] !== undefined) {
+                        root.appCycleIndices[resolvedCanon] = root.appCycleIndices[oldKey];
+                    }
+                    if (root.appCycleWindowIds[resolvedCanon] === undefined && root.appCycleWindowIds[oldKey] !== undefined) {
+                        root.appCycleWindowIds[resolvedCanon] = root.appCycleWindowIds[oldKey];
+                    }
+                    delete root.appCycleIndices[oldKey];
+                    delete root.appCycleWindowIds[oldKey];
+                    ck = resolvedCanon;
+                }
+            }
             if (!root.isAppRunning(ck)) {
                 delete root.appCycleIndices[ck];
                 delete root.appCycleWindowIds[ck];
+                continue;
+            }
+            const newWins = root.getWindowsForApp(ck);
+            const lastWid = root.appCycleWindowIds[ck] || "";
+            if (!lastWid) continue;
+            let stillIdx = -1;
+            for (let nw = 0; nw < newWins.length; nw++) {
+                if (root.cleanWindowId(newWins[nw].id) === lastWid) {
+                    stillIdx = nw;
+                    break;
+                }
+            }
+            if (stillIdx !== -1) {
+                root.appCycleIndices[ck] = stillIdx;
+            } else {
+                // lastWid disappeared; locate its successor in prevWindows among surviving newWins
+                const appObj = ApplicationService.getAppById(ck);
+                const targetId = appObj ? appObj.id.toLowerCase().replace(/\.desktop$/, "") : String(ck).toLowerCase().replace(/\.desktop$/, "");
+                const aliases = appObj && appObj.aliases ? appObj.aliases : [targetId];
+                const prevAppWins = [];
+                let prevLastIdx = -1;
+                for (let pw = 0; pw < prevWindows.length; pw++) {
+                    const pWin = prevWindows[pw];
+                    if (root.matchesAppWindow(pWin, appObj, ck, targetId, aliases)) {
+                        if (root.cleanWindowId(pWin.id) === lastWid) {
+                            prevLastIdx = prevAppWins.length;
+                        }
+                        prevAppWins.push(pWin);
+                    }
+                }
+                delete root.appCycleWindowIds[ck];
+                if (prevLastIdx !== -1 && prevAppWins.length > 1) {
+                    let mappedSuccessorIdx = 0;
+                    for (let step = 1; step < prevAppWins.length; step++) {
+                        const candClean = root.cleanWindowId(prevAppWins[(prevLastIdx + step) % prevAppWins.length].id);
+                        let foundNewIdx = -1;
+                        for (let nw = 0; nw < newWins.length; nw++) {
+                            if (root.cleanWindowId(newWins[nw].id) === candClean) {
+                                foundNewIdx = nw;
+                                break;
+                            }
+                        }
+                        if (foundNewIdx !== -1) {
+                            mappedSuccessorIdx = foundNewIdx;
+                            break;
+                        }
+                    }
+                    root.appCycleIndices[ck] = mappedSuccessorIdx;
+                }
             }
         }
 
@@ -390,15 +546,24 @@ Singleton {
 
     function matchesAppWindow(w, app, appId, targetId, aliases) {
         if (!w) return false;
+        if (w.app && app) {
+            const wCanon = (w.app.id || "").toLowerCase().replace(/\.desktop$/, "");
+            return wCanon.length > 0 && wCanon === targetId;
+        }
+        if (w.app && !app) {
+            return false;
+        }
         const wAppId = (w.appId || "").toLowerCase().replace(/\.desktop$/, "");
         const wIcon = (w.rawIcon || w.icon || "").toLowerCase().replace(/\.desktop$/, "");
         const wDesktop = (w.desktopFile || "").toLowerCase().replace(/\.desktop$/, "");
         const wClass = (w.resourceClass || "").toLowerCase().replace(/\.desktop$/, "");
+        const wResName = (w.resourceName || "").toLowerCase().replace(/\.desktop$/, "");
         if (wAppId === targetId || w.appId === (app ? app.id : appId)) return true;
         if (wDesktop.length > 0 && (wDesktop === targetId || aliases.indexOf(wDesktop) !== -1)) return true;
         if (wClass.length > 0 && (wClass === targetId || aliases.indexOf(wClass) !== -1)) return true;
+        if (wResName.length > 0 && (wResName === targetId || aliases.indexOf(wResName) !== -1)) return true;
         if (aliases.indexOf(wAppId) !== -1) return true;
-        if (wIcon.length > 0 && wIcon !== "application-x-executable" && aliases.indexOf(wIcon) !== -1) return true;
+        if (!wDesktop && !wClass && !wResName && wIcon.length > 0 && wIcon !== "application-x-executable" && aliases.indexOf(wIcon) !== -1) return true;
         return false;
     }
 
@@ -609,6 +774,7 @@ Singleton {
         root.lastExecutedAction = { action: "activate", windowId: win.id, cleanId: clean };
         if (KWinService.isKWin && root.outputsOverride === null) {
             Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", win.id, ""]);
+            actionReconcileTimer.restart();
         }
         return true;
     }
@@ -669,6 +835,7 @@ Singleton {
         if (KWinService.isKWin && root.outputsOverride === null) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
             Quickshell.execDetached([scriptPath, win.id]);
+            actionReconcileTimer.restart();
         }
         return true;
     }

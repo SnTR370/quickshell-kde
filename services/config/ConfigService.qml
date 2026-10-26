@@ -43,7 +43,8 @@ Singleton {
     property int dockHideDelay: 350
     property int dockRevealDelay: 120
     property var dockMonitors: "all"
-    property var dockPinned: []
+    property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
+    property var canonicalAppIdResolver: null
 
     // --- Window Visibility State ---
     property bool launcherVisible: false
@@ -194,7 +195,7 @@ Singleton {
             "position": "top",
             "edgeOffset": 8,
             "reserveSpace": false,
-            "height": 44,
+            "height": 30,
             "left": ["launcher", "workspaces"],
             "center": ["clock"],
             "right": ["media", "tray", "network", "battery", "audio", "brightness", "controlcenter", "power"],
@@ -205,20 +206,32 @@ Singleton {
             "trayItemPolicies": {},
             "controlCenterMigrated": true
         })
+        property var modifiedBeforeLoad: ({})
+        property bool saveRequestedBeforeLoad: false
         onLoadedValue: (parsed, _) => {
-            if (parsed.enabled !== undefined) root.barEnabled = parsed.enabled;
-            if (parsed.floating !== undefined) root.barFloating = parsed.floating;
-            if (parsed.edge) root.barEdge = parsed.edge;
-            else if (parsed.position) root.barEdge = parsed.position;
-            if (parsed.edgeOffset !== undefined) root.barEdgeOffset = Math.max(0, Math.min(64, parsed.edgeOffset));
-            if (parsed.reserveSpace !== undefined) root.barReserveSpace = parsed.reserveSpace;
-            if (parsed.height !== undefined) root.barHeight = Math.max(24, Math.min(120, parsed.height));
-            if (parsed.left) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
-            if (parsed.center) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
-            if (parsed.right) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
+            if (!parsed || typeof parsed !== "object" || parsed.length !== undefined) return;
+            const mod = barStore.modifiedBeforeLoad || {};
+            if (typeof parsed.enabled === "boolean" && !mod["enabled"]) root.barEnabled = parsed.enabled;
+            if (typeof parsed.floating === "boolean" && !mod["floating"]) root.barFloating = parsed.floating;
+            if (!mod["edge"]) {
+                const rawEdge = parsed.edge || parsed.position || "";
+                if (rawEdge === "top" || rawEdge === "bottom" || rawEdge === "left" || rawEdge === "right") {
+                    root.barEdge = rawEdge;
+                }
+            }
+            if (typeof parsed.edgeOffset === "number" && Number.isFinite(parsed.edgeOffset) && !mod["edgeOffset"]) {
+                root.barEdgeOffset = Math.max(0, Math.min(64, Math.trunc(parsed.edgeOffset)));
+            }
+            if (typeof parsed.reserveSpace === "boolean" && !mod["reserveSpace"]) root.barReserveSpace = parsed.reserveSpace;
+            if (typeof parsed.height === "number" && Number.isFinite(parsed.height) && !mod["height"]) {
+                root.barHeight = Math.max(24, Math.min(120, Math.trunc(parsed.height)));
+            }
+            if (parsed.left && !mod["left"]) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
+            if (parsed.center && !mod["center"]) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
+            if (parsed.right && !mod["right"]) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
             if (parsed.controlCenterMigrated === true) {
                 root.controlCenterMigrated = true;
-            } else {
+            } else if (!mod["right"]) {
                 const hasCC = (root.barLeft.indexOf("controlcenter") !== -1) ||
                               (root.barCenter.indexOf("controlcenter") !== -1) ||
                               (root.barRight.indexOf("controlcenter") !== -1);
@@ -234,13 +247,17 @@ Singleton {
                 }
                 root.controlCenterMigrated = true;
             }
-            if (parsed.opacity !== undefined) root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
-            if (parsed.monitors !== undefined) {
+            if (typeof parsed.opacity === "number" && Number.isFinite(parsed.opacity) && !mod["opacity"]) {
+                root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
+            }
+            if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
             }
-            if (parsed.blur !== undefined) root.blurEnabled = parsed.blur;
-            if (parsed.notificationsEnabled !== undefined) root.notificationsEnabled = parsed.notificationsEnabled;
-            if (parsed.trayItemPolicies && typeof parsed.trayItemPolicies === "object" && !Array.isArray(parsed.trayItemPolicies)) {
+            if (typeof parsed.blur === "boolean" && !mod["blur"]) root.blurEnabled = parsed.blur;
+            if (typeof parsed.notificationsEnabled === "boolean" && !mod["notificationsEnabled"]) {
+                root.notificationsEnabled = parsed.notificationsEnabled;
+            }
+            if (parsed.trayItemPolicies && typeof parsed.trayItemPolicies === "object" && parsed.trayItemPolicies.length === undefined && !mod["trayItemPolicies"]) {
                 const cleanPolicies = {};
                 for (const k in parsed.trayItemPolicies) {
                     const key = String(k || "").trim();
@@ -250,22 +267,20 @@ Singleton {
                 }
                 root.trayItemPolicies = cleanPolicies;
             }
-        }
-        property bool saveInFlight: false
-        property bool savePending: false
-        onSavedValue: {
-            barStore.saveInFlight = false;
-            if (barStore.savePending) {
-                barStore.savePending = false;
+            barStore.modifiedBeforeLoad = ({});
+            if (barStore.saveRequestedBeforeLoad) {
+                barStore.saveRequestedBeforeLoad = false;
                 root.saveBarConfig();
             }
         }
         onFailed: (phase, _, __) => {
-            if (phase === "write" || phase === "serialize") {
-                barStore.saveInFlight = false;
-                if (barStore.savePending) {
-                    barStore.savePending = false;
+            if (phase === "read" || phase === "parse") {
+                barStore.modifiedBeforeLoad = ({});
+                if (barStore.saveRequestedBeforeLoad && phase !== "parse") {
+                    barStore.saveRequestedBeforeLoad = false;
                     root.saveBarConfig();
+                } else {
+                    barStore.saveRequestedBeforeLoad = false;
                 }
             }
         }
@@ -287,51 +302,86 @@ Singleton {
             "hideDelay": 350,
             "revealDelay": 120,
             "monitors": "all",
-            "pinned": []
+            "pinned": ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
         })
+        property var modifiedBeforeLoad: ({})
+        property bool saveRequestedBeforeLoad: false
         onLoadedValue: (parsed, _) => {
-            if (parsed.enabled !== undefined) root.dockEnabled = parsed.enabled;
-            if (parsed.floating !== undefined) root.dockFloating = parsed.floating;
-            if (parsed.edge) root.dockEdge = parsed.edge;
-            else if (parsed.position) root.dockEdge = parsed.position;
-            if (parsed.edgeOffset !== undefined) root.dockEdgeOffset = Math.max(0, Math.min(64, parsed.edgeOffset));
-            if (parsed.reserveSpace !== undefined) root.dockReserveSpace = parsed.reserveSpace;
-            if (parsed.iconSize !== undefined) root.dockIconSize = Math.max(20, Math.min(128, parsed.iconSize));
-            if (parsed.autoHide !== undefined) root.dockAutoHide = parsed.autoHide;
-            if (parsed.hideDelay !== undefined) root.dockHideDelay = Math.max(50, Math.min(2000, parsed.hideDelay));
-            if (parsed.revealDelay !== undefined) root.dockRevealDelay = Math.max(0, Math.min(1000, parsed.revealDelay));
-            if (parsed.monitors !== undefined) {
+            if (!parsed || typeof parsed !== "object" || parsed.length !== undefined) return;
+            const mod = dockStore.modifiedBeforeLoad || {};
+            if (typeof parsed.enabled === "boolean" && !mod["enabled"]) root.dockEnabled = parsed.enabled;
+            if (typeof parsed.floating === "boolean" && !mod["floating"]) root.dockFloating = parsed.floating;
+            if (!mod["edge"]) {
+                const rawEdge = parsed.edge || parsed.position || "";
+                if (rawEdge === "top" || rawEdge === "bottom" || rawEdge === "left" || rawEdge === "right") {
+                    root.dockEdge = rawEdge;
+                }
+            }
+            if (typeof parsed.edgeOffset === "number" && Number.isFinite(parsed.edgeOffset) && !mod["edgeOffset"]) {
+                root.dockEdgeOffset = Math.max(0, Math.min(64, Math.trunc(parsed.edgeOffset)));
+            }
+            if (typeof parsed.reserveSpace === "boolean" && !mod["reserveSpace"]) root.dockReserveSpace = parsed.reserveSpace;
+            if (typeof parsed.iconSize === "number" && Number.isFinite(parsed.iconSize) && !mod["iconSize"]) {
+                root.dockIconSize = Math.max(20, Math.min(128, Math.trunc(parsed.iconSize)));
+            }
+            if (typeof parsed.autoHide === "boolean" && !mod["autoHide"]) root.dockAutoHide = parsed.autoHide;
+            if (typeof parsed.hideDelay === "number" && Number.isFinite(parsed.hideDelay) && !mod["hideDelay"]) {
+                root.dockHideDelay = Math.max(50, Math.min(2000, Math.trunc(parsed.hideDelay)));
+            }
+            if (typeof parsed.revealDelay === "number" && Number.isFinite(parsed.revealDelay) && !mod["revealDelay"]) {
+                root.dockRevealDelay = Math.max(0, Math.min(1000, Math.trunc(parsed.revealDelay)));
+            }
+            if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
             }
-            if (parsed.pinned) root.dockPinned = root.sanitizeDockPinned(parsed.pinned);
-        }
-        property bool saveInFlight: false
-        property bool savePending: false
-        onSavedValue: {
-            dockStore.saveInFlight = false;
-            if (dockStore.savePending) {
-                dockStore.savePending = false;
+            if (parsed.pinned && typeof parsed.pinned === "object" && parsed.pinned.length !== undefined && !mod["pinned"]) {
+                root.dockPinned = root.sanitizeDockPinned(parsed.pinned);
+            }
+            dockStore.modifiedBeforeLoad = ({});
+            if (dockStore.saveRequestedBeforeLoad) {
+                dockStore.saveRequestedBeforeLoad = false;
                 root.saveDockConfig();
             }
         }
         onFailed: (phase, _, __) => {
-            if (phase === "write" || phase === "serialize") {
-                dockStore.saveInFlight = false;
-                if (dockStore.savePending) {
-                    dockStore.savePending = false;
+            if (phase === "read" || phase === "parse") {
+                dockStore.modifiedBeforeLoad = ({});
+                if (dockStore.saveRequestedBeforeLoad && phase !== "parse") {
+                    dockStore.saveRequestedBeforeLoad = false;
                     root.saveDockConfig();
+                } else {
+                    dockStore.saveRequestedBeforeLoad = false;
                 }
             }
         }
     }
 
+    function _markBarModified(key) {
+        if (!barStore.loaded && key) {
+            barStore.modifiedBeforeLoad[key] = true;
+        }
+    }
+
+    function _markDockModified(key) {
+        if (!dockStore.loaded && key) {
+            dockStore.modifiedBeforeLoad[key] = true;
+        }
+    }
+
+    function reloadBarConfig() {
+        return barStore.load();
+    }
+
+    function reloadDockConfig() {
+        return dockStore.load();
+    }
+
     // --- Bar Operations ---
     function saveBarConfig() {
-        if (barStore.saveInFlight) {
-            barStore.savePending = true;
+        if (!barStore.loaded) {
+            barStore.saveRequestedBeforeLoad = true;
             return;
         }
-        barStore.saveInFlight = true;
         barStore.save({
             "enabled": root.barEnabled,
             "floating": root.barFloating,
@@ -468,22 +518,26 @@ Singleton {
             delete next[raw];
         }
         next[key] = validPolicy;
+        root._markBarModified("trayItemPolicies");
         root.trayItemPolicies = next;
         saveBarConfig();
     }
 
     function setBarEnabled(enabled) {
+        root._markBarModified("enabled");
         root.barEnabled = enabled;
         saveBarConfig();
     }
 
     function setBarFloating(floating) {
+        root._markBarModified("floating");
         root.barFloating = floating;
         saveBarConfig();
     }
 
     function setBarEdge(edge) {
         if (edge === "top" || edge === "bottom" || edge === "left" || edge === "right") {
+            root._markBarModified("edge");
             root.barEdge = edge;
             saveBarConfig();
         }
@@ -494,26 +548,31 @@ Singleton {
     }
 
     function setBarEdgeOffset(offset) {
+        root._markBarModified("edgeOffset");
         root.barEdgeOffset = Math.max(0, Math.min(64, offset));
         saveBarConfig();
     }
 
     function setBarReserveSpace(reserve) {
+        root._markBarModified("reserveSpace");
         root.barReserveSpace = reserve;
         saveBarConfig();
     }
 
     function setBarHeight(h) {
+        root._markBarModified("height");
         root.barHeight = Math.max(24, Math.min(120, h));
         saveBarConfig();
     }
 
     function setBarOpacity(op) {
+        root._markBarModified("opacity");
         root.barOpacity = Math.max(0.1, Math.min(1.0, op));
         saveBarConfig();
     }
 
     function setBarMonitors(m) {
+        root._markBarModified("monitors");
         if (!m || m === "primary" || m === "default" || (Array.isArray(m) && m.length === 0)) {
             root.barMonitors = "all";
         } else {
@@ -555,11 +614,13 @@ Singleton {
     }
 
     function setBlurEnabled(b) {
+        root._markBarModified("blur");
         root.blurEnabled = b;
         saveBarConfig();
     }
 
     function setNotificationsEnabled(n) {
+        root._markBarModified("notificationsEnabled");
         root.notificationsEnabled = n;
         saveBarConfig();
     }
@@ -571,8 +632,22 @@ Singleton {
         if (norm.length <= 1 || !/^[a-zA-Z0-9._-]+$/.test(norm)) return "";
         const lower = norm.toLowerCase();
         if (lower === "env" || lower === "sh" || lower === "bash" ||
+            lower === "flatpak" || lower === "snap" || lower === "xdg-open" ||
+            lower === "gio" || lower === "gtk-launch" || lower === "electron" ||
             lower === "application-x-executable" || lower.indexOf("window-") === 0) {
             return "";
+        }
+        return norm;
+    }
+
+    function resolveCanonicalDockAppKey(appId) {
+        const norm = normalizeDockAppId(appId).toLowerCase();
+        if (!norm) return "";
+        if (typeof root.canonicalAppIdResolver === "function") {
+            const resolved = root.canonicalAppIdResolver(norm);
+            if (resolved && typeof resolved === "string" && resolved.length > 0) {
+                return resolved.trim().toLowerCase().replace(/\.desktop$/i, "");
+            }
         }
         return norm;
     }
@@ -580,7 +655,11 @@ Singleton {
     function dockAppIdsMatch(idA, idB) {
         const normA = normalizeDockAppId(idA).toLowerCase();
         const normB = normalizeDockAppId(idB).toLowerCase();
-        return normA.length > 0 && normA === normB;
+        if (!normA || !normB) return false;
+        if (normA === normB) return true;
+        const canonA = resolveCanonicalDockAppKey(normA);
+        const canonB = resolveCanonicalDockAppKey(normB);
+        return canonA.length > 0 && canonA === canonB;
     }
 
     function sanitizeDockPinned(list) {
@@ -591,8 +670,10 @@ Singleton {
             const norm = normalizeDockAppId(list[i]);
             if (!norm) continue;
             const key = norm.toLowerCase();
-            if (!seen[key]) {
+            const canonKey = resolveCanonicalDockAppKey(norm);
+            if (!seen[key] && (!canonKey || !seen[canonKey])) {
                 seen[key] = true;
+                if (canonKey) seen[canonKey] = true;
                 clean.push(norm);
             }
         }
@@ -609,16 +690,24 @@ Singleton {
                 return i;
             }
         }
+        const canon = resolveCanonicalDockAppKey(norm);
+        if (canon) {
+            for (let i = 0; i < arr.length; i++) {
+                if (resolveCanonicalDockAppKey(arr[i]) === canon) {
+                    return i;
+                }
+            }
+        }
         return -1;
     }
 
     function saveDockConfig() {
+        root._markDockModified("pinned");
         root.dockPinned = sanitizeDockPinned(root.dockPinned);
-        if (dockStore.saveInFlight) {
-            dockStore.savePending = true;
+        if (!dockStore.loaded) {
+            dockStore.saveRequestedBeforeLoad = true;
             return;
         }
-        dockStore.saveInFlight = true;
         dockStore.save({
             "enabled": root.dockEnabled,
             "floating": root.dockFloating,
@@ -636,17 +725,20 @@ Singleton {
     }
 
     function setDockEnabled(enabled) {
+        root._markDockModified("enabled");
         root.dockEnabled = enabled;
         saveDockConfig();
     }
 
     function setDockFloating(floating) {
+        root._markDockModified("floating");
         root.dockFloating = floating;
         saveDockConfig();
     }
 
     function setDockEdge(edge) {
         if (edge === "top" || edge === "bottom" || edge === "left" || edge === "right") {
+            root._markDockModified("edge");
             root.dockEdge = edge;
             saveDockConfig();
         }
@@ -657,36 +749,43 @@ Singleton {
     }
 
     function setDockEdgeOffset(offset) {
+        root._markDockModified("edgeOffset");
         root.dockEdgeOffset = Math.max(0, Math.min(64, offset));
         saveDockConfig();
     }
 
     function setDockReserveSpace(reserve) {
+        root._markDockModified("reserveSpace");
         root.dockReserveSpace = reserve;
         saveDockConfig();
     }
 
     function setDockIconSize(size) {
+        root._markDockModified("iconSize");
         root.dockIconSize = Math.max(20, Math.min(128, size));
         saveDockConfig();
     }
 
     function setDockAutoHide(autoHide) {
+        root._markDockModified("autoHide");
         root.dockAutoHide = autoHide;
         saveDockConfig();
     }
 
     function setDockHideDelay(delay) {
+        root._markDockModified("hideDelay");
         root.dockHideDelay = Math.max(50, Math.min(2000, delay));
         saveDockConfig();
     }
 
     function setDockRevealDelay(delay) {
+        root._markDockModified("revealDelay");
         root.dockRevealDelay = Math.max(0, Math.min(1000, delay));
         saveDockConfig();
     }
 
     function setDockMonitors(m) {
+        root._markDockModified("monitors");
         if (!m || m === "primary" || m === "default" || (Array.isArray(m) && m.length === 0)) {
             root.dockMonitors = "all";
         } else {
@@ -732,6 +831,22 @@ Singleton {
         return findDockPinnedIndex(appId, root.dockPinned) !== -1;
     }
 
+    function insertDockPinnedAt(appId, rawIndex) {
+        const norm = normalizeDockAppId(appId);
+        if (!norm) return false;
+        const current = sanitizeDockPinned(root.dockPinned);
+        if (findDockPinnedIndex(norm, current) !== -1) return false;
+        if (typeof rawIndex !== "number" || !Number.isInteger(rawIndex) ||
+            rawIndex < 0 || rawIndex > current.length) {
+            return false;
+        }
+        current.splice(rawIndex, 0, norm);
+        root._markDockModified("pinned");
+        root.dockPinned = current;
+        saveDockConfig();
+        return true;
+    }
+
     function toggleDockPinned(appId) {
         const norm = normalizeDockAppId(appId);
         if (!norm) return false;
@@ -742,6 +857,7 @@ Singleton {
         } else {
             current.push(norm);
         }
+        root._markDockModified("pinned");
         root.dockPinned = current;
         saveDockConfig();
         return true;
@@ -782,6 +898,7 @@ Singleton {
         }
         const moved = current.splice(fromIndex, 1)[0];
         current.splice(toIndex, 0, moved);
+        root._markDockModified("pinned");
         root.dockPinned = current;
         saveDockConfig();
         return true;

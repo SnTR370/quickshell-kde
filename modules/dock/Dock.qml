@@ -66,20 +66,28 @@ Variants {
             const pinned = ApplicationService.pinnedApps || [];
             const running = WindowService.runningAppIds || [];
             const res = [];
+            const seenCanon = {};
             for (let i = 0; i < running.length; i++) {
                 const r = running[i];
+                if (!r) continue;
                 const app = ApplicationService.getAppById(r);
                 const canonId = app ? app.id : r;
+                const canonKey = String(canonId).toLowerCase().replace(/\.desktop$/, "");
+                const rKey = String(r).toLowerCase().replace(/\.desktop$/, "");
                 let isPinned = false;
                 for (let p = 0; p < pinned.length; p++) {
-                    const pApp = ApplicationService.getAppById(pinned[p]);
-                    const pCanon = pApp ? pApp.id : pinned[p];
-                    if (pCanon === canonId || pinned[p] === r || pinned[p] === canonId) {
+                    const pRaw = pinned[p];
+                    if (!pRaw) continue;
+                    const pApp = ApplicationService.getAppById(pRaw);
+                    const pCanonKey = String(pApp ? pApp.id : pRaw).toLowerCase().replace(/\.desktop$/, "");
+                    const pRawKey = String(pRaw).toLowerCase().replace(/\.desktop$/, "");
+                    if (pCanonKey === canonKey || pRawKey === rKey || pRawKey === canonKey || pCanonKey === rKey) {
                         isPinned = true;
                         break;
                     }
                 }
-                if (!isPinned && res.indexOf(canonId) === -1) {
+                if (!isPinned && canonKey.length > 0 && !seenCanon[canonKey]) {
+                    seenCanon[canonKey] = true;
                     res.push(canonId);
                 }
             }

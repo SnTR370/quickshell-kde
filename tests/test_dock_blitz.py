@@ -1425,5 +1425,506 @@ FloatingWindow {
                 if os.path.exists(probe_path):
                     os.remove(probe_path)
 
+    def test_17_runtime_window_state_reconciliation_identity_and_cycling_reliability(self):
+        """Live QML Runtime Test: Verify late app-index resolution, zero-title windows, shared-icon cross-app isolation, rejected KWin action reconciliation, chooser auto-close, and forward/reverse cycling after start/middle/end window disappearance."""
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_dock_phase_a_reliability_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+Scope {
+    QtObject {
+        id: mockWin
+        property var activePopupItem: null
+        readonly property bool hasActivePopup: activePopupItem !== null
+        property var activeDragItem: null
+        readonly property bool isDragging: activeDragItem !== null
+        property bool isVertical: false
+    }
+
+    DockItem {
+        id: konsoleItem
+        parentWindowRef: mockWin
+        appId: "org.kde.konsole"
+    }
+
+    DockItem {
+        id: qtermItem
+        parentWindowRef: mockWin
+        appId: "org.lxqt.qterminal"
+    }
+
+    DockItem {
+        id: ffItem
+        parentWindowRef: mockWin
+        appId: "org.mozilla.firefox"
+    }
+
+    property string activeDuringUpdateSignal: "UNSET"
+    property int cacheKeysDuringUpdateSignal: -1
+
+    Connections {
+        target: WindowService
+        function onWindowsUpdated() {
+            activeDuringUpdateSignal = WindowService.activeWindowId;
+            cacheKeysDuringUpdateSignal = Object.keys(WindowService.metadataCache).length;
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1", "DP-2"];
+
+            // 1. Windows arrive BEFORE ApplicationService.applications is populated
+            ApplicationService.applications = [];
+            ApplicationService.aliasMap = ({});
+
+            const wKon = "0_{11111111-1111-1111-1111-111111111111}";
+            const wZeroTitle = "0_{12121212-1212-1212-1212-121212121212}";
+            const wQterm = "0_{22222222-2222-2222-2222-222222222222}";
+            const wAlacritty = "0_{33333333-3333-3333-3333-333333333333}";
+
+            const rawPreApps = [
+                '[Argument: (sssida{sv}) "' + wKon + '", "Konsole 1", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wZeroTitle + '", "", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wQterm + '", "QTerminal", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wAlacritty + '", "Alacritty", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + wKon + '\\torg.kde.konsole\\tkonsole\\tkonsole===',
+                '===KWIN_META:' + wZeroTitle + '\\t\\t\\tkonsole===',
+                '===KWIN_META:' + wQterm + '\\torg.lxqt.qterminal\\tqterminal\\tqterminal===',
+                '===KWIN_META:' + wAlacritty + '\\tcom.alacritty.Alacritty\\tAlacritty\\talacritty==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawPreApps);
+            const runningBeforeAppsLoaded = WindowService.runningAppIds.slice();
+            const zeroTitleFoundBefore = WindowService.findWindowById(wZeroTitle) !== null;
+
+            // Pre-app-load cycle state keyed under "window-org.kde.konsole"
+            WindowService.appCycleIndices["window-org.kde.konsole"] = 1;
+            WindowService.appCycleWindowIds["window-org.kde.konsole"] = WindowService.cleanWindowId(wZeroTitle);
+
+            // 2. ApplicationService.applications finishes loading -> WindowService must immediately re-resolve without new KWin poll
+            ApplicationService.applications = [
+                {
+                    id: "org.kde.konsole.desktop",
+                    name: "Konsole",
+                    icon: "utilities-terminal",
+                    startupWMClass: "konsole",
+                    execBinary: "konsole",
+                    aliases: ["org.kde.konsole", "konsole", "utilities-terminal"]
+                },
+                {
+                    id: "org.lxqt.qterminal.desktop",
+                    name: "QTerminal",
+                    icon: "utilities-terminal",
+                    startupWMClass: "qterminal",
+                    execBinary: "qterminal",
+                    aliases: ["org.lxqt.qterminal", "qterminal", "utilities-terminal"]
+                },
+                {
+                    id: "org.mozilla.firefox.desktop",
+                    name: "Firefox",
+                    icon: "org.mozilla.firefox",
+                    startupWMClass: "org.mozilla.firefox",
+                    execBinary: "firefox",
+                    aliases: ["org.mozilla.firefox", "firefox"]
+                }
+            ];
+            ApplicationService.loading = false;
+
+            const runningAfterAppsLoaded = WindowService.runningAppIds.slice();
+            const konsoleWinsCount = WindowService.getWindowsForApp("org.kde.konsole").length;
+            const qtermWinsCount = WindowService.getWindowsForApp("org.lxqt.qterminal").length;
+            const alacrittyAppId = WindowService.findWindowById(wAlacritty).appId;
+            const migratedCycleWid = WindowService.appCycleWindowIds["org.kde.konsole"] || "";
+
+            // 3. Chooser popup auto-closes when windowCount drops from 2 -> 1 -> 0
+            konsoleItem.chooserOpen = true;
+            const popupActiveWhen2Wins = (mockWin.activePopupItem === konsoleItem);
+            const rawOneKonsole = [
+                '[Argument: (sssida{sv}) "' + wKon + '", "Konsole 1", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]'
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawOneKonsole);
+            const chooserOpenAfterDropTo1 = konsoleItem.chooserOpen;
+            const popupClearedAfterDropTo1 = (mockWin.activePopupItem === null);
+
+            // 4. Optimistic activeWindowId reconciliation when KWin rejects activate / minimize
+            WindowService.activateWindow(wKon);
+            const optimisticActive = WindowService.activeWindowId;
+            // KWin reports no active window (e.g. activation rejected or all windows minimized)
+            WindowService.handleActiveWindowOutput("");
+            const activeAfterEmptyReconcile = WindowService.activeWindowId;
+            WindowService.activateWindow(wKon);
+            WindowService.handleActiveWindowOutput("null");
+            const activeAfterNullReconcile = WindowService.activeWindowId;
+            // Toggle minimizes active wKon optimistically (""), but KWin rejects minimize (window not minimizable) and reports wKon still active
+            WindowService.activateWindow(wKon);
+            WindowService.toggleWindow(wKon);
+            const optimisticAfterToggleMinimize = WindowService.activeWindowId;
+            WindowService.handleActiveWindowOutput(wKon);
+            const reconciledAfterRejectedMinimize = WindowService.activeWindowId;
+
+            // 5. Active window closing during polling clears activeWindowId and prunes caches BEFORE windowsUpdated signal fires
+            WindowService.handleScannerOutput("[Argument: a(sssida{sv}) {}]");
+            const activeDuringCloseAllSignal = activeDuringUpdateSignal;
+            const cacheKeysDuringCloseAllSignal = cacheKeysDuringUpdateSignal;
+
+            // 6. Forward and reverse cycling when start, middle, or end window disappears
+            const wFF1 = "0_{aaaa1111-1111-1111-1111-111111111111}";
+            const wFF2 = "0_{bbbb2222-2222-2222-2222-222222222222}";
+            const wFF3 = "0_{cccc3333-3333-3333-3333-333333333333}";
+            const rawThreeFF = [
+                '[Argument: (sssida{sv}) "' + wFF1 + '", "FF 1", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wFF2 + '", "FF 2", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wFF3 + '", "FF 3", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + wFF1 + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:' + wFF2 + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:' + wFF3 + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawThreeFF);
+
+            // 6a. Middle window (wFF2) focused, then wFF2 closes -> reverse cycle must select wFF1 (predecessor)
+            WindowService.activateWindow(wFF2);
+            const rawNoFF2 = [
+                '[Argument: (sssida{sv}) "' + wFF1 + '", "FF 1", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wFF3 + '", "FF 3", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]'
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawNoFF2);
+            ffItem.handleWheel(-120);
+            const revAfterMiddleClose = WindowService.activeWindowId;
+
+            // 6b. End window (wFF3) focused, then wFF3 closes -> forward cycle wraps to wFF1; reverse cycle selects wFF2
+            WindowService.handleScannerOutput(rawThreeFF);
+            WindowService.activateWindow(wFF3);
+            const rawNoFF3 = [
+                '[Argument: (sssida{sv}) "' + wFF1 + '", "FF 1", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wFF2 + '", "FF 2", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]'
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawNoFF3);
+            ffItem.handleWheel(120);
+            const fwdAfterEndClose = WindowService.activeWindowId;
+
+            WindowService.handleScannerOutput(rawThreeFF);
+            WindowService.activateWindow(wFF3);
+            WindowService.handleScannerOutput(rawNoFF3);
+            ffItem.handleWheel(-120);
+            const revAfterEndClose = WindowService.activeWindowId;
+
+            // 7. Metadata retry exhaustion on partial/unformatted parseMetaOutput
+            const wMetaFail = "0_{dddd4444-4444-4444-4444-444444444444}";
+            WindowService.handleScannerOutput('[Argument: (sssida{sv}) "' + wMetaFail + '", "Mystery", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]');
+            WindowService.inFlightWids = [wMetaFail];
+            WindowService.parseMetaOutput("unrelated_output");
+            WindowService.inFlightWids = [wMetaFail];
+            WindowService.parseMetaOutput("unrelated_output");
+            WindowService.inFlightWids = [wMetaFail];
+            WindowService.parseMetaOutput("unrelated_output");
+            const retriesAfter3 = WindowService.metaRetries[wMetaFail] || 0;
+            const cachedEmptyAfter3 = (WindowService.metadataCache[wMetaFail] !== undefined);
+
+            console.log("PHASE_A_RELIABILITY_RESULT:" + JSON.stringify({
+                runningBeforeAppsLoaded: runningBeforeAppsLoaded,
+                zeroTitleFoundBefore: zeroTitleFoundBefore,
+                runningAfterAppsLoaded: runningAfterAppsLoaded,
+                konsoleWinsCount: konsoleWinsCount,
+                qtermWinsCount: qtermWinsCount,
+                alacrittyAppId: alacrittyAppId,
+                migratedCycleWid: migratedCycleWid,
+                popupActiveWhen2Wins: popupActiveWhen2Wins,
+                chooserOpenAfterDropTo1: chooserOpenAfterDropTo1,
+                popupClearedAfterDropTo1: popupClearedAfterDropTo1,
+                optimisticActive: optimisticActive,
+                activeAfterEmptyReconcile: activeAfterEmptyReconcile,
+                activeAfterNullReconcile: activeAfterNullReconcile,
+                optimisticAfterToggleMinimize: optimisticAfterToggleMinimize,
+                reconciledAfterRejectedMinimize: reconciledAfterRejectedMinimize,
+                activeDuringCloseAllSignal: activeDuringCloseAllSignal,
+                cacheKeysDuringCloseAllSignal: cacheKeysDuringCloseAllSignal,
+                revAfterMiddleClose: revAfterMiddleClose,
+                fwdAfterEndClose: fwdAfterEndClose,
+                revAfterEndClose: revAfterEndClose,
+                retriesAfter3: retriesAfter3,
+                cachedEmptyAfter3: cachedEmptyAfter3
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "PHASE_A_RELIABILITY_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertTrue(data["zeroTitleFoundBefore"])
+                self.assertIn("window-org.kde.konsole", data["runningBeforeAppsLoaded"])
+                self.assertEqual(
+                    data["runningAfterAppsLoaded"],
+                    ["org.kde.konsole.desktop", "org.lxqt.qterminal.desktop", "window-com.alacritty.alacritty"]
+                )
+                self.assertEqual(data["konsoleWinsCount"], 2)
+                self.assertEqual(data["qtermWinsCount"], 1)
+                self.assertEqual(data["alacrittyAppId"], "window-com.alacritty.alacritty")
+                self.assertEqual(data["migratedCycleWid"], "12121212-1212-1212-1212-121212121212")
+
+                self.assertTrue(data["popupActiveWhen2Wins"])
+                self.assertFalse(data["chooserOpenAfterDropTo1"])
+                self.assertTrue(data["popupClearedAfterDropTo1"])
+
+                self.assertEqual(data["optimisticActive"], "11111111-1111-1111-1111-111111111111")
+                self.assertEqual(data["activeAfterEmptyReconcile"], "")
+                self.assertEqual(data["activeAfterNullReconcile"], "")
+                self.assertEqual(data["optimisticAfterToggleMinimize"], "")
+                self.assertEqual(data["reconciledAfterRejectedMinimize"], "11111111-1111-1111-1111-111111111111")
+
+                self.assertEqual(data["activeDuringCloseAllSignal"], "")
+                self.assertEqual(data["cacheKeysDuringCloseAllSignal"], 0)
+
+                self.assertEqual(data["revAfterMiddleClose"], "aaaa1111-1111-1111-1111-111111111111")
+                self.assertEqual(data["fwdAfterEndClose"], "aaaa1111-1111-1111-1111-111111111111")
+                self.assertEqual(data["revAfterEndClose"], "bbbb2222-2222-2222-2222-222222222222")
+
+                self.assertEqual(data["retriesAfter3"], 3)
+                self.assertTrue(data["cachedEmptyAfter3"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
+    def test_18_runtime_pin_atomicity_canonical_dedup_and_mid_drag_disappearance(self):
+        """Live QML Runtime Test: Verify pinAppAt atomicity, invalid index rejection without partial state, canonical/alias dedup, uninstalled preservation, and mid-drag app/window disappearance safety."""
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_dock_phase_b_reliability_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import QtQuick.Layouts
+import QtTest
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+FloatingWindow {
+    id: win
+    implicitWidth: 800
+    implicitHeight: 200
+    visible: true
+    property bool isVertical: false
+    property var activePopupItem: null
+    readonly property bool hasActivePopup: activePopupItem !== null
+    property var activeDragItem: null
+    readonly property bool isDragging: activeDragItem !== null
+
+    RowLayout {
+        x: 20
+        y: 20
+        spacing: 4
+
+        Repeater {
+            id: pinnedRep
+            model: ApplicationService.pinnedApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+
+        DockSeparator {
+            id: pinSep
+            isVertical: false
+            acceptPinDrop: true
+        }
+
+        DockItem {
+            id: gwenItem
+            parentWindowRef: win
+            appId: "org.kde.gwenview"
+            app: ApplicationService.getAppById("org.kde.gwenview")
+        }
+    }
+
+    TestCase {
+        id: tc
+        name: "PhaseBReliabilitySuite"
+        when: false
+
+        function runTests() {
+            wait(25);
+
+            // 1. Canonical duplicate prevention when dockPinned has both alias and canonical ID
+            ConfigService.dockPinned = ["firefox", "org.mozilla.firefox", "org.kde.dolphin", "code"];
+            const sanitizedFromBoth = ConfigService.sanitizeDockPinned(ConfigService.dockPinned);
+            ConfigService.dockPinned = ["firefox", "org.mozilla.firefox", "org.kde.dolphin", "code"];
+            const visibleWithDupeRaw = ApplicationService.pinnedApps.slice();
+            ApplicationService.togglePin("org.mozilla.firefox.desktop");
+            const stillPinnedAfterToggle = ApplicationService.isPinned("firefox");
+            const rawAfterUnpinFirefox = ConfigService.dockPinned.slice();
+
+            // 2. pinAppAt invalid targetIndex rejection (must return false and NOT pin the app)
+            const beforeInvalidPin = ConfigService.dockPinned.slice();
+            const pinNeg = ApplicationService.pinAppAt("org.mozilla.firefox", -1);
+            const pinOob = ApplicationService.pinAppAt("org.mozilla.firefox", 99);
+            const pinStr = ApplicationService.pinAppAt("org.mozilla.firefox", "bad");
+            const pinFloat = ApplicationService.pinAppAt("org.mozilla.firefox", 0.5);
+            const pinNaN = ApplicationService.pinAppAt("org.mozilla.firefox", NaN);
+            const afterInvalidPin = ConfigService.dockPinned.slice();
+            const isFirefoxPinnedAfterInvalid = ApplicationService.isPinned("org.mozilla.firefox");
+
+            // 3. Valid pinAppAt with uninstalled entry preservation
+            // Current raw: ["org.kde.dolphin", "code"], visible: ["org.kde.dolphin"] (len 1)
+            const pinAtZero = ApplicationService.pinAppAt("org.mozilla.firefox", 0);
+            const visAfterPinZero = ApplicationService.pinnedApps.slice();
+            const rawAfterPinZero = ConfigService.dockPinned.slice();
+
+            const pinAtEnd = ApplicationService.pinAppAt("org.kde.konsole", 2);
+            const visAfterPinEnd = ApplicationService.pinnedApps.slice();
+            const rawAfterPinEnd = ConfigService.dockPinned.slice();
+            wait(25);
+
+            // 4. Mid-drag window disappearance on unpinned running item ("org.kde.gwenview")
+            mousePress(gwenItem, 26, 26, Qt.LeftButton);
+            mouseMove(gwenItem, 36, 26);
+            mouseMove(gwenItem, 56, 26);
+            const draggingBeforeWindowClose = gwenItem.dragging;
+            // Gwenview window closes while user is mid-drag!
+            WindowService.handleScannerOutput("[Argument: a(sssida{sv}) {}]");
+            const draggingAfterWindowClose = gwenItem.dragging;
+            const winDraggingAfterWindowClose = win.isDragging;
+            const commitAfterWindowClose = gwenItem.commitDrop({ targetIndex: 0, targetAppId: "org.mozilla.firefox" });
+            mouseRelease(gwenItem, 56, 26, Qt.LeftButton);
+            wait(20);
+            const pinnedAfterMidDragClose = ApplicationService.pinnedApps.slice();
+
+            // 5. Mid-drag target unpinning on pinned item reorder
+            const pinItem0 = pinnedRep.itemAt(0); // org.mozilla.firefox
+            const commitUnpinnedTarget = pinItem0.commitDrop({ targetIndex: 2, targetAppId: "org.kde.gwenview" });
+            const pinnedAfterUnpinnedTarget = ApplicationService.pinnedApps.slice();
+
+            console.log("PHASE_B_RELIABILITY_RESULT:" + JSON.stringify({
+                sanitizedFromBoth: sanitizedFromBoth,
+                visibleWithDupeRaw: visibleWithDupeRaw,
+                stillPinnedAfterToggle: stillPinnedAfterToggle,
+                rawAfterUnpinFirefox: rawAfterUnpinFirefox,
+                beforeInvalidPin: beforeInvalidPin,
+                pinNeg: pinNeg,
+                pinOob: pinOob,
+                pinStr: pinStr,
+                pinFloat: pinFloat,
+                pinNaN: pinNaN,
+                afterInvalidPin: afterInvalidPin,
+                isFirefoxPinnedAfterInvalid: isFirefoxPinnedAfterInvalid,
+                pinAtZero: pinAtZero,
+                visAfterPinZero: visAfterPinZero,
+                rawAfterPinZero: rawAfterPinZero,
+                pinAtEnd: pinAtEnd,
+                visAfterPinEnd: visAfterPinEnd,
+                rawAfterPinEnd: rawAfterPinEnd,
+                draggingBeforeWindowClose: draggingBeforeWindowClose,
+                draggingAfterWindowClose: draggingAfterWindowClose,
+                winDraggingAfterWindowClose: winDraggingAfterWindowClose,
+                commitAfterWindowClose: commitAfterWindowClose,
+                pinnedAfterMidDragClose: pinnedAfterMidDragClose,
+                commitUnpinnedTarget: commitUnpinnedTarget,
+                pinnedAfterUnpinnedTarget: pinnedAfterUnpinnedTarget
+            }));
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1"];
+            ApplicationService.applications = [
+                { id: "org.kde.dolphin", name: "Dolphin", icon: "system-file-manager", aliases: ["org.kde.dolphin", "dolphin"] },
+                { id: "org.kde.konsole", name: "Konsole", icon: "utilities-terminal", aliases: ["org.kde.konsole", "konsole"] },
+                { id: "org.mozilla.firefox", name: "Firefox", icon: "org.mozilla.firefox", aliases: ["org.mozilla.firefox", "firefox"] },
+                { id: "org.kde.gwenview", name: "Gwenview", icon: "gwenview", aliases: ["org.kde.gwenview", "gwenview"] }
+            ];
+            ApplicationService.loading = false;
+
+            const wGwen = "0_{66666666-6666-6666-6666-666666666666}";
+            WindowService.handleScannerOutput(
+                '[Argument: (sssida{sv}) "' + wGwen + '", "Gwenview", "gwenview", 100, 1.0, [Argument: a{sv} {}]]\\n' +
+                '===KWIN_META:' + wGwen + '\\torg.kde.gwenview\\tgwenview\\t==='
+            );
+            tc.runTests();
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "PHASE_B_RELIABILITY_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertEqual(data["sanitizedFromBoth"], ["firefox", "org.kde.dolphin", "code"])
+                self.assertEqual(data["visibleWithDupeRaw"], ["firefox", "org.kde.dolphin"])
+                self.assertFalse(data["stillPinnedAfterToggle"])
+                self.assertEqual(data["rawAfterUnpinFirefox"], ["org.kde.dolphin", "code"])
+
+                self.assertFalse(data["pinNeg"])
+                self.assertFalse(data["pinOob"])
+                self.assertFalse(data["pinStr"])
+                self.assertFalse(data["pinFloat"])
+                self.assertFalse(data["pinNaN"])
+                self.assertEqual(data["afterInvalidPin"], data["beforeInvalidPin"])
+                self.assertFalse(data["isFirefoxPinnedAfterInvalid"])
+
+                self.assertTrue(data["pinAtZero"])
+                self.assertEqual(data["visAfterPinZero"], ["org.mozilla.firefox", "org.kde.dolphin"])
+                self.assertIn("code", data["rawAfterPinZero"])
+
+                self.assertTrue(data["pinAtEnd"])
+                self.assertEqual(data["visAfterPinEnd"], ["org.mozilla.firefox", "org.kde.dolphin", "org.kde.konsole"])
+                self.assertIn("code", data["rawAfterPinEnd"])
+
+                self.assertTrue(data["draggingBeforeWindowClose"])
+                self.assertFalse(data["draggingAfterWindowClose"])
+                self.assertFalse(data["winDraggingAfterWindowClose"])
+                self.assertFalse(data["commitAfterWindowClose"])
+                self.assertEqual(data["pinnedAfterMidDragClose"], ["org.mozilla.firefox", "org.kde.dolphin", "org.kde.konsole"])
+
+                self.assertFalse(data["commitUnpinnedTarget"])
+                self.assertEqual(data["pinnedAfterUnpinnedTarget"], ["org.mozilla.firefox", "org.kde.dolphin", "org.kde.konsole"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()

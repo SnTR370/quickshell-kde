@@ -41,11 +41,17 @@ run_kwin_js() {
 
 case "$ACTION" in
     activate)
-        if command -v kdotool >/dev/null 2>&1; then
-            kdotool windowactivate "$FORMATTED_ID" >/dev/null 2>&1 || true
-        else
-            qdbus6 org.kde.KWin /WindowsRunner org.kde.krunner1.Run "$TARGET_ID" "" >/dev/null 2>&1 || true
-        fi
+        JS_CODE="var target = \"${FORMATTED_ID}\";
+var wins = workspace.windowList();
+for (var i = 0; i < wins.length; i++) {
+    var w = wins[i];
+    if (w.internalId.toString().toLowerCase() === target) {
+        w.minimized = false;
+        workspace.activeWindow = w;
+        break;
+    }
+}"
+        run_kwin_js "$JS_CODE" "activate" || qdbus6 org.kde.KWin /WindowsRunner org.kde.krunner1.Run "$TARGET_ID" "" >/dev/null 2>&1 || true
         ;;
     close)
         JS_CODE="var target = \"${FORMATTED_ID}\";

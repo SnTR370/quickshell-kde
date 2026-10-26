@@ -1034,5 +1034,185 @@ Scope {
                 if os.path.exists(probe_path):
                     os.remove(probe_path)
 
+    def test_16_json_store_and_config_service_durability(self):
+        """Live QML Runtime Test: Verify JsonStore and ConfigService durability under pre-load mutations, rapid saves, deferred loads, serialize/write failures, and corrupt/empty JSON preservation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            cfg_dir = os.path.join(tmpdir, "quickshell-kde")
+            os.makedirs(cfg_dir, exist_ok=True)
+            corrupt_path = os.path.join(cfg_dir, "corrupt_store.json")
+            empty_path = os.path.join(cfg_dir, "empty_store.json")
+            queue_path = os.path.join(cfg_dir, "queue_store.json")
+            readonly_dir = os.path.join(tmpdir, "readonly_dir")
+            os.makedirs(readonly_dir, exist_ok=True)
+            readonly_path = os.path.join(readonly_dir, "locked.json")
+            with open(corrupt_path, "w") as cf:
+                cf.write("{invalid json content!!!")
+            with open(empty_path, "w") as ef:
+                ef.write("")
+            with open(readonly_path, "w") as rf:
+                json.dump({"version": 1}, rf)
+            os.chmod(readonly_dir, 0o500)
+
+            probe_path = os.path.join(REPO_DIR, "_test_phase_c_durability_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write(f"""import QtQuick
+import Quickshell
+import "./services"
+import "./services/core"
+
+Scope {{
+    property var corruptFailures: []
+    property var emptyFailures: []
+    property var queueEvents: []
+    property var writeFailures: []
+    property bool serializeRejected: false
+
+    JsonStore {{
+        id: corruptStore
+        path: "{corrupt_path}"
+        fallbackPath: Qt.resolvedUrl("config/dock_config.json").toString().replace(/^file:\\/\\//, "")
+        defaultValue: ({{ "fallback": false, "defaultUsed": true }})
+        onFailed: (phase, code, details) => {{
+            corruptFailures.push(phase);
+        }}
+    }}
+
+    JsonStore {{
+        id: emptyStore
+        path: "{empty_path}"
+        fallbackPath: Qt.resolvedUrl("config/dock_config.json").toString().replace(/^file:\\/\\//, "")
+        defaultValue: ({{ "emptyDefault": true }})
+        onFailed: (phase, code, details) => {{
+            emptyFailures.push(phase);
+        }}
+    }}
+
+    JsonStore {{
+        id: queueStore
+        path: "{queue_path}"
+        defaultValue: ({{ "step": 0 }})
+        onSavedValue: data => {{
+            queueEvents.push("saved:" + data.step);
+        }}
+        onLoadedValue: (parsed, _) => {{
+            queueEvents.push("loaded:" + parsed.step);
+        }}
+    }}
+
+    JsonStore {{
+        id: roStore
+        path: "{readonly_path}"
+        defaultValue: ({{ "version": 0 }})
+        onFailed: (phase, code, details) => {{
+            writeFailures.push(phase);
+        }}
+    }}
+
+    Component.onCompleted: {{
+        // Mutate ConfigService IMMEDIATELY during startup while initial load() is still in flight
+        ConfigService.setDockEdge("left");
+        ConfigService.setBarEdge("bottom");
+    }}
+
+    Timer {{
+        interval: 120
+        running: true
+        repeat: false
+        onTriggered: {{
+            // 1. Rapid consecutive saves + load() called while save is in flight
+            for (let i = 1; i <= 6; i++) {{
+                queueStore.save({{ "step": i }});
+            }}
+            queueStore.load();
+
+            // 2. Serialization failure check
+            serializeRejected = !queueStore.save(undefined);
+
+            // 3. Write failure on read-only directory must preserve lastPersistedValue ({{ "version": 1 }})
+            roStore.save({{ "version": 999 }});
+
+            // 4. Explicit save over corruptStore must create .bak of corrupt file before writing
+            corruptStore.save({{ "recovered": true }});
+        }}
+    }}
+
+    Timer {{
+        interval: 350
+        running: true
+        repeat: false
+        onTriggered: {{
+            console.log("PHASE_C_DURABILITY_RESULT:" + JSON.stringify({{
+                dockEdgeInMemory: ConfigService.dockEdge,
+                barEdgeInMemory: ConfigService.barEdge,
+                corruptFailures: corruptFailures,
+                emptyFailures: emptyFailures,
+                emptyHadParseError: emptyStore.hadParseError,
+                emptyValue: emptyStore.value,
+                queueFinalStep: queueStore.value.step,
+                queueEvents: queueEvents,
+                serializeRejected: serializeRejected,
+                writeFailures: writeFailures,
+                roRestoredVersion: roStore.value.version
+            }}));
+            Qt.quit();
+        }}
+    }}
+}}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "PHASE_C_DURABILITY_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                # 1. Pre-load modifications preserved in memory AND flushed to disk
+                self.assertEqual(data["dockEdgeInMemory"], "left")
+                self.assertEqual(data["barEdgeInMemory"], "bottom")
+                with open(os.path.join(cfg_dir, "dock_config.json")) as df:
+                    disk_dock = json.load(df)
+                with open(os.path.join(cfg_dir, "bar_config.json")) as bf:
+                    disk_bar = json.load(bf)
+                self.assertEqual(disk_dock["edge"], "left")
+                self.assertEqual(disk_bar["edge"], "bottom")
+
+                # 2. Corrupt and empty JSON files emit "parse" failure, do not silently fall back to fallbackPath, and .bak is created on explicit save
+                self.assertIn("parse", data["corruptFailures"])
+                self.assertIn("parse", data["emptyFailures"])
+                self.assertTrue(data["emptyHadParseError"])
+                self.assertEqual(data["emptyValue"], {"emptyDefault": True})
+                with open(empty_path) as ef:
+                    self.assertEqual(ef.read(), "")
+                self.assertTrue(os.path.isfile(corrupt_path + ".bak"))
+                with open(corrupt_path + ".bak") as bkf:
+                    self.assertEqual(bkf.read(), "{invalid json content!!!")
+                with open(corrupt_path) as cf:
+                    self.assertEqual(json.load(cf), {"recovered": True})
+
+                # 3. Rapid consecutive saves + deferred load()
+                self.assertEqual(data["queueFinalStep"], 6)
+                self.assertIn("loaded:6", data["queueEvents"])
+                with open(queue_path) as qf:
+                    self.assertEqual(json.load(qf), {"step": 6})
+
+                # 4. Serialization & write failure recovery
+                self.assertTrue(data["serializeRejected"])
+                self.assertIn("write", data["writeFailures"])
+                self.assertEqual(data["roRestoredVersion"], 1)
+            finally:
+                os.chmod(readonly_dir, 0o700)
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()
