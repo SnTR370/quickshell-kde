@@ -36,11 +36,37 @@ AnchoredPopup {
         return ok;
     }
 
-    Component.onCompleted: {
-        WindowService.refreshWindowOutputs();
+    function triggerWindowAction(windowId, actionName, targetArg) {
+        let ok = false;
+        if (actionName === "activate") {
+            ok = WindowService.activateWindow(windowId);
+        } else if (actionName === "close") {
+            ok = WindowService.closeWindow(windowId);
+        } else if (actionName === "minimize" || actionName === "toggle-minimize") {
+            ok = WindowService.toggleMinimizeWindow(windowId);
+        } else if (actionName === "maximize" || actionName === "toggle-maximize") {
+            ok = WindowService.toggleMaximizeWindow(windowId);
+        } else if (actionName === "fullscreen" || actionName === "toggle-fullscreen") {
+            ok = WindowService.toggleFullScreenWindow(windowId);
+        } else if (actionName === "keep-above" || actionName === "toggle-keep-above") {
+            ok = WindowService.toggleKeepAboveWindow(windowId);
+        } else if (actionName === "move-output") {
+            ok = WindowService.moveWindowToOutput(windowId, targetArg);
+        } else if (actionName === "move-desktop") {
+            ok = WindowService.moveWindowToDesktop(windowId, targetArg);
+        }
+        if (ok) {
+            root.actionTriggered();
+        }
+        return ok;
     }
 
-    implicitWidth: Math.max(200, Math.min(320, menuLayout.implicitWidth + 24))
+    Component.onCompleted: {
+        WindowService.refreshWindowOutputs();
+        KWinService.refreshDesktops();
+    }
+
+    implicitWidth: Math.max(220, Math.min(340, menuLayout.implicitWidth + 24))
     implicitHeight: menuLayout.implicitHeight + 16
 
     ColumnLayout {
@@ -75,7 +101,7 @@ AnchoredPopup {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            Layout.preferredHeight: 1
             color: Theme.border
             opacity: 0.5
         }
@@ -88,9 +114,21 @@ AnchoredPopup {
                 id: winItem
                 required property var modelData
                 readonly property string windowId: modelData ? (modelData.id || "") : ""
+                readonly property var windowState: WindowService.getWindowState(windowId)
+                readonly property bool isMinimized: windowState ? Boolean(windowState.minimized) : false
+                readonly property bool isMaximized: windowState ? Boolean(windowState.maximized) : false
+                readonly property bool isFullScreen: windowState ? Boolean(windowState.fullScreen) : false
+                readonly property bool isKeepAbove: windowState ? Boolean(windowState.keepAbove) : false
+                readonly property bool isOnAllDesktops: windowState ? Boolean(windowState.onAllDesktops) : false
+                readonly property bool canMinimize: WindowService.canMinimizeWindow(windowId)
+                readonly property bool canMaximize: WindowService.canMaximizeWindow(windowId)
+                readonly property bool canFullScreen: WindowService.canFullScreenWindow(windowId)
+                readonly property bool canKeepAbove: WindowService.canKeepAboveWindow(windowId)
+                readonly property bool canClose: WindowService.canCloseWindow(windowId)
                 readonly property var targetOutputs: WindowService.getTargetOutputsForWindow(windowId)
+                readonly property var targetDesktops: WindowService.getTargetDesktopsForWindow(windowId)
                 Layout.fillWidth: true
-                spacing: 2
+                spacing: 3
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -135,8 +173,9 @@ AnchoredPopup {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    WindowService.activateWindow(winItem.windowId);
-                                    root.actionTriggered();
+                                    if (WindowService.activateWindow(winItem.windowId)) {
+                                        root.actionTriggered();
+                                    }
                                 }
                             }
                         }
@@ -173,8 +212,9 @@ AnchoredPopup {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        WindowService.moveWindowToOutput(winItem.windowId, moveOutBtn.modelData);
-                                        root.actionTriggered();
+                                        if (WindowService.moveWindowToOutput(winItem.windowId, moveOutBtn.modelData)) {
+                                            root.actionTriggered();
+                                        }
                                     }
                                 }
                             }
@@ -186,23 +226,269 @@ AnchoredPopup {
                             implicitWidth: 22
                             implicitHeight: 22
                             radius: Theme.radiusSmall
-                            color: closeWinMouse.containsMouse ? Theme.alpha(Theme.error, 0.22) : "transparent"
+                            opacity: winItem.canClose ? 1.0 : 0.45
+                            color: (winItem.canClose && closeWinMouse.containsMouse) ? Theme.alpha(Theme.error, 0.22) : "transparent"
                             Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
 
                             SvgIcon {
                                 anchors.centerIn: parent
                                 icon: "window-close"
                                 size: 13
-                                color: closeWinMouse.containsMouse ? Theme.error : Theme.foreground
+                                color: (winItem.canClose && closeWinMouse.containsMouse) ? Theme.error : (winItem.canClose ? Theme.foreground : Theme.foregroundMuted)
                             }
 
                             MouseArea {
                                 id: closeWinMouse
                                 anchors.fill: parent
+                                enabled: winItem.canClose
+                                hoverEnabled: true
+                                cursorShape: winItem.canClose ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: {
+                                    if (WindowService.closeWindow(winItem.windowId)) {
+                                        root.actionTriggered();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Native KWin Window State Actions Row (Minimize, Maximize, Fullscreen, Keep Above)
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 4
+                    spacing: 4
+
+                    // Minimize / Restore
+                    Rectangle {
+                        id: minimizeWinBtn
+                        implicitWidth: minimizeWinLabel.implicitWidth + 10
+                        implicitHeight: 20
+                        radius: Theme.radiusSmall
+                        opacity: winItem.canMinimize ? 1.0 : 0.45
+                        color: (winItem.canMinimize && minimizeWinMouse.containsMouse)
+                            ? Theme.alpha(Theme.primary, 0.22)
+                            : (winItem.isMinimized ? Theme.alpha(Theme.accent, 0.2) : Theme.alpha(Theme.surface, 0.6))
+                        border.width: 1
+                        border.color: (winItem.canMinimize && minimizeWinMouse.containsMouse)
+                            ? Theme.primary
+                            : (winItem.isMinimized ? Theme.accent : Theme.border)
+                        Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                        Text {
+                            id: minimizeWinLabel
+                            anchors.centerIn: parent
+                            text: winItem.isMinimized ? "Restore" : "Minimize"
+                            color: winItem.canMinimize ? Theme.foreground : Theme.foregroundMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall - 2
+                        }
+
+                        MouseArea {
+                            id: minimizeWinMouse
+                            anchors.fill: parent
+                            enabled: winItem.canMinimize
+                            hoverEnabled: true
+                            cursorShape: winItem.canMinimize ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (WindowService.toggleMinimizeWindow(winItem.windowId)) {
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
+                    }
+
+                    // Maximize / Unmaximize
+                    Rectangle {
+                        id: maximizeWinBtn
+                        implicitWidth: maximizeWinLabel.implicitWidth + 10
+                        implicitHeight: 20
+                        radius: Theme.radiusSmall
+                        opacity: winItem.canMaximize ? 1.0 : 0.45
+                        color: (winItem.canMaximize && maximizeWinMouse.containsMouse)
+                            ? Theme.alpha(Theme.primary, 0.22)
+                            : (winItem.isMaximized ? Theme.alpha(Theme.accent, 0.2) : Theme.alpha(Theme.surface, 0.6))
+                        border.width: 1
+                        border.color: (winItem.canMaximize && maximizeWinMouse.containsMouse)
+                            ? Theme.primary
+                            : (winItem.isMaximized ? Theme.accent : Theme.border)
+                        Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                        Text {
+                            id: maximizeWinLabel
+                            anchors.centerIn: parent
+                            text: winItem.isMaximized ? "Unmaximize" : "Maximize"
+                            color: winItem.canMaximize ? Theme.foreground : Theme.foregroundMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall - 2
+                        }
+
+                        MouseArea {
+                            id: maximizeWinMouse
+                            anchors.fill: parent
+                            enabled: winItem.canMaximize
+                            hoverEnabled: true
+                            cursorShape: winItem.canMaximize ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (WindowService.toggleMaximizeWindow(winItem.windowId)) {
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
+                    }
+
+                    // Fullscreen toggle
+                    Rectangle {
+                        id: fullscreenWinBtn
+                        implicitWidth: fullscreenWinLabel.implicitWidth + 10
+                        implicitHeight: 20
+                        radius: Theme.radiusSmall
+                        opacity: winItem.canFullScreen ? 1.0 : 0.45
+                        color: (winItem.canFullScreen && fullscreenWinMouse.containsMouse)
+                            ? Theme.alpha(Theme.primary, 0.22)
+                            : (winItem.isFullScreen ? Theme.alpha(Theme.accent, 0.2) : Theme.alpha(Theme.surface, 0.6))
+                        border.width: 1
+                        border.color: (winItem.canFullScreen && fullscreenWinMouse.containsMouse)
+                            ? Theme.primary
+                            : (winItem.isFullScreen ? Theme.accent : Theme.border)
+                        Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                        Text {
+                            id: fullscreenWinLabel
+                            anchors.centerIn: parent
+                            text: winItem.isFullScreen ? "Exit Fullscreen" : "Fullscreen"
+                            color: winItem.canFullScreen ? Theme.foreground : Theme.foregroundMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall - 2
+                        }
+
+                        MouseArea {
+                            id: fullscreenWinMouse
+                            anchors.fill: parent
+                            enabled: winItem.canFullScreen
+                            hoverEnabled: true
+                            cursorShape: winItem.canFullScreen ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (WindowService.toggleFullScreenWindow(winItem.windowId)) {
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
+                    }
+
+                    // Keep Above / Always on Top toggle
+                    Rectangle {
+                        id: keepAboveWinBtn
+                        implicitWidth: keepAboveWinLabel.implicitWidth + 10
+                        implicitHeight: 20
+                        radius: Theme.radiusSmall
+                        opacity: winItem.canKeepAbove ? 1.0 : 0.45
+                        color: (winItem.canKeepAbove && keepAboveWinMouse.containsMouse)
+                            ? Theme.alpha(Theme.primary, 0.22)
+                            : (winItem.isKeepAbove ? Theme.alpha(Theme.accent, 0.2) : Theme.alpha(Theme.surface, 0.6))
+                        border.width: 1
+                        border.color: (winItem.canKeepAbove && keepAboveWinMouse.containsMouse)
+                            ? Theme.primary
+                            : (winItem.isKeepAbove ? Theme.accent : Theme.border)
+                        Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                        Text {
+                            id: keepAboveWinLabel
+                            anchors.centerIn: parent
+                            text: "Keep Above"
+                            color: winItem.canKeepAbove ? Theme.foreground : Theme.foregroundMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall - 2
+                        }
+
+                        MouseArea {
+                            id: keepAboveWinMouse
+                            anchors.fill: parent
+                            enabled: winItem.canKeepAbove
+                            hoverEnabled: true
+                            cursorShape: winItem.canKeepAbove ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (WindowService.toggleKeepAboveWindow(winItem.windowId)) {
+                                    root.actionTriggered();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Move to Virtual Desktop Row (only shown when >1 virtual desktop exists)
+                RowLayout {
+                    visible: winItem.targetDesktops.length > 0 || (WindowService.availableDesktops.length > 1 && !winItem.isOnAllDesktops)
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 4
+                    spacing: 4
+
+                    Repeater {
+                        model: winItem.targetDesktops
+
+                        Rectangle {
+                            id: moveDeskBtn
+                            required property var modelData
+                            implicitWidth: moveDeskLabel.implicitWidth + 10
+                            implicitHeight: 20
+                            radius: Theme.radiusSmall
+                            color: moveDeskMouse.containsMouse ? Theme.alpha(Theme.primary, 0.22) : Theme.alpha(Theme.surface, 0.6)
+                            border.width: 1
+                            border.color: moveDeskMouse.containsMouse ? Theme.primary : Theme.border
+                            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                            Text {
+                                id: moveDeskLabel
+                                anchors.centerIn: parent
+                                text: "→ " + (moveDeskBtn.modelData ? moveDeskBtn.modelData.name : "")
+                                color: Theme.foreground
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall - 2
+                            }
+
+                            MouseArea {
+                                id: moveDeskMouse
+                                anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    WindowService.closeWindow(winItem.windowId);
+                                    if (moveDeskBtn.modelData && WindowService.moveWindowToDesktop(winItem.windowId, moveDeskBtn.modelData.id)) {
+                                        root.actionTriggered();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: allDesksBtn
+                        visible: WindowService.availableDesktops.length > 1 && !winItem.isOnAllDesktops
+                        implicitWidth: allDesksLabel.implicitWidth + 10
+                        implicitHeight: 20
+                        radius: Theme.radiusSmall
+                        color: allDesksMouse.containsMouse ? Theme.alpha(Theme.primary, 0.22) : Theme.alpha(Theme.surface, 0.6)
+                        border.width: 1
+                        border.color: allDesksMouse.containsMouse ? Theme.primary : Theme.border
+                        Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                        Text {
+                            id: allDesksLabel
+                            anchors.centerIn: parent
+                            text: "All Desktops"
+                            color: Theme.foreground
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall - 2
+                        }
+
+                        MouseArea {
+                            id: allDesksMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (WindowService.moveWindowToDesktop(winItem.windowId, "all")) {
                                     root.actionTriggered();
                                 }
                             }
@@ -214,7 +500,7 @@ AnchoredPopup {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            Layout.preferredHeight: 1
             color: Theme.border
             opacity: 0.5
             visible: root.appWindows.length > 0

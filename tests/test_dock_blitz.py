@@ -1926,5 +1926,351 @@ FloatingWindow {
                 if os.path.exists(probe_path):
                     os.remove(probe_path)
 
+    def test_19_runtime_kwin_native_window_actions_and_capabilities(self):
+        """Phase 1 (P0 #5): Verify KWin native window actions (maximize, minimize, fullscreen, keep-above, move-desktop, move-output, close), capability gating, non-optimistic reconciliation, and DockMenu integration."""
+        import json
+        import tempfile
+
+        script_path = os.path.join(REPO_DIR, "services/kwin/scripts/kwin-window-action.sh")
+        # 1. Verify script rejects malformed UUIDs and invalid target args safely without calling KWin
+        bad_uuid_res = subprocess.run([script_path, "maximize", "bad;uuid"], capture_output=True, text=True)
+        self.assertNotEqual(bad_uuid_res.returncode, 0)
+        bad_desk_res = subprocess.run([script_path, "move-desktop", "0_{11111111-1111-1111-1111-111111111111}", "desk;rm"], capture_output=True, text=True)
+        self.assertNotEqual(bad_desk_res.returncode, 0)
+        bad_fs_res = subprocess.run([script_path, "fullscreen", "0_{11111111-1111-1111-1111-111111111111}", "invalid_bool"], capture_output=True, text=True)
+        self.assertNotEqual(bad_fs_res.returncode, 0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            probe_path = os.path.join(REPO_DIR, "_test_phase1_window_actions_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+Scope {
+    DockMenu {
+        id: menu
+        appId: "org.mozilla.firefox"
+        isRunning: true
+        isPinned: true
+    }
+
+    Timer {
+        interval: 200
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1", "DP-2"];
+            WindowService.desktopsOverride = [
+                { id: "desk-1", name: "Desktop 1", index: 0 },
+                { id: "desk-2", name: "Desktop 2", index: 1 },
+                { id: "desk-3", name: "Desktop 3", index: 2 }
+            ];
+
+            ApplicationService.applications = [
+                {
+                    id: "org.mozilla.firefox",
+                    name: "Firefox",
+                    icon: "org.mozilla.firefox",
+                    startupWMClass: "org.mozilla.firefox",
+                    execBinary: "firefox",
+                    aliases: ["org.mozilla.firefox", "firefox"]
+                }
+            ];
+            ApplicationService.loading = false;
+
+            const uuidA = "0_{11111111-1111-1111-1111-111111111111}";
+            const uuidB = "0_{22222222-2222-2222-2222-222222222222}";
+            const staleUuid = "0_{99999999-9999-9999-9999-999999999999}";
+
+            const rawWin = [
+                '[Argument: (sssida{sv}) "' + uuidA + '", "Firefox Main", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + uuidB + '", "Firefox Fixed Dialog", "org.mozilla.firefox", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + uuidA + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t===',
+                '===KWIN_META:' + uuidB + '\\torg.mozilla.firefox\\torg.mozilla.firefox\\t==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawWin);
+
+            // Seed initial KWin state: uuidA full capabilities, uuidB restricted capabilities
+            WindowService.parseWindowStatesJson(JSON.stringify([
+                {
+                    id: uuidA,
+                    output: "eDP-1",
+                    minimized: false,
+                    minimizable: true,
+                    maximized: false,
+                    maximizable: true,
+                    fullScreen: false,
+                    fullScreenable: true,
+                    keepAbove: false,
+                    keepAboveable: true,
+                    closeable: true,
+                    moveableAcrossScreens: true,
+                    onAllDesktops: false,
+                    desktops: ["desk-1"]
+                },
+                {
+                    id: uuidB,
+                    output: "eDP-1",
+                    minimized: false,
+                    minimizable: false,
+                    maximized: false,
+                    maximizable: false,
+                    fullScreen: false,
+                    fullScreenable: false,
+                    keepAbove: false,
+                    keepAboveable: false,
+                    closeable: false,
+                    moveableAcrossScreens: false,
+                    onAllDesktops: false,
+                    desktops: ["desk-1"]
+                }
+            ]));
+
+            const capsA = WindowService.getWindowCapabilities(uuidA);
+            const capsB = WindowService.getWindowCapabilities(uuidB);
+
+            // 1. Maximize / Unmaximize + non-optimistic reconciliation
+            const maxDispatchA = WindowService.toggleMaximizeWindow(uuidA);
+            const maxActName1 = WindowService.lastExecutedAction ? WindowService.lastExecutedAction.action : "";
+            const maxStateBeforeConfirm = WindowService.getWindowState(uuidA).maximized;
+            // KWin confirms maximize
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, maximized: true, maximizeMode: 3 }]));
+            const maxStateAfterConfirm = WindowService.getWindowState(uuidA).maximized;
+            const maxRedundantDispatch = WindowService.setWindowMaximized(uuidA, true);
+            const unmaxDispatchA = WindowService.toggleMaximizeWindow(uuidA);
+            const maxActName2 = WindowService.lastExecutedAction ? WindowService.lastExecutedAction.action : "";
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, maximized: false, maximizeMode: 0 }]));
+            const maxStateAfterRestore = WindowService.getWindowState(uuidA).maximized;
+
+            // Restricted window B rejects maximize
+            const maxRejectB = WindowService.toggleMaximizeWindow(uuidB);
+
+            // 2. Minimize / Restore + non-minimizable restoration safety
+            const minDispatchA = WindowService.toggleMinimizeWindow(uuidA);
+            const minActName1 = WindowService.lastExecutedAction ? WindowService.lastExecutedAction.action : "";
+            const minStateBeforeConfirm = WindowService.getWindowState(uuidA).minimized;
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, minimized: true }]));
+            const minStateAfterConfirm = WindowService.getWindowState(uuidA).minimized;
+            const unminDispatchA = WindowService.toggleMinimizeWindow(uuidA);
+            const minActName2 = WindowService.lastExecutedAction ? WindowService.lastExecutedAction.action : "";
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, minimized: false }]));
+
+            const minRejectB = WindowService.toggleMinimizeWindow(uuidB);
+            // If KWin marks uuidB as minimized despite minimizable:false, restoring it must still be allowed
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidB, minimized: true, minimizable: false }]));
+            const canRestoreMinimizedB = WindowService.canMinimizeWindow(uuidB);
+            const restoreMinimizedB = WindowService.toggleMinimizeWindow(uuidB);
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidB, minimized: false, minimizable: false }]));
+
+            // 3. Fullscreen toggle
+            const fsDispatchA = WindowService.toggleFullScreenWindow(uuidA);
+            const fsBeforeConfirm = WindowService.getWindowState(uuidA).fullScreen;
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, fullScreen: true }]));
+            const fsAfterConfirm = WindowService.getWindowState(uuidA).fullScreen;
+            const fsExitDispatchA = WindowService.toggleFullScreenWindow(uuidA);
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, fullScreen: false }]));
+            const fsRejectB = WindowService.toggleFullScreenWindow(uuidB);
+
+            // 4. Keep Above / Always on Top toggle
+            const kaDispatchA = WindowService.toggleKeepAboveWindow(uuidA);
+            const kaBeforeConfirm = WindowService.getWindowState(uuidA).keepAbove;
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, keepAbove: true }]));
+            const kaAfterConfirm = WindowService.getWindowState(uuidA).keepAbove;
+            const kaOffDispatchA = WindowService.toggleKeepAboveWindow(uuidA);
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, keepAbove: false }]));
+            const kaRejectB = WindowService.toggleKeepAboveWindow(uuidB);
+
+            // 5. Move window to Virtual Desktop & All Desktops
+            const targetsDeskInitial = WindowService.getTargetDesktopsForWindow(uuidA).map(d => d.id);
+            const moveSameDesk = WindowService.moveWindowToDesktop(uuidA, "desk-1");
+            const moveUnknownDesk = WindowService.moveWindowToDesktop(uuidA, "desk-999");
+            const moveBadDesk = WindowService.moveWindowToDesktop(uuidA, "desk-2;rm");
+            const moveDesk2Dispatch = WindowService.moveWindowToDesktop(uuidA, "desk-2");
+            const desksBeforeConfirm = WindowService.getWindowDesktops(uuidA);
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, onAllDesktops: false, desktops: ["desk-2"] }]));
+            const desksAfterConfirm = WindowService.getWindowDesktops(uuidA);
+            const targetsDeskAfterMove2 = WindowService.getTargetDesktopsForWindow(uuidA).map(d => d.id);
+
+            const moveAllDesksDispatch = WindowService.moveWindowToDesktop(uuidA, "all");
+            WindowService.parseWindowStatesJson(JSON.stringify([{ id: uuidA, onAllDesktops: true, desktops: [] }]));
+            const desksAfterAll = WindowService.getWindowDesktops(uuidA);
+            const moveAllDesksRedundant = WindowService.moveWindowToDesktop(uuidA, "all");
+            const targetsDeskWhenOnAll = WindowService.getTargetDesktopsForWindow(uuidA).map(d => d.id);
+
+            // Single-desktop environment disables moveWindowToDesktop
+            WindowService.desktopsOverride = [{ id: "desk-1", name: "Desktop 1", index: 0 }];
+            const singleDeskTargets = WindowService.getTargetDesktopsForWindow(uuidA);
+            const singleDeskMoveAttempt = WindowService.moveWindowToDesktop(uuidA, "desk-1");
+
+            // 6. Restricted close & output movement + stale/invalid UUIDs
+            const closeRejectB = WindowService.closeWindow(uuidB);
+            const moveOutRejectB = WindowService.moveWindowToOutput(uuidB, "DP-2");
+            WindowService.lastExecutedAction = null;
+            const staleMax = WindowService.toggleMaximizeWindow(staleUuid);
+            const staleDesk = WindowService.moveWindowToDesktop(staleUuid, "desk-2");
+            const invalidMax = WindowService.toggleMaximizeWindow("not_a_uuid");
+            const actionAfterStale = WindowService.lastExecutedAction;
+
+            // 7. DockMenu triggerWindowAction integration
+            const menuMaxOk = menu.triggerWindowAction(uuidA, "maximize", "");
+            const menuMaxRejectB = menu.triggerWindowAction(uuidB, "maximize", "");
+
+            console.log("PHASE1_WINDOW_ACTIONS_RESULT:" + JSON.stringify({
+                capsA: capsA,
+                capsB: capsB,
+                maxDispatchA: maxDispatchA,
+                maxActName1: maxActName1,
+                maxStateBeforeConfirm: maxStateBeforeConfirm,
+                maxStateAfterConfirm: maxStateAfterConfirm,
+                maxRedundantDispatch: maxRedundantDispatch,
+                unmaxDispatchA: unmaxDispatchA,
+                maxActName2: maxActName2,
+                maxStateAfterRestore: maxStateAfterRestore,
+                maxRejectB: maxRejectB,
+                minDispatchA: minDispatchA,
+                minActName1: minActName1,
+                minStateBeforeConfirm: minStateBeforeConfirm,
+                minStateAfterConfirm: minStateAfterConfirm,
+                unminDispatchA: unminDispatchA,
+                minActName2: minActName2,
+                minRejectB: minRejectB,
+                canRestoreMinimizedB: canRestoreMinimizedB,
+                restoreMinimizedB: restoreMinimizedB,
+                fsDispatchA: fsDispatchA,
+                fsBeforeConfirm: fsBeforeConfirm,
+                fsAfterConfirm: fsAfterConfirm,
+                fsExitDispatchA: fsExitDispatchA,
+                fsRejectB: fsRejectB,
+                kaDispatchA: kaDispatchA,
+                kaBeforeConfirm: kaBeforeConfirm,
+                kaAfterConfirm: kaAfterConfirm,
+                kaOffDispatchA: kaOffDispatchA,
+                kaRejectB: kaRejectB,
+                targetsDeskInitial: targetsDeskInitial,
+                moveSameDesk: moveSameDesk,
+                moveUnknownDesk: moveUnknownDesk,
+                moveBadDesk: moveBadDesk,
+                moveDesk2Dispatch: moveDesk2Dispatch,
+                desksBeforeConfirm: desksBeforeConfirm,
+                desksAfterConfirm: desksAfterConfirm,
+                targetsDeskAfterMove2: targetsDeskAfterMove2,
+                moveAllDesksDispatch: moveAllDesksDispatch,
+                desksAfterAll: desksAfterAll,
+                moveAllDesksRedundant: moveAllDesksRedundant,
+                targetsDeskWhenOnAll: targetsDeskWhenOnAll,
+                singleDeskTargets: singleDeskTargets,
+                singleDeskMoveAttempt: singleDeskMoveAttempt,
+                closeRejectB: closeRejectB,
+                moveOutRejectB: moveOutRejectB,
+                staleMax: staleMax,
+                staleDesk: staleDesk,
+                invalidMax: invalidMax,
+                actionAfterStale: actionAfterStale,
+                menuMaxOk: menuMaxOk,
+                menuMaxRejectB: menuMaxRejectB
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "PHASE1_WINDOW_ACTIONS_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                # Capabilities for normal vs restricted window
+                self.assertTrue(all(data["capsA"].values()))
+                self.assertTrue(data["capsB"]["valid"])
+                self.assertTrue(data["capsB"]["activate"])
+                self.assertFalse(data["capsB"]["minimize"])
+                self.assertFalse(data["capsB"]["maximize"])
+                self.assertFalse(data["capsB"]["fullscreen"])
+                self.assertFalse(data["capsB"]["keepAbove"])
+                self.assertFalse(data["capsB"]["close"])
+                self.assertFalse(data["capsB"]["moveToOutput"])
+                self.assertTrue(data["capsB"]["moveToDesktop"])
+
+                # Maximize / Unmaximize
+                self.assertTrue(data["maxDispatchA"])
+                self.assertEqual(data["maxActName1"], "maximize")
+                self.assertFalse(data["maxStateBeforeConfirm"])
+                self.assertTrue(data["maxStateAfterConfirm"])
+                self.assertFalse(data["maxRedundantDispatch"])
+                self.assertTrue(data["unmaxDispatchA"])
+                self.assertEqual(data["maxActName2"], "unmaximize")
+                self.assertFalse(data["maxStateAfterRestore"])
+                self.assertFalse(data["maxRejectB"])
+
+                # Minimize / Restore
+                self.assertTrue(data["minDispatchA"])
+                self.assertEqual(data["minActName1"], "minimize")
+                self.assertFalse(data["minStateBeforeConfirm"])
+                self.assertTrue(data["minStateAfterConfirm"])
+                self.assertTrue(data["unminDispatchA"])
+                self.assertEqual(data["minActName2"], "unminimize")
+                self.assertFalse(data["minRejectB"])
+                self.assertTrue(data["canRestoreMinimizedB"])
+                self.assertTrue(data["restoreMinimizedB"])
+
+                # Fullscreen
+                self.assertTrue(data["fsDispatchA"])
+                self.assertFalse(data["fsBeforeConfirm"])
+                self.assertTrue(data["fsAfterConfirm"])
+                self.assertTrue(data["fsExitDispatchA"])
+                self.assertFalse(data["fsRejectB"])
+
+                # Keep Above
+                self.assertTrue(data["kaDispatchA"])
+                self.assertFalse(data["kaBeforeConfirm"])
+                self.assertTrue(data["kaAfterConfirm"])
+                self.assertTrue(data["kaOffDispatchA"])
+                self.assertFalse(data["kaRejectB"])
+
+                # Move to Virtual Desktop
+                self.assertEqual(data["targetsDeskInitial"], ["desk-2", "desk-3"])
+                self.assertFalse(data["moveSameDesk"])
+                self.assertFalse(data["moveUnknownDesk"])
+                self.assertFalse(data["moveBadDesk"])
+                self.assertTrue(data["moveDesk2Dispatch"])
+                self.assertEqual(data["desksBeforeConfirm"], ["desk-1"])
+                self.assertEqual(data["desksAfterConfirm"], ["desk-2"])
+                self.assertEqual(data["targetsDeskAfterMove2"], ["desk-1", "desk-3"])
+                self.assertTrue(data["moveAllDesksDispatch"])
+                self.assertEqual(data["desksAfterAll"], ["all"])
+                self.assertFalse(data["moveAllDesksRedundant"])
+                self.assertEqual(data["targetsDeskWhenOnAll"], ["desk-1", "desk-2", "desk-3"])
+                self.assertEqual(data["singleDeskTargets"], [])
+                self.assertFalse(data["singleDeskMoveAttempt"])
+
+                # Restricted close / output move + stale / invalid UUIDs
+                self.assertFalse(data["closeRejectB"])
+                self.assertFalse(data["moveOutRejectB"])
+                self.assertFalse(data["staleMax"])
+                self.assertFalse(data["staleDesk"])
+                self.assertFalse(data["invalidMax"])
+                self.assertIsNone(data["actionAfterStale"])
+
+                # DockMenu integration
+                self.assertTrue(data["menuMaxOk"])
+                self.assertFalse(data["menuMaxRejectB"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()

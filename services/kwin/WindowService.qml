@@ -460,6 +460,22 @@ Singleton {
             root.windowOutputs = nextOuts;
         }
 
+        const stateKeys = Object.keys(root.windowStates || {});
+        let statePruned = false;
+        const nextStates = {};
+        for (let i = 0; i < stateKeys.length; i++) {
+            const sk = stateKeys[i];
+            if (activeCleanWids[sk]) {
+                nextStates[sk] = root.windowStates[sk];
+            } else {
+                statePruned = true;
+            }
+        }
+        if (statePruned) {
+            root.windowStates = nextStates;
+        }
+        root.windowStateRevision += 1;
+
         // Reconcile window cycling state across window open/close and late app resolution
         const rawCycleKeys = Object.keys(root.appCycleIndices || {});
         const rawWidKeys = Object.keys(root.appCycleWindowIds || {});
@@ -608,8 +624,20 @@ Singleton {
     }
 
     property var outputsOverride: null
+    property var desktopsOverride: null
     property var windowOutputs: ({})
+    property var windowStates: ({})
+    property int windowStateRevision: 0
     property var lastExecutedAction: null
+
+    onOutputsOverrideChanged: {
+        root.windowStateRevision += 1;
+    }
+    onDesktopsOverrideChanged: {
+        root.windowStateRevision += 1;
+    }
+
+    readonly property bool isLiveKWinSession: KWinService.isKWin && root.outputsOverride === null && root.desktopsOverride === null
 
     readonly property var availableOutputs: {
         if (root.outputsOverride !== null && Array.isArray(root.outputsOverride)) {
@@ -634,19 +662,104 @@ Singleton {
         return res;
     }
 
+    readonly property var availableDesktops: {
+        if (root.desktopsOverride !== null && Array.isArray(root.desktopsOverride)) {
+            const custom = [];
+            const seen = {};
+            for (let i = 0; i < root.desktopsOverride.length; i++) {
+                const entry = root.desktopsOverride[i];
+                const id = (typeof entry === "object" && entry !== null)
+                    ? String(entry.id || "").trim()
+                    : String(entry || "").trim();
+                const name = (typeof entry === "object" && entry !== null && entry.name)
+                    ? String(entry.name).trim()
+                    : ("Desktop " + (i + 1));
+                const idx = (typeof entry === "object" && entry !== null && entry.index !== undefined)
+                    ? Number(entry.index)
+                    : i;
+                if (id.length > 0 && /^[a-zA-Z0-9._-]+$/.test(id) && !seen[id]) {
+                    seen[id] = true;
+                    custom.push({ id: id, name: name, index: idx });
+                }
+            }
+            return custom;
+        }
+        const kdesks = KWinService.desktops || [];
+        const res = [];
+        const seenK = {};
+        for (let i = 0; i < kdesks.length; i++) {
+            const d = kdesks[i];
+            const id = (d && d.id) ? String(d.id).trim() : "";
+            const name = (d && d.name) ? String(d.name).trim() : ("Desktop " + (i + 1));
+            const idx = (d && d.index !== undefined) ? Number(d.index) : i;
+            if (id.length > 0 && /^[a-zA-Z0-9._-]+$/.test(id) && !seenK[id]) {
+                seenK[id] = true;
+                res.push({ id: id, name: name, index: idx });
+            }
+        }
+        return res;
+    }
+
     function parseWindowOutputsJson(jsonText) {
         if (!jsonText) return false;
         try {
             const parsed = JSON.parse(String(jsonText).trim());
             if (Array.isArray(parsed)) {
-                const next = {};
+                const hasAnyOutput = parsed.some(item => item && item.output !== undefined);
+                const nextOuts = hasAnyOutput ? {} : Object.assign({}, root.windowOutputs || {});
+                const nextStates = Object.assign({}, root.windowStates || {});
                 for (let i = 0; i < parsed.length; i++) {
                     const item = parsed[i];
-                    if (item && item.id && item.output) {
-                        next[root.cleanWindowId(item.id)] = String(item.output).trim();
+                    if (!item || !item.id) continue;
+                    const clean = root.cleanWindowId(item.id);
+                    if (!clean || !root.isValidWindowUuid(clean)) continue;
+                    if (root.windows && root.windows.length > 0 && !root.findWindowById(clean)) {
+                        continue;
                     }
+                    if (item.output !== undefined) {
+                        const outStr = String(item.output || "").trim();
+                        if (outStr.length > 0) {
+                            nextOuts[clean] = outStr;
+                        } else {
+                            delete nextOuts[clean];
+                        }
+                    }
+                    const prev = nextStates[clean] || {};
+                    const st = {
+                        minimized: item.minimized !== undefined ? Boolean(item.minimized) : (prev.minimized !== undefined ? Boolean(prev.minimized) : false),
+                        minimizable: item.minimizable !== undefined ? Boolean(item.minimizable) : (prev.minimizable !== undefined ? Boolean(prev.minimizable) : true),
+                        maximized: item.maximized !== undefined
+                            ? Boolean(item.maximized)
+                            : (item.maximizeMode !== undefined
+                                ? ((Number(item.maximizeMode) & 3) === 3)
+                                : (prev.maximized !== undefined ? Boolean(prev.maximized) : false)),
+                        maximizeMode: item.maximizeMode !== undefined
+                            ? Number(item.maximizeMode)
+                            : (item.maximized !== undefined
+                                ? (item.maximized ? 3 : 0)
+                                : (prev.maximizeMode !== undefined ? Number(prev.maximizeMode) : 0)),
+                        maximizable: item.maximizable !== undefined ? Boolean(item.maximizable) : (prev.maximizable !== undefined ? Boolean(prev.maximizable) : true),
+                        fullScreen: item.fullScreen !== undefined ? Boolean(item.fullScreen) : (prev.fullScreen !== undefined ? Boolean(prev.fullScreen) : false),
+                        fullScreenable: item.fullScreenable !== undefined ? Boolean(item.fullScreenable) : (prev.fullScreenable !== undefined ? Boolean(prev.fullScreenable) : true),
+                        keepAbove: item.keepAbove !== undefined ? Boolean(item.keepAbove) : (prev.keepAbove !== undefined ? Boolean(prev.keepAbove) : false),
+                        keepAboveable: item.keepAboveable !== undefined ? Boolean(item.keepAboveable) : (prev.keepAboveable !== undefined ? Boolean(prev.keepAboveable) : true),
+                        closeable: item.closeable !== undefined ? Boolean(item.closeable) : (prev.closeable !== undefined ? Boolean(prev.closeable) : true),
+                        moveable: item.moveable !== undefined ? Boolean(item.moveable) : (prev.moveable !== undefined ? Boolean(prev.moveable) : true),
+                        moveableAcrossScreens: item.moveableAcrossScreens !== undefined ? Boolean(item.moveableAcrossScreens) : (prev.moveableAcrossScreens !== undefined ? Boolean(prev.moveableAcrossScreens) : true),
+                        onAllDesktops: item.onAllDesktops !== undefined ? Boolean(item.onAllDesktops) : (prev.onAllDesktops !== undefined ? Boolean(prev.onAllDesktops) : false),
+                        desktops: Array.isArray(item.desktops)
+                            ? item.desktops.map(d => String(d || "").trim()).filter(d => d.length > 0 && /^[a-zA-Z0-9._-]+$/.test(d))
+                            : (Array.isArray(prev.desktops) ? prev.desktops.slice() : []),
+                        x: item.x !== undefined ? Number(item.x) : (prev.x !== undefined ? Number(prev.x) : 0),
+                        y: item.y !== undefined ? Number(item.y) : (prev.y !== undefined ? Number(prev.y) : 0),
+                        width: item.width !== undefined ? Number(item.width) : (prev.width !== undefined ? Number(prev.width) : 0),
+                        height: item.height !== undefined ? Number(item.height) : (prev.height !== undefined ? Number(prev.height) : 0)
+                    };
+                    nextStates[clean] = st;
                 }
-                root.windowOutputs = next;
+                root.windowOutputs = nextOuts;
+                root.windowStates = nextStates;
+                root.windowStateRevision += 1;
                 return true;
             }
         } catch (e) {
@@ -655,12 +768,16 @@ Singleton {
         return false;
     }
 
+    function parseWindowStatesJson(jsonText) {
+        return root.parseWindowOutputsJson(jsonText);
+    }
+
     Process {
         id: outputsSyncProc
         property string buf: ""
         command: [
             "kdotool", "kwinscript", "--inline",
-            "var wins = workspace.windowList().filter(w => w.normalWindow).map(w => ({ id: w.internalId.toString(), output: w.output ? w.output.name : '' })); output_result(JSON.stringify(wins));"
+            "const wins = workspace.windowList().filter(w => w.normalWindow && !w.deleted).map(w => ({ id: w.internalId.toString(), output: w.output ? w.output.name : '', minimized: !!w.minimized, minimizable: w.minimizable !== false, maximized: ((w.maximizeMode & 3) === 3), maximizeMode: Number(w.maximizeMode || 0), maximizable: w.maximizable !== false, fullScreen: !!w.fullScreen, fullScreenable: w.fullScreenable !== false, keepAbove: !!w.keepAbove, keepAboveable: !w.specialWindow, closeable: w.closeable !== false, moveable: w.moveable !== false, moveableAcrossScreens: w.moveableAcrossScreens !== false, onAllDesktops: !!w.onAllDesktops, desktops: (w.desktops || []).map(d => d.id ? d.id.toString() : ''), x: Math.round(w.x || 0), y: Math.round(w.y || 0), width: Math.round(w.width || 0), height: Math.round(w.height || 0) })); output_result(JSON.stringify(wins));"
         ]
         stdout: SplitParser {
             onRead: data => { outputsSyncProc.buf += data; }
@@ -674,12 +791,15 @@ Singleton {
     }
 
     function refreshWindowOutputs() {
-        if (!KWinService.isKWin || root.outputsOverride !== null) return;
-        if (root.availableOutputs.length <= 1) return;
+        if (!root.isLiveKWinSession) return;
         if (!outputsSyncProc.running) {
             outputsSyncProc.buf = "";
             outputsSyncProc.running = true;
         }
+    }
+
+    function refreshWindowStates() {
+        root.refreshWindowOutputs();
     }
 
     function isValidOutputName(outputName) {
@@ -687,6 +807,18 @@ Singleton {
         const trimmed = outputName.trim();
         if (!/^[a-zA-Z0-9._-]+$/.test(trimmed)) return false;
         return root.availableOutputs.indexOf(trimmed) !== -1;
+    }
+
+    function isValidDesktopTarget(desktopId) {
+        if (!desktopId || typeof desktopId !== "string") return false;
+        const trimmed = desktopId.trim();
+        if (!/^[a-zA-Z0-9._-]+$/.test(trimmed)) return false;
+        if (trimmed === "all") return root.availableDesktops.length > 1;
+        const desks = root.availableDesktops || [];
+        for (let i = 0; i < desks.length; i++) {
+            if (desks[i] && desks[i].id === trimmed) return true;
+        }
+        return false;
     }
 
     function findWindowById(windowId) {
@@ -701,7 +833,77 @@ Singleton {
         return null;
     }
 
+    function getWindowState(windowId) {
+        void(root.windowStateRevision);
+        const win = findWindowById(windowId);
+        if (!win) return null;
+        const clean = cleanWindowId(win.id);
+        const st = (root.windowStates && root.windowStates[clean]) ? root.windowStates[clean] : {};
+        return {
+            id: win.id,
+            cleanId: clean,
+            minimized: Boolean(st.minimized),
+            minimizable: st.minimizable !== undefined ? Boolean(st.minimizable) : true,
+            maximized: Boolean(st.maximized),
+            maximizeMode: st.maximizeMode !== undefined ? Number(st.maximizeMode) : (st.maximized ? 3 : 0),
+            maximizable: st.maximizable !== undefined ? Boolean(st.maximizable) : true,
+            fullScreen: Boolean(st.fullScreen),
+            fullScreenable: st.fullScreenable !== undefined ? Boolean(st.fullScreenable) : true,
+            keepAbove: Boolean(st.keepAbove),
+            keepAboveable: st.keepAboveable !== undefined ? Boolean(st.keepAboveable) : true,
+            closeable: st.closeable !== undefined ? Boolean(st.closeable) : true,
+            moveable: st.moveable !== undefined ? Boolean(st.moveable) : true,
+            moveableAcrossScreens: st.moveableAcrossScreens !== undefined ? Boolean(st.moveableAcrossScreens) : true,
+            onAllDesktops: Boolean(st.onAllDesktops),
+            desktops: Array.isArray(st.desktops) ? st.desktops.slice() : [],
+            output: root.getWindowOutput(win.id),
+            x: st.x !== undefined ? Number(st.x) : 0,
+            y: st.y !== undefined ? Number(st.y) : 0,
+            width: st.width !== undefined ? Number(st.width) : 0,
+            height: st.height !== undefined ? Number(st.height) : 0
+        };
+    }
+
+    function getWindowDesktops(windowId) {
+        const st = getWindowState(windowId);
+        if (!st) return [];
+        if (st.onAllDesktops) return ["all"];
+        return st.desktops;
+    }
+
+    function canActivateWindow(windowId) {
+        void(root.windowStateRevision);
+        return isValidWindowUuid(windowId) && findWindowById(windowId) !== null;
+    }
+
+    function canCloseWindow(windowId) {
+        const st = getWindowState(windowId);
+        return st !== null && st.closeable !== false;
+    }
+
+    function canMinimizeWindow(windowId) {
+        const st = getWindowState(windowId);
+        if (!st) return false;
+        return st.minimized || st.minimizable !== false;
+    }
+
+    function canMaximizeWindow(windowId) {
+        const st = getWindowState(windowId);
+        return st !== null && st.maximizable !== false;
+    }
+
+    function canFullScreenWindow(windowId) {
+        const st = getWindowState(windowId);
+        return st !== null && st.fullScreenable !== false;
+    }
+
+    function canKeepAboveWindow(windowId) {
+        const st = getWindowState(windowId);
+        return st !== null && st.keepAboveable !== false;
+    }
+
     function getWindowOutput(windowId) {
+        void(root.windowStateRevision);
         const clean = cleanWindowId(windowId);
         if (!clean) return "";
         if (root.windowOutputs && root.windowOutputs[clean]) {
@@ -717,11 +919,11 @@ Singleton {
     }
 
     function getTargetOutputsForWindow(windowId) {
-        const win = findWindowById(windowId);
-        if (!win) return [];
+        const st = getWindowState(windowId);
+        if (!st || !st.moveableAcrossScreens) return [];
         const outs = root.availableOutputs || [];
         if (outs.length <= 1) return [];
-        const curOut = getWindowOutput(win.id);
+        const curOut = getWindowOutput(st.id);
         const targets = [];
         for (let i = 0; i < outs.length; i++) {
             if (!curOut || outs[i] !== curOut) {
@@ -729,6 +931,52 @@ Singleton {
             }
         }
         return targets;
+    }
+
+    function getTargetDesktopsForWindow(windowId) {
+        const st = getWindowState(windowId);
+        if (!st) return [];
+        const desks = root.availableDesktops || [];
+        if (desks.length <= 1) return [];
+        const curDesks = st.desktops || [];
+        const isSingleDesk = !st.onAllDesktops && curDesks.length === 1;
+        const targets = [];
+        for (let i = 0; i < desks.length; i++) {
+            const d = desks[i];
+            if (!d || !d.id) continue;
+            if (!isSingleDesk || curDesks[0] !== d.id) {
+                targets.push(d);
+            }
+        }
+        return targets;
+    }
+
+    function getWindowCapabilities(windowId) {
+        const st = getWindowState(windowId);
+        if (!st) {
+            return {
+                valid: false,
+                activate: false,
+                minimize: false,
+                maximize: false,
+                fullscreen: false,
+                keepAbove: false,
+                close: false,
+                moveToOutput: false,
+                moveToDesktop: false
+            };
+        }
+        return {
+            valid: true,
+            activate: true,
+            minimize: canMinimizeWindow(windowId),
+            maximize: canMaximizeWindow(windowId),
+            fullscreen: canFullScreenWindow(windowId),
+            keepAbove: canKeepAboveWindow(windowId),
+            close: canCloseWindow(windowId),
+            moveToOutput: getTargetOutputsForWindow(windowId).length > 0,
+            moveToDesktop: getTargetDesktopsForWindow(windowId).length > 0
+        };
     }
 
     function getActiveWindowForApp(appId) {
@@ -772,7 +1020,7 @@ Singleton {
             }
         }
         root.lastExecutedAction = { action: "activate", windowId: win.id, cleanId: clean };
-        if (KWinService.isKWin && root.outputsOverride === null) {
+        if (root.isLiveKWinSession) {
             Quickshell.execDetached(["qdbus6", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", win.id, ""]);
             actionReconcileTimer.restart();
         }
@@ -783,12 +1031,14 @@ Singleton {
         if (!isValidWindowUuid(windowId)) return false;
         const win = findWindowById(windowId);
         if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st || !st.closeable) return false;
         const clean = cleanWindowId(win.id);
         Log.info("WindowService", "Requesting graceful close for window: " + win.id);
         root.lastExecutedAction = { action: "close", windowId: win.id, cleanId: clean };
 
         // Do NOT optimistically remove the window from local state; wait for KWin enumeration to confirm closure
-        if (KWinService.isKWin && root.outputsOverride === null) {
+        if (root.isLiveKWinSession) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
             Quickshell.execDetached([scriptPath, "close", win.id]);
             actionReconcileTimer.restart();
@@ -796,10 +1046,119 @@ Singleton {
         return true;
     }
 
+    function setWindowMinimized(windowId, minimized) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st) return false;
+        const targetMin = (minimized !== undefined) ? Boolean(minimized) : !st.minimized;
+        if (st.minimized === targetMin) return false;
+        if (targetMin && !st.minimizable) return false;
+
+        const clean = cleanWindowId(win.id);
+        const actName = targetMin ? "minimize" : "unminimize";
+        Log.info("WindowService", "Requesting " + actName + " for window: " + win.id);
+        root.lastExecutedAction = { action: actName, windowId: win.id, cleanId: clean, targetMinimized: targetMin };
+
+        // Do NOT optimistically mutate windowStates; wait for KWin reconciliation to confirm
+        if (root.isLiveKWinSession) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, actName, win.id]);
+            actionReconcileTimer.restart();
+        }
+        return true;
+    }
+
+    function toggleMinimizeWindow(windowId) {
+        return setWindowMinimized(windowId, undefined);
+    }
+
+    function setWindowMaximized(windowId, maximized) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st || !st.maximizable) return false;
+        const targetMax = (maximized !== undefined) ? Boolean(maximized) : !st.maximized;
+        if (st.maximized === targetMax) return false;
+
+        const clean = cleanWindowId(win.id);
+        const actName = targetMax ? "maximize" : "unmaximize";
+        Log.info("WindowService", "Requesting " + actName + " for window: " + win.id);
+        root.lastExecutedAction = { action: actName, windowId: win.id, cleanId: clean, targetMaximized: targetMax };
+
+        // Do NOT optimistically mutate windowStates; wait for KWin reconciliation to confirm
+        if (root.isLiveKWinSession) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, actName, win.id]);
+            actionReconcileTimer.restart();
+        }
+        return true;
+    }
+
+    function toggleMaximizeWindow(windowId) {
+        return setWindowMaximized(windowId, undefined);
+    }
+
+    function setWindowFullScreen(windowId, fullScreen) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st || !st.fullScreenable) return false;
+        const targetFs = (fullScreen !== undefined) ? Boolean(fullScreen) : !st.fullScreen;
+        if (st.fullScreen === targetFs) return false;
+
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Requesting fullscreen=" + targetFs + " for window: " + win.id);
+        root.lastExecutedAction = { action: "fullscreen", windowId: win.id, cleanId: clean, targetFullScreen: targetFs };
+
+        // Do NOT optimistically mutate windowStates; wait for KWin reconciliation to confirm
+        if (root.isLiveKWinSession) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, "fullscreen", win.id, targetFs ? "true" : "false"]);
+            actionReconcileTimer.restart();
+        }
+        return true;
+    }
+
+    function toggleFullScreenWindow(windowId) {
+        return setWindowFullScreen(windowId, undefined);
+    }
+
+    function setWindowKeepAbove(windowId, keepAbove) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st || !st.keepAboveable) return false;
+        const targetKa = (keepAbove !== undefined) ? Boolean(keepAbove) : !st.keepAbove;
+        if (st.keepAbove === targetKa) return false;
+
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Requesting keepAbove=" + targetKa + " for window: " + win.id);
+        root.lastExecutedAction = { action: "keep-above", windowId: win.id, cleanId: clean, targetKeepAbove: targetKa };
+
+        // Do NOT optimistically mutate windowStates; wait for KWin reconciliation to confirm
+        if (root.isLiveKWinSession) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, "keep-above", win.id, targetKa ? "true" : "false"]);
+            actionReconcileTimer.restart();
+        }
+        return true;
+    }
+
+    function toggleKeepAboveWindow(windowId) {
+        return setWindowKeepAbove(windowId, undefined);
+    }
+
     function moveWindowToOutput(windowId, outputName) {
         if (!isValidWindowUuid(windowId)) return false;
         const win = findWindowById(windowId);
         if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st || !st.moveableAcrossScreens) return false;
         const outs = root.availableOutputs || [];
         if (outs.length <= 1) return false;
         if (!isValidOutputName(outputName)) return false;
@@ -812,9 +1171,40 @@ Singleton {
         root.lastExecutedAction = { action: "move-output", windowId: win.id, cleanId: clean, outputName: targetOut };
 
         // Do NOT optimistically update windowOutputs; wait for actual KWin output sync to confirm movement
-        if (KWinService.isKWin && root.outputsOverride === null) {
+        if (root.isLiveKWinSession) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
             Quickshell.execDetached([scriptPath, "move-output", win.id, targetOut]);
+            actionReconcileTimer.restart();
+        }
+        return true;
+    }
+
+    function moveWindowToDesktop(windowId, desktopId) {
+        if (!isValidWindowUuid(windowId)) return false;
+        const win = findWindowById(windowId);
+        if (!win) return false;
+        const st = getWindowState(win.id);
+        if (!st) return false;
+        const desks = root.availableDesktops || [];
+        if (desks.length <= 1) return false;
+        if (!isValidDesktopTarget(desktopId)) return false;
+        const targetDesk = desktopId.trim();
+        if (targetDesk === "all") {
+            if (st.onAllDesktops) return false;
+        } else {
+            if (!st.onAllDesktops && st.desktops.length === 1 && st.desktops[0] === targetDesk) {
+                return false;
+            }
+        }
+
+        const clean = cleanWindowId(win.id);
+        Log.info("WindowService", "Requesting move for window " + win.id + " to desktop " + targetDesk);
+        root.lastExecutedAction = { action: "move-desktop", windowId: win.id, cleanId: clean, desktopId: targetDesk };
+
+        // Do NOT optimistically update windowStates; wait for KWin reconciliation to confirm desktop change
+        if (root.isLiveKWinSession) {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-window-action.sh";
+            Quickshell.execDetached([scriptPath, "move-desktop", win.id, targetDesk]);
             actionReconcileTimer.restart();
         }
         return true;
@@ -832,7 +1222,7 @@ Singleton {
             root.activeWindowId = clean;
         }
         root.lastExecutedAction = { action: "toggle", windowId: win.id, cleanId: clean };
-        if (KWinService.isKWin && root.outputsOverride === null) {
+        if (root.isLiveKWinSession) {
             const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-toggle-window.sh";
             Quickshell.execDetached([scriptPath, win.id]);
             actionReconcileTimer.restart();
