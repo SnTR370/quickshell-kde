@@ -10,7 +10,8 @@ AnchoredPopup {
     property string appId: ""
     property var app: null
     accessibleName: ApplicationService.cleanAppName(root.app ? root.app.name : root.appId) + " windows"
-    readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
+    property string filterScreenName: ""
+    readonly property var appWindows: WindowService.getFilteredWindowsForApp(root.appId, ConfigService.dockWindowFilter, root.filterScreenName)
 
     signal windowSelected()
 

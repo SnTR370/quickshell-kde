@@ -119,7 +119,7 @@ Variants {
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
-            const running = WindowService.runningAppIds || [];
+            const running = WindowService.getFilteredRunningAppIds(ConfigService.dockWindowFilter, dockWindow.modelData ? dockWindow.modelData.name : "") || [];
             const res = [];
             const seenCanon = {};
             for (let i = 0; i < running.length; i++) {

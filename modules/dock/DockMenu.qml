@@ -12,7 +12,8 @@ AnchoredPopup {
     property bool isRunning: false
     property bool isPinned: false
     accessibleName: ApplicationService.cleanAppName(root.app ? root.app.name : root.appId) + " context menu"
-    readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
+    property string filterScreenName: ""
+    readonly property var appWindows: WindowService.getFilteredWindowsForApp(root.appId, ConfigService.dockWindowFilter, root.filterScreenName)
     readonly property var appActions: {
         const _apps = ApplicationService.applications;
         return ApplicationService.getAppActions(root.app || root.appId);

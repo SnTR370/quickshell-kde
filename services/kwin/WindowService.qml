@@ -1,4 +1,5 @@
 pragma Singleton
+import "WindowFilter.js" as WindowFilter
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -979,6 +980,37 @@ Singleton {
         };
     }
 
+
+    // ---- Dock window filtering (selectors only; never mutates root.windows) ----
+    // mode/screenName default to the configured mode and no specific screen.
+    function _filterCtx(mode, screenName, desktopId) {
+        void(root.windowStateRevision);
+        return {
+            mode: mode === undefined ? ConfigService.dockWindowFilter : mode,
+            screenName: screenName || "",
+            currentDesktopId: desktopId === undefined ? KWinService.currentDesktopId : desktopId,
+            states: root.windowStates,
+            cleanId: root.cleanWindowId,
+            outputOf: root.getWindowOutput
+        };
+    }
+
+    function getFilteredWindowsForApp(appId, mode, screenName, desktopId) {
+        const wins = getWindowsForApp(appId);
+        return WindowFilter.filterWindows(wins, _filterCtx(mode, screenName, desktopId));
+    }
+
+    // Running app ids that have at least one window visible in the filtered view.
+    function getFilteredRunningAppIds(mode, screenName, desktopId) {
+        const ids = root.runningAppIds || [];
+        if (WindowFilter.normalizeMode(mode === undefined ? ConfigService.dockWindowFilter : mode) === "all") return ids;
+        const res = [];
+        for (let i = 0; i < ids.length; i++) {
+            if (getFilteredWindowsForApp(ids[i], mode, screenName, desktopId).length > 0) res.push(ids[i]);
+        }
+        return res;
+    }
+
     function getActiveWindowForApp(appId) {
         const wins = getWindowsForApp(appId);
         if (wins.length === 0 || !root.activeWindowId) return null;
@@ -1241,10 +1273,10 @@ Singleton {
         }
     }
 
-    function cycleAppWindows(appId, reverse) {
+    function cycleAppWindows(appId, reverse, screenName) {
         if (!appId) return false;
         const normAppId = normalizeCycleAppKey(appId);
-        const wins = getWindowsForApp(appId);
+        const wins = getFilteredWindowsForApp(appId, undefined, screenName);
         if (wins.length === 0) {
             if (normAppId) {
                 delete root.appCycleIndices[normAppId];

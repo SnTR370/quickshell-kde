@@ -92,3 +92,13 @@
   - OFFSCREEN (simulated QtTest key/mouse events, isolated `XDG_CONFIG_HOME`, `WindowService` overrides): real DockItem/IconButton/DockKeyboardNav/DockMenu/WindowChooserPopup. The harness window only mirrors the thin Dock window API because `PanelWindow` has no offscreen backend.
   - PHYSICAL Wayland: **not verified**. Whether KWin grants `OnDemand` keyboard focus to the Dock surface on request, and screen-reader output, were not tested on a real session.
 - **Performance:** no timers/processes/polling added. Focus lists and popup action lists are computed only on key presses; one small non-visual `DockKeyboardNav` per Dock window.
+
+## P0 #8 — Dock desktop & monitor window filtering
+- **Status:** DONE (logic verified in isolation; physical multi-monitor Wayland NOT verified).
+- **Modes** (`dock.windowFilter`, default `all`, invalid -> `all`, no write if unchanged): `all`, `desktop`, `monitor`, `desktop-and-monitor`. Selector in Settings > Dock ("Dock Window Filter"); Dock monitor visibility settings untouched.
+- **Design:** pure logic in `services/kwin/WindowFilter.js`; `WindowService.getFilteredWindowsForApp` / `getFilteredRunningAppIds` are read-only selectors. `windows`, `runningAppIds`, `windowStates` are never replaced by a filtered subset. Match by UUID (`cleanWindowId`); desktops from `windowStates` vs `KWinService.currentDesktopId`; output from `getWindowOutput` compared to the Dock surface's own `screen.name` (not `dockMonitors`).
+- **Unknown metadata => window INCLUDED** (unknown current desktop, missing state, empty desktop list, unknown/disconnected output, empty screen name). On-all-desktops windows pass every desktop filter.
+- **Semantics:** pinned launchers always shown; unpinned running icons only if >=1 window in the view; indicator, window count, chooser, context menu and wheel cycling all use the filtered view. Activating an app that runs globally but has 0 windows in the view does nothing (no duplicate launch); "New window" actions still launch explicitly.
+- **Tests:** `tests/test_dock_window_filter.py` (node-executed pure logic + static contracts, 17 tests). Passing: also `test_dock_keyboard.TestDockKeyboardStatic`, `test_milestone_3a` (qmllint only).
+- **Skipped as unsafe:** `test_dock_keyboard.TestDockKeyboardRuntime` (quickshell probe; services run `qdbus6` against the live KWin even under offscreen) and any `quickshell -p shell.qml`. `tst_dock_autohide.qml` fails to import under qmltestrunner (pre-existing, unrelated).
+- **Performance:** no timers/processes added; selectors are evaluated in bindings only when windows/states/desktop/config change, O(windows) per item and early-return for `all`.

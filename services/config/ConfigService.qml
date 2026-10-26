@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import "../core"
 import "../kwin"
+import "../kwin/WindowFilter.js" as WindowFilter
 
 Singleton {
     id: root
@@ -43,6 +44,8 @@ Singleton {
     property int dockHideDelay: 350
     property int dockRevealDelay: 120
     property var dockMonitors: "all"
+    // Dock window filter: all | desktop | monitor | desktop-and-monitor (invalid -> all)
+    property string dockWindowFilter: "all"
     property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
     property var canonicalAppIdResolver: null
 
@@ -333,6 +336,9 @@ Singleton {
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
+            }
+            if (parsed.windowFilter !== undefined && !mod["windowFilter"]) {
+                root.dockWindowFilter = WindowFilter.normalizeMode(parsed.windowFilter);
             }
             if (parsed.pinned && typeof parsed.pinned === "object" && parsed.pinned.length !== undefined && !mod["pinned"]) {
                 root.dockPinned = root.sanitizeDockPinned(parsed.pinned);
@@ -720,6 +726,7 @@ Singleton {
             "hideDelay": root.dockHideDelay,
             "revealDelay": root.dockRevealDelay,
             "monitors": root.dockMonitors,
+            "windowFilter": root.dockWindowFilter,
             "pinned": root.dockPinned
         });
     }
@@ -781,6 +788,14 @@ Singleton {
     function setDockRevealDelay(delay) {
         root._markDockModified("revealDelay");
         root.dockRevealDelay = Math.max(0, Math.min(1000, delay));
+        saveDockConfig();
+    }
+
+    function setDockWindowFilter(mode) {
+        const norm = WindowFilter.normalizeMode(mode);
+        if (norm === root.dockWindowFilter) return;
+        root._markDockModified("windowFilter");
+        root.dockWindowFilter = norm;
         saveDockConfig();
     }
 

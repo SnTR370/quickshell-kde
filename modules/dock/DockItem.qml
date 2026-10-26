@@ -16,7 +16,9 @@ Item {
     readonly property int pinnedIndex: ApplicationService.getPinnedIndex(root.appId)
     readonly property bool canMoveLeft: isPinned && ApplicationService.canMovePinned(root.appId, "left")
     readonly property bool canMoveRight: isPinned && ApplicationService.canMovePinned(root.appId, "right")
-    readonly property var appWindows: WindowService.getWindowsForApp(root.appId)
+    // Filtered view for THIS dock surface's own screen (not the Dock-visibility monitor list).
+    readonly property string filterScreenName: (root.parentWindowRef && root.parentWindowRef.modelData) ? root.parentWindowRef.modelData.name : ""
+    readonly property var appWindows: WindowService.getFilteredWindowsForApp(root.appId, ConfigService.dockWindowFilter, root.filterScreenName)
     readonly property int windowCount: appWindows.length
     readonly property bool isCurrentAppActive: WindowService.activeWindowId !== "" && appWindows.some(w => WindowService.cleanWindowId(w.id) === WindowService.activeWindowId || w.id === WindowService.activeWindowId)
     property real baseSize: ConfigService.dockIconSize
@@ -388,8 +390,8 @@ Item {
             anchors.bottomMargin: 2
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 2
-            visible: root.isRunning
-            opacity: root.isRunning ? 1.0 : 0.0
+            visible: root.windowCount > 0
+            opacity: root.windowCount > 0 ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
 
             // Dot 1 (Single window or first of multi)
@@ -440,6 +442,7 @@ Item {
             anchorItem: iconContainer
             edge: ConfigService.dockEdge
             appId: root.appId
+            filterScreenName: root.filterScreenName
             app: root.app
             onWindowSelected: root.chooserOpen = false
             onClosed: root.chooserOpen = false
@@ -455,6 +458,7 @@ Item {
             anchorItem: iconContainer
             edge: ConfigService.dockEdge
             appId: root.appId
+            filterScreenName: root.filterScreenName
             app: root.app
             isRunning: root.isRunning
             isPinned: root.isPinned
@@ -467,7 +471,10 @@ Item {
     function activateItem() {
         if (root.dragging) return false;
         clickBounceAnim.restart();
-        if (root.windowCount === 0) {
+        if (root.windowCount === 0 && root.isRunning) {
+            // App runs globally but has no window in the filtered view: never launch a duplicate.
+            root.chooserOpen = false;
+        } else if (root.windowCount === 0) {
             root.menuOpen = false;
             root.chooserOpen = false;
             if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
@@ -582,7 +589,7 @@ Item {
         tooltipDwellTimer.stop();
         root.tooltipActive = false;
         if (root.windowCount === 0) return false;
-        return WindowService.cycleAppWindows(root.appId, delta < 0);
+        return WindowService.cycleAppWindows(root.appId, delta < 0, root.filterScreenName);
     }
 
     MouseArea {

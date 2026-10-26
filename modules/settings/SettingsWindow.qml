@@ -780,6 +780,58 @@ Variants {
                                     }
                                 }
 
+                                // Dock Window Filter selector (default: all)
+                                Text {
+                                    text: "Dock Window Filter"
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Repeater {
+                                        model: [
+                                            { mode: "all", label: "All" },
+                                            { mode: "desktop", label: "Desktop" },
+                                            { mode: "monitor", label: "Monitor" },
+                                            { mode: "desktop-and-monitor", label: "Both" }
+                                        ]
+
+                                        Rectangle {
+                                            id: wfBtn
+                                            required property var modelData
+                                            readonly property bool selected: ConfigService.dockWindowFilter === modelData.mode
+                                            Layout.fillWidth: true
+                                            implicitHeight: 30
+                                            radius: Theme.radiusSmall
+                                            color: wfBtn.selected ? Theme.primary : (wfMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+                                            Accessible.role: Accessible.Button
+                                            Accessible.name: "Window filter " + modelData.label
+                                            Accessible.checked: wfBtn.selected
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: wfBtn.modelData.label
+                                                color: wfBtn.selected ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.bold: wfBtn.selected
+                                            }
+
+                                            MouseArea {
+                                                id: wfMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: ConfigService.setDockWindowFilter(wfBtn.modelData.mode)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // Dock Displays Selection UI
                                 Text {
                                     text: "Dock Output Displays"
