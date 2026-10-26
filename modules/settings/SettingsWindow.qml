@@ -780,6 +780,28 @@ Variants {
                                     }
                                 }
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Text {
+                                        text: "Intellihide (hide only when a window overlaps; overrides Auto-hide)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockIntellihide ? "Intellihide On" : "Intellihide Off"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockIntellihide ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockIntellihide ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockIntellihide(!ConfigService.dockIntellihide)
+                                    }
+                                }
+
                                 // Dock Window Filter selector (default: all)
                                 Text {
                                     text: "Dock Window Filter"

@@ -41,6 +41,7 @@ Singleton {
     property bool dockReserveSpace: false
     property int dockIconSize: 44
     property bool dockAutoHide: false
+    property bool dockIntellihide: false
     property int dockHideDelay: 350
     property int dockRevealDelay: 120
     property var dockMonitors: "all"
@@ -302,6 +303,7 @@ Singleton {
             "reserveSpace": false,
             "iconSize": 44,
             "autoHide": false,
+            "intellihide": false,
             "hideDelay": 350,
             "revealDelay": 120,
             "monitors": "all",
@@ -328,6 +330,7 @@ Singleton {
                 root.dockIconSize = Math.max(20, Math.min(128, Math.trunc(parsed.iconSize)));
             }
             if (typeof parsed.autoHide === "boolean" && !mod["autoHide"]) root.dockAutoHide = parsed.autoHide;
+            if (typeof parsed.intellihide === "boolean" && !mod["intellihide"]) root.dockIntellihide = parsed.intellihide;
             if (typeof parsed.hideDelay === "number" && Number.isFinite(parsed.hideDelay) && !mod["hideDelay"]) {
                 root.dockHideDelay = Math.max(50, Math.min(2000, Math.trunc(parsed.hideDelay)));
             }
@@ -723,6 +726,7 @@ Singleton {
             "reserveSpace": root.dockReserveSpace,
             "iconSize": root.dockIconSize,
             "autoHide": root.dockAutoHide,
+            "intellihide": root.dockIntellihide,
             "hideDelay": root.dockHideDelay,
             "revealDelay": root.dockRevealDelay,
             "monitors": root.dockMonitors,
@@ -776,6 +780,12 @@ Singleton {
     function setDockAutoHide(autoHide) {
         root._markDockModified("autoHide");
         root.dockAutoHide = autoHide;
+        saveDockConfig();
+    }
+
+    function setDockIntellihide(on) {
+        root._markDockModified("intellihide");
+        root.dockIntellihide = on;
         saveDockConfig();
     }
 

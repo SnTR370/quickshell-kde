@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import "../../services"
 import "../../components"
+import "../../services/kwin/Intellihide.js" as Intellihide
 import "."
 
 Variants {
@@ -24,7 +25,21 @@ Variants {
         readonly property bool isVertical: edge === "left" || edge === "right"
         readonly property bool isFloating: ConfigService.dockFloating
         readonly property int offset: isFloating ? ConfigService.dockEdgeOffset : 0
-        readonly property bool autoHide: ConfigService.dockAutoHide
+        // autoHide = hide-capable (legacy auto-hide OR intellihide). Intellihide wins when both set.
+        readonly property bool intellihide: ConfigService.dockIntellihide
+        readonly property bool autoHide: ConfigService.dockAutoHide || ConfigService.dockIntellihide
+        // Revealed footprint: uses implicit surface size, never the animated Translate.
+        readonly property var footprint: Intellihide.dockFootprint(
+            modelData ? { x: modelData.x, y: modelData.y, width: modelData.width, height: modelData.height } : null,
+            edge, dockSurface.implicitWidth, dockSurface.implicitHeight, offset)
+        readonly property bool intellihideObstructed: {
+            if (!intellihide) return false;
+            void(WindowService.windowStateRevision);
+            const sts = WindowService.windowStates || {};
+            const arr = [];
+            for (const k in sts) arr.push(sts[k]);
+            return Intellihide.isObstructed(footprint, arr, KWinService.currentDesktopId);
+        }
         property bool hoverRevealed: false
         property var activePopupItem: null
         readonly property bool hasActivePopup: activePopupItem !== null
@@ -115,7 +130,8 @@ Variants {
                 if (ConfigService.settingsVisible) dockWindow.activePopupItem = null;
             }
         }
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging || keyboardNavActive
+        readonly property bool isRevealed: Intellihide.isRevealed(ConfigService.dockAutoHide, intellihide, intellihideObstructed,
+            hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging || keyboardNavActive)
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
