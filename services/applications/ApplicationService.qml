@@ -359,7 +359,34 @@ Singleton {
         const norm = ConfigService.normalizeDockAppId(appId);
         if (!norm || isIgnoredAlias(norm)) return false;
         const key = resolvePinnedKey(norm);
+        if (!key) return false;
+        if (ConfigService.isDockPinned(key)) {
+            return ConfigService.toggleDockPinned(key);
+        }
+        if (root.applications && root.applications.length > 0) {
+            const app = root.getAppById(key);
+            if (!app) return false;
+            const canonKey = ConfigService.normalizeDockAppId(app.id || key);
+            return ConfigService.toggleDockPinned(canonKey || key);
+        }
         return ConfigService.toggleDockPinned(key);
+    }
+
+    function pinAppAt(appId, targetIndex) {
+        if (!appId || typeof appId !== "string") return false;
+        if (isPinned(appId)) return false;
+        if (!getAppById(appId)) return false;
+        if (!togglePin(appId)) return false;
+        if (typeof targetIndex === "number" && Number.isInteger(targetIndex)) {
+            const newIdx = getPinnedIndex(appId);
+            if (newIdx > 0) {
+                const clamped = Math.max(0, Math.min(newIdx, targetIndex));
+                if (clamped !== newIdx) {
+                    reorderPinnedApps(newIdx, clamped);
+                }
+            }
+        }
+        return true;
     }
 
     function getPinnedIndex(appId) {

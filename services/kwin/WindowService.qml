@@ -54,7 +54,7 @@ Singleton {
             onRead: data => { windowScanner.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && windowScanner.buf.length > 0) {
+            if (exitCode === 0 && windowScanner.buf.length > 0 && root.outputsOverride === null) {
                 root.handleScannerOutput(windowScanner.buf);
             }
             windowScanner.buf = "";
@@ -242,7 +242,7 @@ Singleton {
             onRead: data => { activeWindowProc.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0) {
+            if (exitCode === 0 && activeWindowProc.buf.trim().length > 0 && root.outputsOverride === null) {
                 const wid = root.cleanWindowId(activeWindowProc.buf.trim());
                 if (wid.length > 0 && root.activeWindowId !== wid) {
                     root.activeWindowId = wid;
@@ -257,7 +257,7 @@ Singleton {
         id: syncTimer
         interval: 1000
         repeat: true
-        running: KWinService.isKWin
+        running: KWinService.isKWin && root.outputsOverride === null
         onTriggered: {
             root.refreshWindows();
             root.refreshActiveWindow();
@@ -276,7 +276,7 @@ Singleton {
     }
 
     function refreshActiveWindow() {
-        if (!KWinService.isKWin) return;
+        if (!KWinService.isKWin || root.outputsOverride !== null) return;
         if (!activeWindowProc.running) {
             activeWindowProc.buf = "";
             activeWindowProc.running = true;
@@ -284,7 +284,7 @@ Singleton {
     }
 
     function refreshWindows() {
-        if (!KWinService.isKWin) return;
+        if (!KWinService.isKWin || root.outputsOverride !== null) return;
         if (!windowScanner.running) {
             windowScanner.buf = "";
             windowScanner.running = true;

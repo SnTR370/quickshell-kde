@@ -668,5 +668,762 @@ Scope {
                     if os.path.exists(p):
                         os.remove(p)
 
+    def test_13_static_dock_drag_and_drop_contracts(self):
+        """Static verification of Qt Quick native Drag/DropArea facilities, service reuse, and autohide drag protection."""
+        with open(os.path.join(REPO_DIR, "modules/dock/DockSeparator.qml")) as f:
+            sep_qml = f.read()
+        with open(os.path.join(REPO_DIR, "services/applications/ApplicationService.qml")) as f:
+            app_service_qml = f.read()
+
+        # Qt Quick native Drag and DropArea in DockItem and DockSeparator
+        self.assertIn("DropArea {", self.dock_item_qml)
+        self.assertIn('keys: ["quickshell-dock-item"]', self.dock_item_qml)
+        self.assertIn("Drag.active: root.dragging", self.dock_item_qml)
+        self.assertIn("Drag.source: root", self.dock_item_qml)
+        self.assertIn("dragProxy.Drag.drop()", self.dock_item_qml)
+        self.assertIn("dragProxy.Drag.cancel()", self.dock_item_qml)
+        self.assertIn("DropArea {", sep_qml)
+        self.assertIn('keys: ["quickshell-dock-item"]', sep_qml)
+
+        # Service reuse without duplicating persistence/identity logic
+        self.assertIn("ApplicationService.reorderPinnedApps", self.dock_item_qml)
+        self.assertIn("ApplicationService.pinAppAt", self.dock_item_qml)
+        self.assertIn("function pinAppAt(appId, targetIndex)", app_service_qml)
+        self.assertIn("if (!togglePin(appId)) return false;", app_service_qml)
+        self.assertIn("reorderPinnedApps(newIdx, clamped);", app_service_qml)
+
+        # Autohide protection during active drag in Dock.qml
+        self.assertIn("property var activeDragItem: null", self.dock_qml)
+        self.assertIn("readonly property bool isDragging: activeDragItem !== null", self.dock_qml)
+        self.assertIn("|| isDragging", self.dock_qml)
+
+    def test_14_runtime_horizontal_and_vertical_drag_reordering_and_persistence(self):
+        """Real QML Drag Event Test: Verify horizontal and vertical Dock drag-to-reorder across multiple positions in both directions, single-item Dock no-op, uninstalled preservation, and reload persistence."""
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            env["QT_QPA_PLATFORM"] = "offscreen"
+            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_probe.qml")
+            reload_probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_reload_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import QtQuick.Layouts
+import QtTest
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+FloatingWindow {
+    id: win
+    implicitWidth: 800
+    implicitHeight: 600
+    visible: true
+
+    property string edge: ConfigService.dockEdge
+    readonly property bool isVertical: edge === "left" || edge === "right"
+    property var activePopupItem: null
+    readonly property bool hasActivePopup: activePopupItem !== null
+    property var activeDragItem: null
+    readonly property bool isDragging: activeDragItem !== null
+    property bool isRevealed: true
+
+    RowLayout {
+        id: horizLayout
+        visible: !win.isVertical
+        x: 20
+        y: 20
+        spacing: 4
+
+        Repeater {
+            id: horizPinnedRep
+            model: ApplicationService.pinnedApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+    }
+
+    ColumnLayout {
+        id: vertLayout
+        visible: win.isVertical
+        x: 20
+        y: 120
+        spacing: 4
+
+        Repeater {
+            id: vertPinnedRep
+            model: ApplicationService.pinnedApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+    }
+
+    TestCase {
+        id: tc
+        name: "DockDragReorderSuite"
+        when: false
+
+        function dragBetween(srcItem, dstItem) {
+            mousePress(srcItem, srcItem.width / 2, srcItem.height / 2, Qt.LeftButton);
+            mouseMove(srcItem, srcItem.width / 2 + 8, srcItem.height / 2 + 8);
+            const pt = srcItem.mapFromItem(dstItem, dstItem.width / 2, dstItem.height / 2);
+            mouseMove(srcItem, pt.x, pt.y);
+            mouseRelease(srcItem, pt.x, pt.y, Qt.LeftButton);
+            wait(25);
+        }
+
+        function runTests() {
+            wait(25);
+            const initialVis = ApplicationService.pinnedApps.slice();
+            const initialRaw = ConfigService.dockPinned.slice();
+
+            // 1. Horizontal (bottom edge): Drag index 0 ("org.kde.dolphin") -> index 3 ("systemsettings")
+            ConfigService.setDockEdge("bottom");
+            wait(20);
+            dragBetween(horizPinnedRep.itemAt(0), horizPinnedRep.itemAt(3));
+            const afterHorizFwdMulti = ApplicationService.pinnedApps.slice();
+
+            // 2. Horizontal (top edge): Drag index 3 ("org.kde.dolphin") -> index 1 ("firefox")
+            ConfigService.setDockEdge("top");
+            wait(20);
+            dragBetween(horizPinnedRep.itemAt(3), horizPinnedRep.itemAt(1));
+            const afterHorizRevMulti = ApplicationService.pinnedApps.slice();
+
+            // 3. Horizontal single-step right: Drag index 0 ("org.kde.konsole") -> index 1 ("org.kde.dolphin")
+            dragBetween(horizPinnedRep.itemAt(0), horizPinnedRep.itemAt(1));
+            const afterHorizStepRight = ApplicationService.pinnedApps.slice();
+
+            // 4. Vertical (left edge): Drag index 0 ("org.kde.dolphin") down to index 2 ("firefox")
+            ConfigService.setDockEdge("left");
+            wait(25);
+            dragBetween(vertPinnedRep.itemAt(0), vertPinnedRep.itemAt(2));
+            const afterVertDown = ApplicationService.pinnedApps.slice();
+
+            // 5. Vertical (right edge): Drag index 3 ("systemsettings") up to index 0 ("org.kde.konsole")
+            ConfigService.setDockEdge("right");
+            wait(25);
+            dragBetween(vertPinnedRep.itemAt(3), vertPinnedRep.itemAt(0));
+            const afterVertUp = ApplicationService.pinnedApps.slice();
+            const rawAfterMulti = ConfigService.dockPinned.slice();
+
+            // 6. Single-item Dock test: temporarily set dockPinned to ["org.kde.dolphin"]
+            ConfigService.dockPinned = ["org.kde.dolphin"];
+            wait(25);
+            const singleItem = vertPinnedRep.itemAt(0);
+            mousePress(singleItem, 26, 26, Qt.LeftButton);
+            mouseMove(singleItem, 26, 80);
+            mouseRelease(singleItem, 26, 80, Qt.LeftButton);
+            wait(20);
+            const afterSingleDrag = ApplicationService.pinnedApps.slice();
+
+            // Restore multi-item final state and persist for reload verification
+            ConfigService.dockPinned = rawAfterMulti;
+            ConfigService.saveDockConfig();
+            wait(50);
+
+            console.log("DOCK_DND_REORDER_RESULT:" + JSON.stringify({
+                initialVis: initialVis,
+                initialRaw: initialRaw,
+                afterHorizFwdMulti: afterHorizFwdMulti,
+                afterHorizRevMulti: afterHorizRevMulti,
+                afterHorizStepRight: afterHorizStepRight,
+                afterVertDown: afterVertDown,
+                afterVertUp: afterVertUp,
+                rawAfterMulti: rawAfterMulti,
+                afterSingleDrag: afterSingleDrag
+            }));
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1"];
+            ApplicationService.applications = [
+                { id: "org.kde.dolphin", name: "Dolphin", icon: "system-file-manager", aliases: ["org.kde.dolphin", "dolphin"] },
+                { id: "org.kde.konsole", name: "Konsole", icon: "utilities-terminal", aliases: ["org.kde.konsole", "konsole"] },
+                { id: "org.mozilla.firefox", name: "Firefox", icon: "org.mozilla.firefox", aliases: ["org.mozilla.firefox", "firefox"] },
+                { id: "systemsettings", name: "System Settings", icon: "preferences-system", aliases: ["systemsettings"] }
+            ];
+            ApplicationService.loading = false;
+            tc.runTests();
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "DOCK_DND_REORDER_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                self.assertEqual(data["initialVis"], ["org.kde.dolphin", "org.kde.konsole", "firefox", "systemsettings"])
+                self.assertEqual(data["afterHorizFwdMulti"], ["org.kde.konsole", "firefox", "systemsettings", "org.kde.dolphin"])
+                self.assertEqual(data["afterHorizRevMulti"], ["org.kde.konsole", "org.kde.dolphin", "firefox", "systemsettings"])
+                self.assertEqual(data["afterHorizStepRight"], ["org.kde.dolphin", "org.kde.konsole", "firefox", "systemsettings"])
+                self.assertEqual(data["afterVertDown"], ["org.kde.konsole", "firefox", "org.kde.dolphin", "systemsettings"])
+                self.assertEqual(data["afterVertUp"], ["systemsettings", "org.kde.konsole", "firefox", "org.kde.dolphin"])
+                self.assertIn("code", data["rawAfterMulti"])
+                self.assertEqual(data["afterSingleDrag"], ["org.kde.dolphin"])
+
+                # Verify reload persistence in fresh Quickshell process
+                with open(reload_probe_path, "w") as rpf:
+                    rpf.write("""import QtQuick
+import Quickshell
+import "./services"
+
+Scope {
+    property var _pinned: ConfigService.dockPinned
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            ApplicationService.applications = [
+                { id: "org.kde.dolphin", name: "Dolphin", icon: "system-file-manager", aliases: ["org.kde.dolphin", "dolphin"] },
+                { id: "org.kde.konsole", name: "Konsole", icon: "utilities-terminal", aliases: ["org.kde.konsole", "konsole"] },
+                { id: "org.mozilla.firefox", name: "Firefox", icon: "org.mozilla.firefox", aliases: ["org.mozilla.firefox", "firefox"] },
+                { id: "systemsettings", name: "System Settings", icon: "preferences-system", aliases: ["systemsettings"] }
+            ];
+            ApplicationService.loading = false;
+            console.log("DOCK_DND_RELOAD_RESULT:" + JSON.stringify({
+                reloadedRaw: ConfigService.dockPinned,
+                reloadedVis: ApplicationService.pinnedApps,
+                reloadedEdge: ConfigService.dockEdge
+            }));
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc_reload = subprocess.run(
+                    ["quickshell", "-p", reload_probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=6
+                )
+                reload_combined = (proc_reload.stdout or "") + "\n" + (proc_reload.stderr or "")
+                reload_marker = "DOCK_DND_RELOAD_RESULT:"
+                self.assertIn(reload_marker, reload_combined, f"Missing reload marker:\n{reload_combined}")
+                reload_line = [line for line in reload_combined.splitlines() if reload_marker in line][-1]
+                reload_data = json.loads(reload_line.split(reload_marker, 1)[1].strip())
+
+                self.assertEqual(reload_data["reloadedRaw"], data["rawAfterMulti"])
+                self.assertEqual(reload_data["reloadedVis"], ["systemsettings", "org.kde.konsole", "firefox", "org.kde.dolphin"])
+                self.assertEqual(reload_data["reloadedEdge"], "right")
+            finally:
+                for p in (probe_path, reload_probe_path):
+                    if os.path.exists(p):
+                        os.remove(p)
+
+    def test_15_runtime_drag_to_pin_running_apps_and_session_pin_unpin(self):
+        """Real QML Drag Event Test: Verify dragging unpinned running apps into empty, single-item, and multi-item Dock, canonical ID resolution, duplicate icon prevention, unknown app rejection, and session pin/unpin."""
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            env["QT_QPA_PLATFORM"] = "offscreen"
+            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_pin_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import QtQuick.Layouts
+import QtTest
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+FloatingWindow {
+    id: win
+    implicitWidth: 800
+    implicitHeight: 300
+    visible: true
+
+    property string edge: "bottom"
+    readonly property bool isVertical: false
+    property var activePopupItem: null
+    readonly property bool hasActivePopup: activePopupItem !== null
+    property var activeDragItem: null
+    readonly property bool isDragging: activeDragItem !== null
+    property bool isRevealed: true
+
+    readonly property var unpinnedRunningApps: {
+        const pinned = ApplicationService.pinnedApps || [];
+        const running = WindowService.runningAppIds || [];
+        const res = [];
+        for (let i = 0; i < running.length; i++) {
+            const r = running[i];
+            const app = ApplicationService.getAppById(r);
+            const canonId = app ? app.id : r;
+            let isPinned = false;
+            for (let p = 0; p < pinned.length; p++) {
+                const pApp = ApplicationService.getAppById(pinned[p]);
+                const pCanon = pApp ? pApp.id : pinned[p];
+                if (pCanon === canonId || pinned[p] === r || pinned[p] === canonId) {
+                    isPinned = true;
+                    break;
+                }
+            }
+            if (!isPinned && res.indexOf(canonId) === -1) {
+                res.push(canonId);
+            }
+        }
+        return res;
+    }
+
+    RowLayout {
+        id: rowLayout
+        x: 60
+        y: 30
+        spacing: 4
+
+        DockSeparator { isVertical: false }
+
+        Repeater {
+            id: pinnedRep
+            model: ApplicationService.pinnedApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+
+        DockSeparator {
+            id: pinSep
+            isVertical: false
+            acceptPinDrop: true
+            visible: win.unpinnedRunningApps.length > 0
+        }
+
+        Repeater {
+            id: runningRep
+            model: win.unpinnedRunningApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+    }
+
+    TestCase {
+        id: tc
+        name: "DockDragPinSuite"
+        when: false
+
+        function dragItemToTarget(srcItem, dstItem, dstX, dstY) {
+            mousePress(srcItem, srcItem.width / 2, srcItem.height / 2, Qt.LeftButton);
+            mouseMove(srcItem, srcItem.width / 2 - 8, srcItem.height / 2);
+            const pt = srcItem.mapFromItem(dstItem, dstX, dstY);
+            mouseMove(srcItem, pt.x, pt.y);
+            mouseRelease(srcItem, pt.x, pt.y, Qt.LeftButton);
+            wait(25);
+        }
+
+        function runTests() {
+            // Start with EMPTY pinned list
+            ConfigService.dockPinned = [];
+            wait(25);
+            const emptyPinnedStart = ApplicationService.pinnedApps.slice();
+            const runningStart = win.unpinnedRunningApps.slice();
+
+            // 1. Empty Dock: Drag running item 0 ("org.kde.gwenview") into the empty pinned zone (left of pinSep)
+            dragItemToTarget(runningRep.itemAt(0), pinSep, -20, 12);
+            const pinnedAfterEmptyDrop = ApplicationService.pinnedApps.slice();
+            const runningAfterEmptyDrop = win.unpinnedRunningApps.slice();
+
+            // 2. Single-item Dock: Drag running item 0 ("com.spotify.Client") onto pinned item 0 ("org.kde.gwenview") -> pins at index 0
+            dragItemToTarget(runningRep.itemAt(0), pinnedRep.itemAt(0), 20, 26);
+            const pinnedAfterSingleDrop = ApplicationService.pinnedApps.slice();
+            const runningAfterSingleDrop = win.unpinnedRunningApps.slice();
+
+            // 3. Multi-item Dock: Drag running item 0 ("org.kde.okular") onto index 1 ("org.kde.gwenview") -> pins at index 1
+            dragItemToTarget(runningRep.itemAt(0), pinnedRep.itemAt(1), 20, 26);
+            const pinnedAfterMiddleDrop = ApplicationService.pinnedApps.slice();
+            const runningAfterMiddleDrop = win.unpinnedRunningApps.slice();
+
+            // 4. Unknown running window ("window-0_{9999...}") remains in runningRep at index 0; dragging it onto pinned item 0 must be rejected!
+            dragItemToTarget(runningRep.itemAt(0), pinnedRep.itemAt(0), 26, 26);
+            const pinnedAfterUnknownDrop = ApplicationService.pinnedApps.slice();
+            const runningAfterUnknownDrop = win.unpinnedRunningApps.slice();
+
+            // 5. Direct service validation for invalid/unknown IDs
+            const rejectEmpty = ApplicationService.pinAppAt("", 0);
+            const rejectEnv = ApplicationService.pinAppAt("env", 0);
+            const rejectWin = ApplicationService.pinAppAt("window-custom-tool", 0);
+            const rejectGhost = ApplicationService.pinAppAt("nonexistent.ghost.app", 0);
+            const rejectDuplicate = ApplicationService.pinAppAt("com.spotify.Client", 0);
+
+            // 6. Unpin "org.kde.okular" during the same session -> returns to unpinnedRunningApps -> drag to pin at end (via pinSep)
+            ApplicationService.togglePin("org.kde.okular");
+            wait(25);
+            const pinnedAfterUnpinOkular = ApplicationService.pinnedApps.slice();
+            const runningAfterUnpinOkular = win.unpinnedRunningApps.slice();
+
+            // Find okular in runningRep (index 0) and drag onto pinSep to pin at the end (index 2)
+            dragItemToTarget(runningRep.itemAt(0), pinSep, 0, 12);
+            const pinnedAfterRepinEnd = ApplicationService.pinnedApps.slice();
+            const runningAfterRepinEnd = win.unpinnedRunningApps.slice();
+
+            console.log("DOCK_DND_PIN_RESULT:" + JSON.stringify({
+                emptyPinnedStart: emptyPinnedStart,
+                runningStart: runningStart,
+                pinnedAfterEmptyDrop: pinnedAfterEmptyDrop,
+                runningAfterEmptyDrop: runningAfterEmptyDrop,
+                pinnedAfterSingleDrop: pinnedAfterSingleDrop,
+                runningAfterSingleDrop: runningAfterSingleDrop,
+                pinnedAfterMiddleDrop: pinnedAfterMiddleDrop,
+                runningAfterMiddleDrop: runningAfterMiddleDrop,
+                pinnedAfterUnknownDrop: pinnedAfterUnknownDrop,
+                runningAfterUnknownDrop: runningAfterUnknownDrop,
+                rejectEmpty: rejectEmpty,
+                rejectEnv: rejectEnv,
+                rejectWin: rejectWin,
+                rejectGhost: rejectGhost,
+                rejectDuplicate: rejectDuplicate,
+                pinnedAfterUnpinOkular: pinnedAfterUnpinOkular,
+                runningAfterUnpinOkular: runningAfterUnpinOkular,
+                pinnedAfterRepinEnd: pinnedAfterRepinEnd,
+                runningAfterRepinEnd: runningAfterRepinEnd
+            }));
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1"];
+            ApplicationService.applications = [
+                { id: "org.kde.gwenview", name: "Gwenview", icon: "gwenview", aliases: ["org.kde.gwenview", "gwenview"] },
+                { id: "com.spotify.Client", name: "Spotify", icon: "com.spotify.Client", startupWMClass: "spotify", aliases: ["com.spotify.client", "spotify"] },
+                { id: "org.kde.okular", name: "Okular", icon: "okular", startupWMClass: "okular", aliases: ["org.kde.okular", "okular"] }
+            ];
+            ApplicationService.loading = false;
+
+            const wGwen = "0_{11111111-1111-1111-1111-111111111111}";
+            const wSpot = "0_{22222222-2222-2222-2222-222222222222}";
+            const wOku  = "0_{33333333-3333-3333-3333-333333333333}";
+            const wUnk  = "0_{99999999-9999-9999-9999-999999999999}";
+
+            const rawWins = [
+                '[Argument: (sssida{sv}) "' + wGwen + '", "Photo.png", "gwenview", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wSpot + '", "Spotify", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wOku + '", "Manual.pdf", "okular", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wUnk + '", "Unknown Tool", "", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + wSpot + '\\tspotify\\tspotify\\t==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawWins);
+            tc.runTests();
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "DOCK_DND_PIN_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                unk_id = "window-0_{99999999-9999-9999-9999-999999999999}"
+                self.assertEqual(data["emptyPinnedStart"], [])
+                self.assertEqual(data["runningStart"], ["org.kde.gwenview", "com.spotify.Client", "org.kde.okular", unk_id])
+
+                # 1. Empty Dock pin -> index 0
+                self.assertEqual(data["pinnedAfterEmptyDrop"], ["org.kde.gwenview"])
+                self.assertEqual(data["runningAfterEmptyDrop"], ["com.spotify.Client", "org.kde.okular", unk_id])
+
+                # 2. Single-item Dock pin -> index 0
+                self.assertEqual(data["pinnedAfterSingleDrop"], ["com.spotify.Client", "org.kde.gwenview"])
+                self.assertEqual(data["runningAfterSingleDrop"], ["org.kde.okular", unk_id])
+
+                # 3. Multi-item Dock pin -> index 1
+                self.assertEqual(data["pinnedAfterMiddleDrop"], ["com.spotify.Client", "org.kde.okular", "org.kde.gwenview"])
+                self.assertEqual(data["runningAfterMiddleDrop"], [unk_id])
+
+                # 4. Unknown running window rejected
+                self.assertEqual(data["pinnedAfterUnknownDrop"], ["com.spotify.Client", "org.kde.okular", "org.kde.gwenview"])
+                self.assertEqual(data["runningAfterUnknownDrop"], [unk_id])
+                self.assertFalse(data["rejectEmpty"])
+                self.assertFalse(data["rejectEnv"])
+                self.assertFalse(data["rejectWin"])
+                self.assertFalse(data["rejectGhost"])
+                self.assertFalse(data["rejectDuplicate"])
+
+                # 5. Unpin and re-pin in same session
+                self.assertEqual(data["pinnedAfterUnpinOkular"], ["com.spotify.Client", "org.kde.gwenview"])
+                self.assertEqual(data["runningAfterUnpinOkular"], ["org.kde.okular", unk_id])
+                self.assertEqual(data["pinnedAfterRepinEnd"], ["com.spotify.Client", "org.kde.gwenview", "org.kde.okular"])
+                self.assertEqual(data["runningAfterRepinEnd"], [unk_id])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
+    def test_16_runtime_drag_cancellation_invalid_drops_and_interaction_safety(self):
+        """Real QML Drag Event Test: Verify drag cancellation, target unavailability, invalid drop no-ops, no accidental launch/toggle on drag, left/middle/right click preservation, wheel cycling, popup/tooltip suppression, and autohide preservation."""
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = os.environ.copy()
+            env["XDG_CONFIG_HOME"] = tmpdir
+            env["QT_QPA_PLATFORM"] = "offscreen"
+            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_safety_probe.qml")
+            try:
+                with open(probe_path, "w") as pf:
+                    pf.write("""import QtQuick
+import QtQuick.Layouts
+import QtTest
+import Quickshell
+import "./services"
+import "./modules/dock"
+
+FloatingWindow {
+    id: win
+    implicitWidth: 800
+    implicitHeight: 300
+    visible: true
+
+    property string edge: "bottom"
+    readonly property bool isVertical: false
+    property bool autoHide: true
+    property bool hoverRevealed: false
+    property var activePopupItem: null
+    readonly property bool hasActivePopup: activePopupItem !== null
+    property var activeDragItem: null
+    readonly property bool isDragging: activeDragItem !== null
+    readonly property bool isRevealed: !autoHide || hoverRevealed || hasActivePopup || isDragging
+
+    RowLayout {
+        id: rowLayout
+        x: 20
+        y: 20
+        spacing: 4
+
+        Repeater {
+            id: pinnedRep
+            model: ApplicationService.pinnedApps
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+
+        Repeater {
+            id: runningRep
+            model: ["org.kde.gwenview"]
+            DockItem {
+                required property var modelData
+                parentWindowRef: win
+                appId: modelData
+                app: ApplicationService.getAppById(modelData)
+            }
+        }
+    }
+
+    TestCase {
+        id: tc
+        name: "DockSafetySuite"
+        when: false
+
+        function runTests() {
+            wait(25);
+            const baseline = ApplicationService.pinnedApps.slice();
+            WindowService.lastExecutedAction = null;
+
+            // 1. Mid-drag explicit cancelDrag() before mouseRelease over another item -> must NOT reorder and must NOT click/launch!
+            const item0 = pinnedRep.itemAt(0);
+            const item2 = pinnedRep.itemAt(2);
+            item0.menuOpen = true;
+            item0.tooltipActive = true;
+            mousePress(item0, 26, 26, Qt.LeftButton);
+            mouseMove(item0, 35, 26);
+            mouseMove(item0, 50, 26); // starts drag
+            const revealedDuringDrag = win.isRevealed;
+            const menuClosedOnDrag = !item0.menuOpen;
+            const tooltipClosedOnDrag = !item0.tooltipActive;
+            const pt2 = item0.mapFromItem(item2, 26, 26);
+            mouseMove(item0, pt2.x, pt2.y);
+            item0.cancelDrag();
+            mouseRelease(item0, pt2.x, pt2.y, Qt.LeftButton);
+            wait(20);
+            const afterExplicitCancel = ApplicationService.pinnedApps.slice();
+            const actionAfterCancel = WindowService.lastExecutedAction;
+
+            // 2. Drag cancellation when item becomes invisible mid-drag
+            mousePress(item0, 26, 26, Qt.LeftButton);
+            mouseMove(item0, 35, 26);
+            mouseMove(item0, 50, 26);
+            const draggingBeforeHide = item0.dragging;
+            item0.visible = false;
+            const draggingAfterHide = item0.dragging;
+            const winDraggingAfterHide = win.isDragging;
+            mouseRelease(item0, 45, 26, Qt.LeftButton);
+            item0.visible = true;
+            wait(20);
+            const afterHideCancel = ApplicationService.pinnedApps.slice();
+
+            // 3. Invalid drop outside Dock (far above rowLayout) -> safe no-op, no window action
+            mousePress(item0, 26, 26, Qt.LeftButton);
+            mouseMove(item0, 26, -120);
+            mouseRelease(item0, 26, -120, Qt.LeftButton);
+            wait(20);
+            const afterOutsideDrop = ApplicationService.pinnedApps.slice();
+
+            // 4. Invalid drop of pinned item onto unpinned running item -> safe no-op
+            const runItem = runningRep.itemAt(0);
+            const ptRun = item0.mapFromItem(runItem, 26, 26);
+            mousePress(item0, 26, 26, Qt.LeftButton);
+            mouseMove(item0, 45, 26);
+            mouseMove(item0, ptRun.x, ptRun.y);
+            mouseRelease(item0, ptRun.x, ptRun.y, Qt.LeftButton);
+            wait(20);
+            const afterDropOnRunning = ApplicationService.pinnedApps.slice();
+
+            // 5. Right-click toggles context menu and right-button mouse movement must NOT start drag
+            mouseClick(item0, 26, 26, Qt.RightButton);
+            const menuOpenAfterRightClick = item0.menuOpen;
+            item0.menuOpen = false;
+            mousePress(item0, 26, 26, Qt.RightButton);
+            mouseMove(item0, 35, 26);
+            mouseMove(item0, 55, 26);
+            const draggingOnRightMove = item0.dragging;
+            mouseRelease(item0, 55, 26, Qt.RightButton);
+            item0.menuOpen = false;
+
+            // 6. Left-click (without drag) on single-window running item ("org.kde.konsole", index 1) toggles window
+            const item1 = pinnedRep.itemAt(1);
+            WindowService.lastExecutedAction = null;
+            mouseClick(item1, 26, 26, Qt.LeftButton);
+            const actionAfterLeftClick = WindowService.lastExecutedAction;
+
+            // 7. Wheel cycling still works after drag operations
+            const wheelOk = item1.handleWheel(120);
+
+            console.log("DOCK_DND_SAFETY_RESULT:" + JSON.stringify({
+                baseline: baseline,
+                revealedDuringDrag: revealedDuringDrag,
+                menuClosedOnDrag: menuClosedOnDrag,
+                tooltipClosedOnDrag: tooltipClosedOnDrag,
+                afterExplicitCancel: afterExplicitCancel,
+                actionAfterCancel: actionAfterCancel,
+                draggingBeforeHide: draggingBeforeHide,
+                draggingAfterHide: draggingAfterHide,
+                winDraggingAfterHide: winDraggingAfterHide,
+                afterHideCancel: afterHideCancel,
+                afterOutsideDrop: afterOutsideDrop,
+                afterDropOnRunning: afterDropOnRunning,
+                draggingOnRightMove: draggingOnRightMove,
+                menuOpenAfterRightClick: menuOpenAfterRightClick,
+                actionAfterLeftClick: actionAfterLeftClick,
+                wheelOk: wheelOk
+            }));
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: true
+        repeat: false
+        onTriggered: {
+            WindowService.outputsOverride = ["eDP-1"];
+            ApplicationService.applications = [
+                { id: "org.kde.dolphin", name: "Dolphin", icon: "system-file-manager", aliases: ["org.kde.dolphin", "dolphin"] },
+                { id: "org.kde.konsole", name: "Konsole", icon: "utilities-terminal", aliases: ["org.kde.konsole", "konsole"] },
+                { id: "org.mozilla.firefox", name: "Firefox", icon: "org.mozilla.firefox", aliases: ["org.mozilla.firefox", "firefox"] },
+                { id: "systemsettings", name: "System Settings", icon: "preferences-system", aliases: ["systemsettings"] },
+                { id: "org.kde.gwenview", name: "Gwenview", icon: "gwenview", aliases: ["org.kde.gwenview", "gwenview"] }
+            ];
+            ApplicationService.loading = false;
+
+            const wKon = "0_{55555555-5555-5555-5555-555555555555}";
+            const wGwen = "0_{66666666-6666-6666-6666-666666666666}";
+            const rawWins = [
+                '[Argument: (sssida{sv}) "' + wKon + '", "Konsole", "utilities-terminal", 100, 1.0, [Argument: a{sv} {}]]',
+                '[Argument: (sssida{sv}) "' + wGwen + '", "Gwenview", "gwenview", 100, 1.0, [Argument: a{sv} {}]]',
+                '===KWIN_META:' + wKon + '\\torg.kde.konsole\\torg.kde.konsole\\t===',
+                '===KWIN_META:' + wGwen + '\\torg.kde.gwenview\\tgwenview\\t==='
+            ].join("\\n");
+            WindowService.handleScannerOutput(rawWins);
+            tc.runTests();
+            Qt.quit();
+        }
+    }
+}
+""")
+                proc = subprocess.run(
+                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    cwd=REPO_DIR,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8
+                )
+                combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                marker = "DOCK_DND_SAFETY_RESULT:"
+                self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
+                payload_line = [line for line in combined.splitlines() if marker in line][-1]
+                data = json.loads(payload_line.split(marker, 1)[1].strip())
+
+                expected_base = ["org.kde.dolphin", "org.kde.konsole", "firefox", "systemsettings"]
+                self.assertEqual(data["baseline"], expected_base)
+                self.assertTrue(data["revealedDuringDrag"])
+                self.assertTrue(data["menuClosedOnDrag"])
+                self.assertTrue(data["tooltipClosedOnDrag"])
+                self.assertEqual(data["afterExplicitCancel"], expected_base)
+                self.assertIsNone(data["actionAfterCancel"])
+                self.assertTrue(data["draggingBeforeHide"])
+                self.assertFalse(data["draggingAfterHide"])
+                self.assertFalse(data["winDraggingAfterHide"])
+                self.assertEqual(data["afterHideCancel"], expected_base)
+                self.assertEqual(data["afterOutsideDrop"], expected_base)
+                self.assertEqual(data["afterDropOnRunning"], expected_base)
+                self.assertFalse(data["draggingOnRightMove"])
+                self.assertTrue(data["menuOpenAfterRightClick"])
+                self.assertIsNotNone(data["actionAfterLeftClick"])
+                self.assertEqual(data["actionAfterLeftClick"]["action"], "toggle")
+                self.assertTrue(data["wheelOk"])
+            finally:
+                if os.path.exists(probe_path):
+                    os.remove(probe_path)
+
 if __name__ == "__main__":
     unittest.main()

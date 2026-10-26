@@ -25,7 +25,13 @@ Item {
     readonly property bool isPopupOpen: menuOpen || chooserOpen
     property bool tooltipActive: false
     property real bounceScale: 1.0
+    property bool dragging: false
+    property bool dragCancelled: false
+    property bool suppressClick: false
+    property var acceptedDropInfo: null
+    readonly property bool dropTargeted: itemDropArea.containsDrag
     readonly property real targetScale: (dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)) * root.bounceScale
+    z: root.dragging ? 10 : (root.dropTargeted ? 5 : 0)
 
     Timer {
         id: tooltipDwellTimer
@@ -81,16 +87,187 @@ Item {
         }
     }
 
+    onVisibleChanged: {
+        if (!root.visible && root.dragging) {
+            root.cancelDrag();
+        }
+    }
+
+    onEnabledChanged: {
+        if (!root.enabled && root.dragging) {
+            root.cancelDrag();
+        }
+    }
+
+    onIsRunningChanged: {
+        if (!root.isRunning && !root.isPinned && root.dragging) {
+            root.cancelDrag();
+        }
+    }
+
     Component.onDestruction: {
+        if (root.dragging) {
+            root.cancelDrag();
+        }
         tooltipDwellTimer.stop();
         clickBounceAnim.stop();
         if (parentWindowRef && parentWindowRef.activePopupItem === root) {
             parentWindowRef.activePopupItem = null;
         }
+        if (parentWindowRef && parentWindowRef.activeDragItem === root) {
+            parentWindowRef.activeDragItem = null;
+        }
     }
 
     implicitWidth: baseSize + 8
     implicitHeight: baseSize + 8
+    width: implicitWidth
+    height: implicitHeight
+
+    function acceptDropTarget(info) {
+        root.acceptedDropInfo = info;
+    }
+
+    function startDrag() {
+        if (root.dragging || root.dragCancelled || !root.visible || !root.enabled) return;
+        if (!root.isPinned && !root.isRunning) return;
+        root.dragging = true;
+        root.suppressClick = true;
+        tooltipDwellTimer.stop();
+        root.tooltipActive = false;
+        root.menuOpen = false;
+        root.chooserOpen = false;
+        if (root.parentWindowRef) {
+            if (root.parentWindowRef.activePopupItem !== undefined) {
+                root.parentWindowRef.activePopupItem = null;
+            }
+            if (root.parentWindowRef.activeDragItem !== undefined) {
+                root.parentWindowRef.activeDragItem = root;
+            }
+        }
+    }
+
+    function resetDragVisuals() {
+        root.dragging = false;
+        dragProxy.x = 0;
+        dragProxy.y = 0;
+        if (root.parentWindowRef && root.parentWindowRef.activeDragItem === root) {
+            root.parentWindowRef.activeDragItem = null;
+        }
+    }
+
+    function cancelDrag() {
+        root.dragCancelled = true;
+        root.acceptedDropInfo = null;
+        if (root.dragging) {
+            root.suppressClick = true;
+            dragProxy.Drag.cancel();
+        }
+        dockItemMouse.drag.target = null;
+        root.resetDragVisuals();
+    }
+
+    function commitDrop(info) {
+        if (!info || !root.appId || !root.visible || !root.enabled) return false;
+        if (root.isPinned) {
+            if (!ApplicationService.isPinned(root.appId)) return false;
+            if (typeof info.targetIndex === "number" && info.targetIndex >= 0) {
+                const fromIdx = ApplicationService.getPinnedIndex(root.appId);
+                if (fromIdx >= 0 && fromIdx !== info.targetIndex) {
+                    return ApplicationService.reorderPinnedApps(fromIdx, info.targetIndex);
+                }
+            }
+            if (info.targetAppId) {
+                return ApplicationService.reorderPinnedApps(root.appId, info.targetAppId);
+            }
+            return false;
+        } else if (root.isRunning) {
+            return ApplicationService.pinAppAt(root.appId, info.targetIndex);
+        }
+        return false;
+    }
+
+    function finishDrag() {
+        if (!root.dragging) return false;
+        root.acceptedDropInfo = null;
+        const dropAction = dragProxy.Drag.drop();
+        const info = root.acceptedDropInfo;
+        root.acceptedDropInfo = null;
+        root.resetDragVisuals();
+        if (dropAction === Qt.MoveAction && info) {
+            return root.commitDrop(info);
+        }
+        return false;
+    }
+
+    DropArea {
+        id: itemDropArea
+        anchors.fill: parent
+        enabled: root.isPinned && root.visible && !root.dragging
+        keys: ["quickshell-dock-item"]
+
+        onDropped: drop => {
+            if (!root.isPinned || !root.visible || !drop.source) {
+                drop.accepted = false;
+                return;
+            }
+            const src = drop.source;
+            if (src === root || !src.appId || root.pinnedIndex < 0) {
+                drop.accepted = false;
+                return;
+            }
+            if (src.isPinned) {
+                if (ConfigService.dockAppIdsMatch(src.appId, root.appId) ||
+                    src.pinnedIndex < 0 || src.pinnedIndex === root.pinnedIndex) {
+                    drop.accepted = false;
+                    return;
+                }
+                if (src.acceptDropTarget) {
+                    src.acceptDropTarget({
+                        targetIndex: root.pinnedIndex,
+                        targetAppId: root.appId
+                    });
+                    drop.accept(Qt.MoveAction);
+                } else {
+                    drop.accepted = false;
+                }
+            } else if (src.isRunning) {
+                if (!ApplicationService.getAppById(src.appId) || ApplicationService.isPinned(src.appId)) {
+                    drop.accepted = false;
+                    return;
+                }
+                let targetIdx = root.pinnedIndex;
+                const isVert = root.parentWindowRef ? root.parentWindowRef.isVertical : (ConfigService.dockEdge === "left" || ConfigService.dockEdge === "right");
+                const pos = isVert ? drop.y : drop.x;
+                const span = isVert ? height : width;
+                if (span > 0 && pos > span * 0.75) {
+                    targetIdx = targetIdx + 1;
+                }
+                if (src.acceptDropTarget) {
+                    src.acceptDropTarget({
+                        targetIndex: targetIdx,
+                        targetAppId: root.appId
+                    });
+                    drop.accept(Qt.MoveAction);
+                } else {
+                    drop.accepted = false;
+                }
+            } else {
+                drop.accepted = false;
+            }
+        }
+    }
+
+    Item {
+        id: dragProxy
+        width: root.width
+        height: root.height
+        Drag.active: root.dragging
+        Drag.source: root
+        Drag.hotSpot.x: width / 2
+        Drag.hotSpot.y: height / 2
+        Drag.keys: ["quickshell-dock-item"]
+    }
 
     Rectangle {
         id: iconContainer
@@ -102,9 +279,14 @@ Item {
              : root.isPopupOpen ? Theme.alpha(Theme.primary, 0.22)
              : dockItemMouse.containsMouse ? Theme.hover
              : "transparent"
-        border.width: root.isPopupOpen ? 1 : 0
-        border.color: Theme.alpha(Theme.primary, 0.45)
+        border.width: (root.isPopupOpen || root.dropTargeted) ? 1 : 0
+        border.color: root.dropTargeted ? Theme.primary : Theme.alpha(Theme.primary, 0.45)
         scale: root.targetScale
+
+        transform: Translate {
+            x: root.dragging ? dragProxy.x : 0
+            y: root.dragging ? dragProxy.y : 0
+        }
 
         Behavior on scale {
             enabled: !clickBounceAnim.running
@@ -168,7 +350,7 @@ Item {
         edge: ConfigService.dockEdge
         offset: 4
         text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : "")
-        show: root.tooltipActive && dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup) && (root.parentWindowRef ? root.parentWindowRef.isRevealed : true)
+        show: root.tooltipActive && dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.dragging && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup) && !(root.parentWindowRef && root.parentWindowRef.isDragging) && (root.parentWindowRef ? root.parentWindowRef.isRevealed : true)
     }
 
     // Lazy-loaded Multi-Window Chooser Popup
@@ -215,10 +397,50 @@ Item {
         id: dockItemMouse
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        drag.target: (!root.dragCancelled && (root.isPinned || root.isRunning)) ? dragProxy : null
+        drag.axis: Drag.XAndYAxis
+        drag.threshold: 4
+        drag.filterChildren: false
+
+        Connections {
+            target: dockItemMouse.drag
+            function onActiveChanged() {
+                if (dockItemMouse.drag.active && !root.dragCancelled) {
+                    root.startDrag();
+                }
+            }
+        }
+
+        onPressed: mouse => {
+            tooltipDwellTimer.stop();
+            root.tooltipActive = false;
+            root.suppressClick = false;
+            root.acceptedDropInfo = null;
+            if (mouse.button === Qt.LeftButton && (root.isPinned || root.isRunning)) {
+                root.dragCancelled = false;
+                dockItemMouse.drag.target = dragProxy;
+            } else {
+                root.dragCancelled = true;
+                dockItemMouse.drag.target = null;
+            }
+        }
+
+        onReleased: mouse => {
+            if (root.dragging && !root.dragCancelled) {
+                root.finishDrag();
+            } else {
+                root.resetDragVisuals();
+            }
+        }
+
+        onCanceled: {
+            root.cancelDrag();
+        }
 
         onWheel: wheel => {
+            if (root.dragging) return;
             const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
             if (delta === 0) return;
             wheel.accepted = true;
@@ -227,7 +449,7 @@ Item {
 
         onEntered: {
             WindowService.refreshActiveWindow();
-            if (!root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup)) {
+            if (!root.dragging && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup) && !(root.parentWindowRef && root.parentWindowRef.isDragging)) {
                 tooltipDwellTimer.restart();
             }
         }
@@ -240,6 +462,10 @@ Item {
         onClicked: mouse => {
             tooltipDwellTimer.stop();
             root.tooltipActive = false;
+            if (root.suppressClick || root.dragging || root.dragCancelled && mouse.button === Qt.LeftButton) {
+                root.suppressClick = false;
+                return;
+            }
             if (mouse.button === Qt.RightButton) {
                 root.menuOpen = !root.menuOpen;
             } else if (mouse.button === Qt.MiddleButton) {

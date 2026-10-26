@@ -570,7 +570,8 @@ Singleton {
         const norm = appId.trim().replace(/\.desktop$/i, "");
         if (norm.length <= 1 || !/^[a-zA-Z0-9._-]+$/.test(norm)) return "";
         const lower = norm.toLowerCase();
-        if (lower === "env" || lower === "sh" || lower === "bash" || lower === "application-x-executable") {
+        if (lower === "env" || lower === "sh" || lower === "bash" ||
+            lower === "application-x-executable" || lower.indexOf("window-") === 0) {
             return "";
         }
         return norm;

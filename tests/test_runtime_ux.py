@@ -583,11 +583,11 @@ class TestDesktopUX(unittest.TestCase):
         self.assertIn("parentWindowRef.activePopupItem = root", item_content)
         self.assertIn("parentWindowRef.activePopupItem = null", item_content)
 
-        # If Qt6 qmltestrunner is available, run interactive hover simulation test
+        # If Qt6 qmltestrunner is available, run interactive hover simulation test in offscreen mode
         qmltest_bin = "/usr/lib/qt6/bin/qmltestrunner"
         if os.path.isfile(qmltest_bin) and os.access(qmltest_bin, os.X_OK):
             test_qml = os.path.join(REPO_DIR, "tests/tst_dock_autohide.qml")
-            res = subprocess.run([qmltest_bin, "-input", test_qml], capture_output=True, text=True)
+            res = subprocess.run([qmltest_bin, "-platform", "offscreen", "-input", test_qml], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, f"QtTest simulation failed:\n{res.stdout}\n{res.stderr}")
 
     def test_20_popup_grab_focus_and_dismissal_contract(self):

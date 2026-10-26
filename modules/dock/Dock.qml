@@ -27,13 +27,26 @@ Variants {
         property bool hoverRevealed: false
         property var activePopupItem: null
         readonly property bool hasActivePopup: activePopupItem !== null
+        property var activeDragItem: null
+        readonly property bool isDragging: activeDragItem !== null
         onHasActivePopupChanged: {
-            if (!hasActivePopup && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
+            if (!hasActivePopup && !isDragging && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
+                hideTimer.restart();
+            }
+        }
+        onIsDraggingChanged: {
+            if (isDragging) {
+                hideTimer.stop();
+            } else if (!hasActivePopup && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
                 hideTimer.restart();
             }
         }
         onVisibleChanged: {
             if (!dockWindow.visible) {
+                if (dockWindow.activeDragItem && dockWindow.activeDragItem.cancelDrag) {
+                    dockWindow.activeDragItem.cancelDrag();
+                }
+                dockWindow.activeDragItem = null;
                 dockWindow.activePopupItem = null;
                 dockWindow.hoverRevealed = false;
             }
@@ -47,7 +60,7 @@ Variants {
                 if (ConfigService.settingsVisible) dockWindow.activePopupItem = null;
             }
         }
-        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup
+        readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging
 
         readonly property var unpinnedRunningApps: {
             const pinned = ApplicationService.pinnedApps || [];
@@ -120,7 +133,7 @@ Variants {
             interval: Math.max(50, ConfigService.dockHideDelay)
             repeat: false
             onTriggered: {
-                if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && !dockWindow.hasActivePopup) {
+                if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && !dockWindow.hasActivePopup && !dockWindow.isDragging) {
                     dockWindow.hoverRevealed = false;
                 }
             }
@@ -149,7 +162,7 @@ Variants {
                         revealTimer.restart();
                     } else {
                         revealTimer.stop();
-                        if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !dockWindow.hasActivePopup) {
+                        if (!dockAreaHover.hovered && !dockHoverHandler.hovered && !dockWindow.hasActivePopup && !dockWindow.isDragging) {
                             hideTimer.restart();
                         }
                     }
@@ -183,7 +196,7 @@ Variants {
                         hideTimer.stop();
                         dockWindow.hoverRevealed = true;
                     } else {
-                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockHoverHandler.hovered && !edgeTriggerHover.hovered) {
+                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockWindow.isDragging && !dockHoverHandler.hovered && !edgeTriggerHover.hovered) {
                             hideTimer.restart();
                         }
                     }
@@ -257,7 +270,7 @@ Variants {
                         hideTimer.stop();
                         dockWindow.hoverRevealed = true;
                     } else {
-                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockAreaHover.hovered && !edgeTriggerHover.hovered) {
+                        if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockWindow.isDragging && !dockAreaHover.hovered && !edgeTriggerHover.hovered) {
                             hideTimer.restart();
                         }
                     }
@@ -301,6 +314,7 @@ Variants {
                 // Separator for unpinned running apps
                 DockSeparator {
                     isVertical: false
+                    acceptPinDrop: true
                     visible: dockWindow.unpinnedRunningApps.length > 0
                 }
 
@@ -368,6 +382,7 @@ Variants {
                 // Separator for unpinned running apps
                 DockSeparator {
                     isVertical: true
+                    acceptPinDrop: true
                     visible: dockWindow.unpinnedRunningApps.length > 0
                 }
 
