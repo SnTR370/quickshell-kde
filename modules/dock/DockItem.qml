@@ -474,6 +474,8 @@ Item {
         if (root.windowCount === 0 && root.isRunning) {
             // App runs globally but has no window in the filtered view: never launch a duplicate.
             root.chooserOpen = false;
+            const pick = WindowService.pickActivation(root.appId, root.appWindows);
+            if (pick.action === "activate") WindowService.activateWindow(pick.id);
         } else if (root.windowCount === 0) {
             root.menuOpen = false;
             root.chooserOpen = false;
@@ -493,13 +495,13 @@ Item {
             }
             WindowService.toggleWindow(root.appWindows[0].id);
         } else {
-            const activeWin = WindowService.getActiveWindowForApp(root.appId);
-            if (activeWin && !root.chooserOpen) {
+            const pick = WindowService.pickActivation(root.appId, root.appWindows);
+            if (pick.action === "toggle" && !root.chooserOpen) {
                 root.menuOpen = false;
                 if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
                     root.parentWindowRef.activePopupItem = null;
                 }
-                WindowService.toggleWindow(activeWin.id);
+                WindowService.toggleWindow(pick.id);
             } else {
                 root.chooserOpen = !root.chooserOpen;
             }

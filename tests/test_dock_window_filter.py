@@ -157,5 +157,78 @@ class TestWiring(unittest.TestCase):
         self.assertEqual(d, "")
 
 
+PICK_DRIVER = r"""
+const vm=require('vm'),fs=require('fs');
+const c={};vm.createContext(c);vm.runInContext(fs.readFileSync(process.argv[1],'utf8').replace(/^\.pragma.*$/m,''),c);
+const i=JSON.parse(process.argv[2]);
+const clean=x=>String(x||'').replace(/^0_/,'').replace(/[{}]/g,'').toLowerCase();
+console.log(JSON.stringify(c.pickActivation(i.filtered,i.global,i.active,clean)));
+"""
+
+
+def pick(filtered, glob, active):
+    ids = lambda l: [{"id": f"0_{{{n}}}", "caption": "same title"} for n in l]
+    p = subprocess.run(["node", "-e", PICK_DRIVER, JS, json.dumps(dict(
+        filtered=ids(filtered), **{"global": ids(glob)}, active=active))], capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    return json.loads(p.stdout)
+
+
+class TestActivationPick(unittest.TestCase):
+    """Mocked pure-logic tests (node). Not physical KWin."""
+
+    def test_active_excluded_by_filter_desktop_or_monitor(self):
+        # active window "a" is out of filter (desktop or monitor filter yields only b,c)
+        r = pick(["b", "c"], ["a", "b", "c"], "a")
+        self.assertEqual(r["action"], "chooser")  # never toggles out-of-filter window
+        self.assertEqual(r["id"], "")
+
+    def test_multi_visible_no_active_visible(self):
+        self.assertEqual(pick(["b", "c"], ["b", "c"], "")["action"], "chooser")
+
+    def test_multi_visible_active_visible_toggles_it(self):
+        r = pick(["b", "c"], ["a", "b", "c"], "{c}")
+        self.assertEqual((r["action"], r["id"]), ("toggle", "0_{c}"))
+
+    def test_zero_visible_running_activates_global_active(self):
+        r = pick([], ["z", "a"], "z")
+        self.assertEqual((r["action"], r["id"]), ("activate", "0_{z}"))
+
+    def test_zero_visible_deterministic_fallback_not_toggle(self):
+        r = pick([], ["z", "m", "a"], "unrelated")
+        self.assertEqual((r["action"], r["id"]), ("activate", "0_{a}"))
+        self.assertEqual(pick([], ["m", "a", "z"], "")["id"], "0_{a}")
+
+    def test_zero_global_fails_safe(self):
+        self.assertEqual(pick([], [], "x")["action"], "none")
+
+    def test_all_mode_compat(self):
+        # all mode: filtered == global
+        r = pick(["a", "b"], ["a", "b"], "b")
+        self.assertEqual((r["action"], r["id"]), ("toggle", "0_{b}"))
+
+    def test_uuid_not_title(self):
+        # all windows share the same title; only UUID decides
+        r = pick(["b"], ["a", "b"], "a")
+        self.assertEqual(r["action"], "chooser")
+
+    def test_dockitem_wiring(self):
+        i = read("modules/dock/DockItem.qml")
+        self.assertNotIn("getActiveWindowForApp(root.appId)", i)
+        self.assertIn("WindowService.pickActivation(root.appId, root.appWindows)", i)
+        self.assertIn("WindowService.activateWindow(pick.id)", i)
+        a = i[i.index("function activateItem"):i.index("function toggleContextMenu")]
+        zero = a[:a.index("else if (root.windowCount === 0)")]
+        self.assertNotIn("ApplicationService.launch", zero)
+        self.assertNotIn("toggleWindow", zero)
+        self.assertIn("ApplicationService.launch(root.app)", a)  # no-window launch unchanged
+
+    def test_no_input_handler_changes(self):
+        import subprocess as sp
+        d = sp.run(["git", "diff", "e6f88f5", "--", "modules/dock/DockItem.qml"], capture_output=True, text=True, cwd=REPO).stdout
+        for k in ("onWheel", "onPressed", "Keys.", "DragHandler", "onTapped", "onClicked", "contextMenu"):
+            self.assertNotIn(k, "\n".join(l for l in d.splitlines() if l[:1] in "+-"))
+
+
 if __name__ == "__main__":
     unittest.main()

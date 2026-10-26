@@ -56,3 +56,28 @@ function filterWindows(windows, ctx) {
     }
     return out;
 }
+
+// Pure activation target selection. Matches stable UUIDs (cleanId), never titles.
+// filtered: windows visible in the filter; globalWins: all windows of the app.
+// Returns {action: "toggle"|"activate"|"chooser"|"none", id}.
+function pickActivation(filtered, globalWins, activeId, cleanId) {
+    const clean = cleanId || function (x) { return String(x || "").replace(/^0_/, "").replace(/[{}]/g, "").toLowerCase(); };
+    const active = activeId ? clean(activeId) : "";
+    const f = filtered || [];
+    if (f.length > 0) {
+        for (let i = 0; i < f.length; i++) {
+            if (active && clean(f[i].id) === active) return { action: "toggle", id: f[i].id };
+        }
+        return { action: "chooser", id: "" };
+    }
+    const g = (globalWins || []).filter(function (w) { return w && clean(w.id).length > 0; });
+    if (g.length === 0) return { action: "none", id: "" };
+    for (let i = 0; i < g.length; i++) {
+        if (active && clean(g[i].id) === active) return { action: "activate", id: g[i].id };
+    }
+    let best = g[0];
+    for (let i = 1; i < g.length; i++) {
+        if (clean(g[i].id) < clean(best.id)) best = g[i];
+    }
+    return { action: "activate", id: best.id };
+}

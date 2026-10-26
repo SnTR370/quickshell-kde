@@ -1023,6 +1023,10 @@ Singleton {
         return null;
     }
 
+    function pickActivation(appId, filtered) {
+        return WindowFilter.pickActivation(filtered, getWindowsForApp(appId), root.activeWindowId, cleanWindowId);
+    }
+
     property var appCycleIndices: ({})
     property var appCycleWindowIds: ({})
 
