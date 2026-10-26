@@ -19,9 +19,118 @@ Item {
     property string edge: "bottom"
     property int badgeCount: 0
     property bool active: false
+    property string accessibleName: root.tooltip.length > 0 ? root.tooltip : root.text
+    property string accessibleDescription: ""
+    readonly property bool isVerticalEdge: (root.parentWindow && root.parentWindow.isVertical !== undefined)
+        ? root.parentWindow.isVertical
+        : (root.edge === "left" || root.edge === "right")
 
     signal clicked(var mouse)
     signal rightClicked(var mouse)
+
+    activeFocusOnTab: root.visible && root.enabled
+    Accessible.role: Accessible.Button
+    Accessible.name: root.accessibleName
+    Accessible.description: root.accessibleDescription
+    Accessible.focusable: true
+    Accessible.focused: root.activeFocus
+    Accessible.onPressAction: root.activate()
+
+    onActiveFocusChanged: {
+        if (root.parentWindow && root.parentWindow.focusedDockItem !== undefined) {
+            if (root.activeFocus) {
+                root.parentWindow.focusedDockItem = root;
+            } else if (root.parentWindow.focusedDockItem === root) {
+                root.parentWindow.focusedDockItem = null;
+            }
+        }
+    }
+
+    function activate() {
+        if (!root.enabled || !root.visible) return false;
+        root.clicked(null);
+        return true;
+    }
+
+    function getFocusableSiblings() {
+        if (root.parentWindow && typeof root.parentWindow.getFocusableDockItems === "function") {
+            const dockItems = root.parentWindow.getFocusableDockItems();
+            if (dockItems && dockItems.length > 0) return dockItems;
+        }
+        if (!root.parent || !root.parent.children) return [root];
+        const list = [];
+        const kids = root.parent.children;
+        for (let i = 0; i < kids.length; i++) {
+            const c = kids[i];
+            if (c && c.visible && c.enabled && c.activeFocusOnTab) {
+                list.push(c);
+            }
+        }
+        return list;
+    }
+
+    function moveSiblingFocus(step) {
+        const items = getFocusableSiblings();
+        if (items.length === 0) return false;
+        const idx = items.indexOf(root);
+        const nextIdx = idx >= 0
+            ? ((idx + step + items.length) % items.length)
+            : (step >= 0 ? 0 : items.length - 1);
+        const target = items[nextIdx];
+        if (target && target !== root) {
+            target.forceActiveFocus();
+            return true;
+        }
+        return false;
+    }
+
+    function focusBoundarySibling(last) {
+        const items = getFocusableSiblings();
+        if (items.length === 0) return false;
+        const target = items[last ? (items.length - 1) : 0];
+        if (target) {
+            target.forceActiveFocus();
+            return true;
+        }
+        return false;
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            event.accepted = true;
+            root.activate();
+        } else if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+            event.accepted = true;
+            root.rightClicked(null);
+        } else if (!root.isVerticalEdge && event.key === Qt.Key_Right) {
+            event.accepted = true;
+            root.moveSiblingFocus(1);
+        } else if (!root.isVerticalEdge && event.key === Qt.Key_Left) {
+            event.accepted = true;
+            root.moveSiblingFocus(-1);
+        } else if (root.isVerticalEdge && event.key === Qt.Key_Down) {
+            event.accepted = true;
+            root.moveSiblingFocus(1);
+        } else if (root.isVerticalEdge && event.key === Qt.Key_Up) {
+            event.accepted = true;
+            root.moveSiblingFocus(-1);
+        } else if (event.key === Qt.Key_Home) {
+            event.accepted = true;
+            root.focusBoundarySibling(false);
+        } else if (event.key === Qt.Key_End) {
+            event.accepted = true;
+            root.focusBoundarySibling(true);
+        } else if (event.key === Qt.Key_Escape) {
+            event.accepted = true;
+            if (root.parentWindow && root.parentWindow.activePopupItem) {
+                root.parentWindow.activePopupItem = null;
+            } else if (root.parentWindow && typeof root.parentWindow.releaseKeyboardFocus === "function") {
+                root.parentWindow.releaseKeyboardFocus();
+            } else {
+                root.focus = false;
+            }
+        }
+    }
 
     implicitWidth: text.length > 0 ? (contentRow.implicitWidth + 16) : size
     implicitHeight: size
@@ -32,9 +141,9 @@ Item {
         id: bgRect
         anchors.fill: parent
         radius: root.radius
-        color: root.active ? root.activeColor : (mouseArea.containsMouse ? root.hoverColor : root.backgroundColor)
-        border.color: Theme.border
-        border.width: root.active ? 1 : 0
+        color: root.active ? root.activeColor : ((mouseArea.containsMouse || root.activeFocus) ? root.hoverColor : root.backgroundColor)
+        border.color: root.activeFocus ? Theme.accent : Theme.border
+        border.width: root.activeFocus ? 2 : (root.active ? 1 : 0)
         scale: mouseArea.pressed ? 0.92 : (mouseArea.containsMouse ? 1.05 : 1.0)
 
         Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }

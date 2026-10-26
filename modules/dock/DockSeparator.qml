@@ -12,6 +12,9 @@ Rectangle {
     implicitHeight: isVertical ? 1 : 24
     color: dropTargeted ? Theme.primary : Theme.alpha(Theme.border, 0.6)
     Layout.alignment: Qt.AlignCenter
+    activeFocusOnTab: false
+    Accessible.role: Accessible.Separator
+    Accessible.ignored: true
 
     DropArea {
         id: separatorDropArea

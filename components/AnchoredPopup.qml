@@ -21,6 +21,15 @@ PopupWindow {
         root.closed();
     }
 
+    function handleKeyEvent(event) {
+        if (event && event.key === Qt.Key_Escape) {
+            event.accepted = true;
+            root.close();
+            return true;
+        }
+        return false;
+    }
+
     onVisibleChanged: {
         if (visible) {
             root.initialDesktopId = KWinService.currentDesktopId;
@@ -110,6 +119,9 @@ PopupWindow {
         border.width: 1
         focus: root.visible
         Keys.onEscapePressed: root.close()
+        Keys.onPressed: event => {
+            root.handleKeyEvent(event);
+        }
 
         Item {
             id: popupContent
