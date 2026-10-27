@@ -28,10 +28,10 @@ function intersects(a, b) {
 }
 
 function onCurrentDesktop(st, currentDesktopId) {
-    if (!currentDesktopId) return true;
-    if (st.onAllDesktops) return true;
+    if (st.onAllDesktops === true) return true;
+    if (typeof currentDesktopId !== "string" || currentDesktopId.trim().length === 0) return false;
     var d = st.desktops;
-    if (!Array.isArray(d) || d.length === 0) return true;
+    if (!Array.isArray(d) || d.length === 0) return false;
     return d.indexOf(currentDesktopId) !== -1;
 }
 
