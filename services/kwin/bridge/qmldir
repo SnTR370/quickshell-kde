@@ -1,0 +1,7 @@
+module KWinEventBridge
+linktarget kwineventbridgeplugin
+optional plugin kwineventbridgeplugin
+classname KWinEventBridgePlugin
+typeinfo kwineventbridge.qmltypes
+prefer :/KWinEventBridge/
+
