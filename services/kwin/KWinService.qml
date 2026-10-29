@@ -215,6 +215,19 @@ Singleton {
         }
     }
 
+    // Authoritative desktop switch pushed by the KWin event bridge
+    // (WindowService.handleBridgeBatch). Updates local state immediately so
+    // Intellihide reacts to desktop switches without waiting for the polling
+    // fallback; refreshDesktops() reconciles name/index metadata shortly after.
+    function applyExternalDesktop(desktopId) {
+        if (!root.isKWin || typeof desktopId !== "string") return;
+        const id = desktopId.trim();
+        if (!id || id === root.currentDesktopId) return;
+        root.currentDesktopId = id;
+        root.updateActiveDesktopState();
+        root.refreshDesktops();
+    }
+
     function setCurrentDesktop(idOrIndex) {
         if (!root.isKWin) return;
         if (typeof idOrIndex === "number") {

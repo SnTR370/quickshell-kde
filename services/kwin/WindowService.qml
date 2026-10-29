@@ -1,5 +1,6 @@
 pragma Singleton
 import "WindowFilter.js" as WindowFilter
+import "BridgeRecords.js" as BridgeRecords
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -446,34 +447,40 @@ Singleton {
                 delete root.metaRetries[rk];
             }
         }
-        const outKeys = Object.keys(root.windowOutputs || {});
-        let outPruned = false;
-        const nextOuts = {};
-        for (let i = 0; i < outKeys.length; i++) {
-            const ok = outKeys[i];
-            if (activeCleanWids[ok]) {
-                nextOuts[ok] = root.windowOutputs[ok];
-            } else {
-                outPruned = true;
-            }
-        }
-        if (outPruned) {
-            root.windowOutputs = nextOuts;
-        }
 
-        const stateKeys = Object.keys(root.windowStates || {});
-        let statePruned = false;
-        const nextStates = {};
-        for (let i = 0; i < stateKeys.length; i++) {
-            const sk = stateKeys[i];
-            if (activeCleanWids[sk]) {
-                nextStates[sk] = root.windowStates[sk];
-            } else {
-                statePruned = true;
+        // The KWin event bridge is the authoritative writer of
+        // windowStates/windowOutputs while it is healthy; scanner-driven
+        // pruning would race live bridge events, so it is suspended.
+        if (!root.bridgeActive) {
+            const outKeys = Object.keys(root.windowOutputs || {});
+            let outPruned = false;
+            const nextOuts = {};
+            for (let i = 0; i < outKeys.length; i++) {
+                const ok = outKeys[i];
+                if (activeCleanWids[ok]) {
+                    nextOuts[ok] = root.windowOutputs[ok];
+                } else {
+                    outPruned = true;
+                }
             }
-        }
-        if (statePruned) {
-            root.windowStates = nextStates;
+            if (outPruned) {
+                root.windowOutputs = nextOuts;
+            }
+
+            const stateKeys = Object.keys(root.windowStates || {});
+            let statePruned = false;
+            const nextStates = {};
+            for (let i = 0; i < stateKeys.length; i++) {
+                const sk = stateKeys[i];
+                if (activeCleanWids[sk]) {
+                    nextStates[sk] = root.windowStates[sk];
+                } else {
+                    statePruned = true;
+                }
+            }
+            if (statePruned) {
+                root.windowStates = nextStates;
+            }
         }
         root.windowStateRevision += 1;
 
@@ -784,7 +791,9 @@ Singleton {
             onRead: data => { outputsSyncProc.buf += data; }
         }
         onExited: exitCode => {
-            if (exitCode === 0 && outputsSyncProc.buf.trim().length > 0) {
+            // Ignore a snapshot that completed while the event bridge took
+            // over: bridge records are authoritative and must not be raced.
+            if (exitCode === 0 && !root.bridgeActive && outputsSyncProc.buf.trim().length > 0) {
                 root.parseWindowOutputsJson(outputsSyncProc.buf);
             }
             outputsSyncProc.buf = "";
@@ -792,7 +801,7 @@ Singleton {
     }
 
     function refreshWindowOutputs() {
-        if (!root.isLiveKWinSession) return;
+        if (!root.isLiveKWinSession || root.bridgeActive) return;
         if (!outputsSyncProc.running) {
             outputsSyncProc.buf = "";
             outputsSyncProc.running = true;
@@ -801,6 +810,76 @@ Singleton {
 
     function refreshWindowStates() {
         root.refreshWindowOutputs();
+    }
+
+    // ---- KWin event bridge (authoritative state when healthy) ----
+    // Loaded only for a live KWin session with Intellihide enabled. If the
+    // compiled plugin is missing or its Qt/ABI does not match, the Loader
+    // stays in error state and the snapshot-based sync path above remains
+    // the authoritative writer (graceful degradation).
+    Loader {
+        id: bridgeLoader
+        active: root.isLiveKWinSession && ConfigService.dockIntellihide
+        source: "bridge/BridgeHost.qml"
+        onLoaded: {
+            if (!item.enable(Quickshell.shellDir + "/services/kwin/scripts/kwin-event-bridge.js")) {
+                Log.warn("WindowService", "KWin event bridge failed to start; keeping snapshot sync");
+            }
+        }
+        onStatusChanged: {
+            if (status === Loader.Error) {
+                Log.warn("WindowService", "KWin event bridge plugin unavailable; keeping snapshot sync");
+            }
+        }
+    }
+
+    Connections {
+        target: bridgeLoader.item
+        function onBatchReceived(jsonArray) {
+            root.handleBridgeBatch(jsonArray);
+        }
+        function onDesynchronized(reason) {
+            Log.warn("WindowService", "KWin event bridge desynchronized: " + reason);
+            // Cached state is stale until the bridge's next snapshot arrives.
+            root.windowStates = {};
+            root.windowOutputs = {};
+            root.windowStateRevision += 1;
+        }
+    }
+
+    // The bridge is authoritative for windowStates/windowOutputs while it is
+    // started and connected to the KWin owner. Anything else (bridge off,
+    // plugin failed to load, KWin gone) falls back to snapshot sync.
+    readonly property bool bridgeActive: bridgeLoader.item !== null
+        && bridgeLoader.item.active && bridgeLoader.item.connected
+
+    onBridgeActiveChanged: {
+        if (!root.bridgeActive && root.isLiveKWinSession) {
+            // Bridge stopped (config toggle, plugin failure, KWin restart):
+            // repopulate window state through the snapshot path.
+            root.refreshWindowOutputs();
+        }
+    }
+
+    function handleBridgeBatch(jsonArray) {
+        let payloads;
+        try {
+            payloads = JSON.parse(jsonArray);
+        } catch (e) {
+            Log.warn("WindowService", "Failed to parse bridge batch: " + e);
+            return;
+        }
+        if (!Array.isArray(payloads)) return;
+        const res = BridgeRecords.applyBatch(root.windowStates, root.windowOutputs, payloads);
+        if (!res.ok) return;
+        root.windowStates = res.states;
+        root.windowOutputs = res.outputs;
+        if (res.changed) {
+            root.windowStateRevision += 1;
+        }
+        if (res.desktopId) {
+            KWinService.applyExternalDesktop(res.desktopId);
+        }
     }
 
     function isValidOutputName(outputName) {

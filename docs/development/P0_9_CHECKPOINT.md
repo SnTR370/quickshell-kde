@@ -1,5 +1,27 @@
 # P0 #9 Intellihide — WIP checkpoint (2026-10-29, PAUSED for public beta rush)
 
+> **RESUMED & INTEGRATED (2026-10-29, later session).** The bridge is now
+> wired into the shell exactly as planned in "Remaining tasks" below:
+> `WindowService` loads `bridge/BridgeHost.qml` through a `Loader`
+> (live KWin session + `ConfigService.dockIntellihide` only), merges
+> `batchReceived` batches via `BridgeRecords.applyBatch` into
+> `windowStates`/`windowOutputs`, forwards desktop records to the new
+> `KWinService.applyExternalDesktop()`, clears state on `desynchronized`,
+> and suspends snapshot-sync writes (`refreshWindowOutputs`, scanner
+> pruning, in-flight snapshot applies) while `bridgeActive`. Missing plugin
+> or bridge failure degrades to the old snapshot path. Tests:
+> `tests/test_bridge_records.py` (node, 19 cases) and
+> `tests/test_kwin_bridge_integration.py` (isolated `kwin_wayland --virtual`
+> rig: lifecycle + live event merge + spoof rejection + orphan recovery —
+> skips when tools/binaries are missing). Both green; see git history.
+> Remaining release blockers: built `.so` artifacts still gitignored
+> (design doc says ship them for ordinary users — decision needed);
+> `tests/test_dock_keyboard.py::test_01_dock_window_contract` fails
+> pre-existing on this branch (unrelated `|| keyboardNavActive` assertion
+> against `modules/dock/Dock.qml`); full `quickshell`-probe suites
+> (`test_dock_blitz`, `test_runtime_ux`) not run this session because they
+> launch shells against the live desktop.
+
 Branch `feat/dock-intellihide`. Development paused by user decision; this
 checkpoint preserves all working code, rig files and findings. **Not merged,
 not pushed, not beta-ready.** The compiled bridge is **not enabled anywhere**
