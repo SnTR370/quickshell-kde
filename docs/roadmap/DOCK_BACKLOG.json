@@ -1,0 +1,153 @@
+{
+  "schema_version": 2,
+  "atlas_origin": "2026-10-26 15:16 Europe/Istanbul",
+  "atlas_path": "docs/reference/DOCK_FEATURE_ATLAS_2026-10-26.txt",
+  "initial_repo_reference": "SnTR370/quickshell-kde feat/beta-layout-presets a47e333f7a3214ac71fa853920771d287eec2193",
+  "truth_rule": "Repository code + verified tests + commit history are authoritative for status, never the 26 Oct atlas. This file is the working queue; every status change must cite fresh evidence.",
+  "active_nonatlas_work": "Layout Presets was completed and pushed as feat/beta-layout-presets a47e333f7a3214ac71fa853920771d287eec2193 (2026-10-30). Visual live UI tests remain unverified. No other active agent confirmed in this worktree (feat/rush-orchestrator).",
+  "audit_2026_10_30": {
+    "audited_by": "rush bootstrap session on feat/rush-orchestrator at a47e333",
+    "baseline_tests": "python3 -m unittest discover -s tests -> 158 tests, 1 failure (test_runtime_ux test_12_live_kwin_running_apps_enumeration: live-session test depending on the user's currently running Spotify/MPRIS state; environmental, not a code regression at this commit), 2 skipped (bridge plugin not built in this checkout, expected per services/kwin/bridge/README.md).",
+    "notes": "Every item below was re-checked against actual code/tests in this checkout. DOCK-001 was promoted from 'verify' to 'implemented' after confirming the dock-dnd work is merged into this branch's ancestry."
+  },
+  "items": [
+    {
+      "id": "DOCK-001",
+      "rank_2026_10_26": 1,
+      "title": "Sürükle-bırak: ikon sıralama ve sabitleme",
+      "status": "implemented",
+      "evidence_note": "AUDITED 2026-10-30: implemented and merged. Commit 27ea5fb (feat/dock-dnd) is an ancestor of HEAD. Drag machinery in modules/dock/DockItem.qml (dragging/cancelDrag/dropTargeted) and modules/dock/Dock.qml (activeDragItem), persistence via ConfigService.reorderDockPinned/reorderDockPinnedByAppId. Runtime coverage: tests/test_dock_blitz.py tests 13-18 (static DnD contracts, horizontal/vertical drag reordering + persistence, drag-to-pin running apps, cancellation/invalid drops, pin atomicity and mid-drag disappearance).",
+      "completed_commit": "27ea5fb",
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-002",
+      "rank_2026_10_26": 2,
+      "title": "Tıklama ve fare tekerleğiyle pencere döngüsü",
+      "status": "implemented",
+      "evidence_note": "AUDITED 2026-10-30: modules/dock/DockItem.qml line 594 wires WindowService.cycleAppWindows(appId, delta<0, filterScreenName) into the wheel handler (line 643). Isolated dock_blitz suite green at this baseline. Live behavior still needs separate verification.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-003",
+      "rank_2026_10_26": 3,
+      "title": "Intellihide / çakışan pencerede gizlenme",
+      "status": "beta_candidate",
+      "evidence_note": "AUDITED 2026-10-30: e0dde1c confirmed in ancestry. KWin event bridge (services/kwin/bridge + kwin-event-bridge.js) with fallback path; tests/test_intellihide.py, test_bridge_records.py, test_bridge_fallback.py green (plugin-load test skipped only because the compiled plugin is not built in this checkout). Live session and physical multi-monitor still unverified.",
+      "completed_commit": "e0dde1c",
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-004",
+      "rank_2026_10_26": 4,
+      "title": "Gerçek parabolik zoom ve komşu ikon hareketi",
+      "status": "ready",
+      "evidence_note": "AUDITED 2026-10-30: confirmed genuinely missing. modules/dock/DockItem.qml line 35 has single-icon targetScale (pressed 0.92 / hover 1.15) only; no neighbor magnification, no pointer-position-driven curve anywhere in modules/dock/. Unblocked top candidate for the next feature session (matches DOCK_FEATURE_RUSH.md), pending a sandboxed environment for unattended work.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-005",
+      "rank_2026_10_26": 5,
+      "title": "Sanal masaüstü / monitör pencere filtreleri",
+      "status": "implemented",
+      "evidence_note": "AUDITED 2026-10-30: services/kwin/WindowFilter.js is the pure filter core; tests/test_dock_window_filter.py covers desktop/output/all-desktops/disconnected-output cases; consumed by WindowService and Dock. Live physical verification separate.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-006",
+      "rank_2026_10_26": 6,
+      "title": "XDG .desktop hızlı eylemleri",
+      "status": "implemented",
+      "evidence_note": "AUDITED 2026-10-30: ApplicationService.getAppActions/runAppAction (lines ~441-493) parse XDG DesktopActions; modules/dock/DockMenu.qml quickActionsRepeater renders them. Tested in the dock blitz suite.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-007",
+      "rank_2026_10_26": 7,
+      "title": "KWin pencere eylemleri",
+      "status": "implemented",
+      "evidence_note": "AUDITED 2026-10-30: services/kwin/scripts/kwin-window-action.sh, kwin-toggle-window.sh, kwin-event-bridge.js present; individual exotic actions still need one-by-one verification.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-008",
+      "rank_2026_10_26": 8,
+      "title": "Klavye gezinimi ve Meta+1..9",
+      "status": "partial",
+      "evidence_note": "AUDITED 2026-10-30: keyboard navigation implemented (modules/dock/DockKeyboardNav.qml; tests/test_dock_keyboard.py 18 tests covering arrows/Tab/Enter/Escape/vertical/menu/chooser). Meta+1..9 global shortcuts NOT found anywhere in the repo (grep for 'Meta+' over QML/JS/Python: no hits) - still missing, likely needs KWin shortcut registration rather than pure QML.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-009",
+      "rank_2026_10_26": 9,
+      "title": "Bildirim, aciliyet ve ilerleme göstergeleri",
+      "status": "candidate",
+      "evidence_note": "AUDITED 2026-10-30: components/Badge.qml exists and dock shows running-window count dots, but there is no notification count, urgency or progress indicator anywhere in modules/dock/. Missing; must use only native KDE/freedesktop data sources, no estimated badges.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-010",
+      "rank_2026_10_26": 10,
+      "title": "Dosyayı uygulama ikonuna bırakıp açma",
+      "status": "candidate",
+      "evidence_note": "AUDITED 2026-10-30: no mimeData/file/URL drop handling in modules/dock/DockItem.qml (drag code only handles intra-dock reordering/pinning). Missing; needs Qt DnD + Wayland target-app support and focus-safety testing.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-011",
+      "rank_2026_10_26": 11,
+      "title": "Klasör ve uygulama Stacks",
+      "status": "candidate",
+      "evidence_note": "AUDITED 2026-10-30: no stack/folder/group code in modules/dock/. Missing; must reuse KDE services, no low-level custom daemon.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    },
+    {
+      "id": "DOCK-012",
+      "rank_2026_10_26": 12,
+      "title": "Monitör başına bağımsız Dock profilleri",
+      "status": "candidate",
+      "evidence_note": "AUDITED 2026-10-30: no per-monitor profile fields in ConfigService or Dock (single dockPinned list, single monitor choice). Missing; build on the existing monitor model; hotplug and fractional-scale verification required.",
+      "completed_commit": null,
+      "live_verified": false,
+      "owner": null
+    }
+  ],
+  "status_values": [
+    "verify",
+    "candidate",
+    "ready",
+    "in_progress",
+    "implemented",
+    "beta_candidate",
+    "blocked",
+    "deferred",
+    "done"
+  ],
+  "gate_for_done": "Code exists, regression green, isolated runtime evidence where appropriate, commit and push confirmed, remaining manual checks explicit. Live/physical checks must not be faked.",
+  "separate_completed_work": {
+    "title": "Layout Presets: Everyday, Classic, Minimal",
+    "branch": "feat/beta-layout-presets",
+    "commit": "a47e333f7a3214ac71fa853920771d287eec2193",
+    "notes": "Isolated tests passed per agent report; physical settings GUI interaction unverified."
+  }
+}

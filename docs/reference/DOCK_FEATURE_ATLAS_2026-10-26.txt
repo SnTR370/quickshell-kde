@@ -1,0 +1,2795 @@
+madem docktan ilerliyoruz gibi şu an. Bir dockta olması gereken tüm özelliklere göz atalım. windows, mac ve linux(farklı dağıtım dockları ve 3th partyde olanlar) özelliklerini bir masaya dökelim. işe yarayan yaramayan tüm dock özellikleri masada olsun ki kendi proje geliştirmemde neleri öncelikli feature olarak ekleyeceğimi bileyim.
+
+Sena, bu araştırmayı quickshell-kde Dock Feature Atlas olarak ele alalım. Amacımız piyasadaki dock'ların özelliklerini kopyalamak değil; Windows'un pencere yönetimini, macOS'un kullanım hissini, KDE'nin native yeteneklerini ve Linux'un özelleştirme özgürlüğünü tek sistemde birleştirmek.
+
+Araştırmada önemli bir ayrıntı çıktı: Dock geliştirmede asıl farkı yalnızca animasyonlar yaratmıyor. Bir uygulamanın bütün pencerelerini yönetebilmek, dosya sürükleyebilmek, çoklu monitörde doğru davranmak ve gizlenme mantığı da en az görünüm kadar önemli.
+1. Rakipler ve örnek alınacak yaklaşımlar
+
+Sistem / Dock
+
+
+En güçlü yanı
+
+
+Bizim alacağımız fikir
+
+Windows 11 Taskbar
+
+
+Pencere gruplama, Jump Lists, rozetler, önizlemeler
+
+
+Üretkenlik ve pencere kontrolü
+
+macOS Dock
+
+
+Büyütme, akıcı animasyon, uygulama ve klasör etkileşimleri
+
+
+Görsel his, drag-and-drop, Stacks
+
+KDE Plasma 6 Task Manager
+
+
+Pencere, sanal masaüstü, Activity, ekran filtreleri
+
+
+Native KWin entegrasyonu
+
+GNOME Dash to Dock
+
+
+Akıllı gizlenme, kenar basıncı, esnek tıklama davranışları
+
+
+Reveal ve kullanıcı etkileşimleri
+
+Dash to Panel
+
+
+Windows benzeri görev çubuğu ve özelleştirme
+
+
+Gelişmiş pencere göstergeleri
+
+COSMIC Dock
+
+
+Modüler applet'ler, monitör ve düzen ayarları
+
+
+Modüler mimari
+
+elementary OS Dock
+
+
+Pressure Reveal, çoklu pencere göstergeleri, arka plan uygulamaları
+
+
+Yenilikçi masaüstü davranışları
+
+Latte Dock
+
+
+Parabolik zoom, dinamik düzenler, widget desteği
+
+
+Görsel motor ve düzen sistemi
+
+Cairo-Dock
+
+
+Animasyonlar, efektler, subdock'lar, applet'ler
+
+
+Genişletilebilirlik
+
+Crystal Dock / Krema / KoolDock2
+
+
+Modern Plasma 6 / Wayland dock deneyimi
+
+
+KDE odaklı tasarım ve performans
+
+nwg-dock
+
+
+Sürükleyerek düzenleme, çoklu monitör, pencere işlemleri
+
+
+Pratik dock yönetimi
+
+Noctalia / diğer shell'ler
+
+
+Bütünleşik shell ve modüler arayüz
+
+
+Dock'un sistemin geri kalanıyla bütünleşmesi
+
+Kaynaklar:
+Microsoft Support+10
+
+Birkaç önemli güncellik notu:
+
+    Windows 11'de dört kenara taşıma desteği Mayıs 2026'da Insider Experimental kanalına sunuldu; dolayısıyla bunu bütün kararlı Windows 11 kurulumlarında varsaymamalıyız.
+    Windows Insider Blog
+
+    Latte Dock'un eski KDE 5 sürümüyle modern Plasma 6 portları aynı şey değil. Latte'yi özellik ilhamı olarak değerlendireceğiz.
+    GitHub+1
+
+    GNOME ve elementary OS'de gerçek Pressure Reveal örnekleri bulunuyor. Fakat bunların KWin Wayland üzerinde sıradan bir Quickshell istemcisinden bire bir uygulanabildiği henüz kanıtlanmış değil.
+    GitHub+1
+
+2. quickshell-kde'de bugün gerçekten neler var?
+
+GitHub'daki feat/blitz-integration branch'inin Dock kodunu kontrol ettim. Bu tablo 26 Ekim 2026 itibarıyla kodda bulunan işlevleri gösteriyor; tümünün gerçek masaüstünde elle doğrulandığı anlamına gelmiyor.
+
+Mevcut özellik
+
+
+Durum
+
+Üst, alt, sol, sağ kenara yerleşim
+
+
+Var
+
+Floating / kenara bitişik görünüm
+
+
+Var
+
+Ekran alanı ayırma (exclusiveZone)
+
+
+Var
+
+Otomatik gizlenme ve gecikme ayarları
+
+
+Var
+
+Kenar tetikleyicisi
+
+
+Var, hover/dwell tabanlı
+
+Dock simge boyutu ayarı
+
+
+Var
+
+Hover büyütme
+
+
+Var, ikon başına
+
+Tıklama bounce animasyonu
+
+
+Var
+
+Açık uygulama göstergeleri
+
+
+Var
+
+Aktif uygulama vurgusu
+
+
+Var
+
+Uygulama başına pencere sayısı göstergesi
+
+
+Var
+
+Uygulama sabitleme / kaldırma
+
+
+Var, sağ tık menüsünden
+
+Sabit olmayan çalışan uygulamalar
+
+
+Var
+
+Aynı uygulamanın pencerelerini listeleme
+
+
+Var
+
+Pencereyi etkinleştirme / küçültme / geri getirme
+
+
+Var
+
+Pencereyi güvenli kapatma
+
+
+Var
+
+Pencereyi başka monitöre taşıma
+
+
+Var
+
+Orta tıkla yeni uygulama örneği
+
+
+Var
+
+Dock üzerinden Launcher ve Settings açma
+
+
+Var
+
+Çoklu monitör için Dock seçimi
+
+
+Kodda var, fiziksel test kısmi
+
+Breeze temasıyla ikonlar ve KWin blur
+
+
+Var
+
+Simge sürükleyerek sıralama
+
+
+Henüz yok
+
+Canlı pencere küçük resimleri
+
+
+Henüz yok
+
+Gerçek parabolik komşu ikon büyütmesi
+
+
+Henüz yok
+
+Akıllı pencere kaçırma (Intellihide)
+
+
+Henüz yok
+
+Kod referansları: Dock.qml, DockItem.qml ve DockMenu.qml.
+
+İlk tespitim: Temel Dock altyapısını geçmişiz. En büyük açıklarımız sürükle-bırak, pencereler arasında gezinme, akıllı gizlenme, gerçek parabolik zoom ve gelişmiş durum göstergeleri.
+3. Büyük özellik envanteri
+
+Aşağıdaki öncelikler benim quickshell-kde için değerlendirmem; rakip ürünlerin resmî puanları değil.
+P0 — İlk yapılacak
+P1 — Yüksek değer
+P2 — İleri özellik
+P3 — Kozmetik / niş
+
+✓ mevcut, ◐ kısmen mevcut, — henüz yok, ? teknik araştırma gerekiyor. Durumlar yalnızca Dock için geçerli; Bar'da veya başka Quickshell modülünde bulunması Dock'a entegre edildiği anlamına gelmiyor.
+A. Uygulama ve pencere yönetimi
+
+Windows Taskbar, KDE Task Manager, Dash to Panel ve Krema Dock bu alan için iyi örnekler.
+Microsoft Support+3
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Uygulamayı tek tıkla başlatma
+
+
+✓
+
+
+Tamam
+
+Favorilere sabitleme / kaldırma
+
+
+✓
+
+
+Tamam
+
+Çalışan uygulamaları otomatik gösterme
+
+
+✓
+
+
+Tamam
+
+Birden fazla pencereyi tek ikonda gruplama
+
+
+✓
+
+
+Tamam
+
+Her pencereyi ayrı ikon olarak gösterme seçeneği
+
+
+—
+
+
+P1
+
+Grup davranışı: daima / asla / dolunca
+
+
+—
+
+
+P2
+
+Aktif pencereyi öne getirme
+
+
+✓
+
+
+Tamam
+
+Aktif pencereye tekrar basınca küçültme
+
+
+✓
+
+
+Tamam
+
+Tekrar basınca pencereler arasında dolaşma
+
+
+◐
+
+
+P0
+
+Fare tekerleğiyle aynı uygulamanın pencerelerini gezme
+
+
+◐
+
+
+P0
+
+Orta tıkla yeni pencere açma
+
+
+✓
+
+
+Tamam
+
+Sağ tıkla pencere işlemleri
+
+
+✓
+
+
+Tamam
+
+Uygulamanın .desktop hızlı eylemleri (New Private Window vb.)
+
+
+—
+
+
+P1
+
+Çoklu pencere seçim menüsü
+
+
+✓
+
+
+Tamam
+
+Pencere başlığını Dock üzerinde gösterme
+
+
+◐
+
+
+P2
+
+Pencere arama / filtreleme
+
+
+—
+
+
+P2
+
+Sadece seçili masaüstünün uygulamaları
+
+
+—
+
+
+P1
+
+Sadece seçili monitörün uygulamaları
+
+
+—
+
+
+P1
+
+Uygulama bazında gizleme / hariç tutma
+
+
+—
+
+
+P2
+
+Yeni başlayan uygulama için yükleniyor göstergesi
+
+
+—
+
+
+P1
+
+Buradaki kritik ayrım şu: Kodda WindowService.cycleAppWindows() zaten var, ancak Dock'un tıklama/tekerlek etkileşimlerine tam bir kullanıcı ayarı olarak bağlanmış değil. Bu yüzden sıfırdan yazmaya gerek yok.
+B. Gelişmiş pencere işlemleri
+
+Windows'un Jump Lists ve küçük resim işlemleri, KDE'nin pencere yönetimi ve DockDoor'un pencere kontrolü burada önemli örnekler.
+Microsoft Support+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Pencereyi kapat
+
+
+✓
+
+
+Tamam
+
+Pencereyi başka monitöre taşı
+
+
+✓
+
+
+Tamam
+
+Pencereyi küçült / geri getir
+
+
+✓
+
+
+Tamam
+
+Pencereyi büyüt / eski boyutuna döndür
+
+
+—
+
+
+P1
+
+Pencereyi tam ekran yap / çıkar
+
+
+—
+
+
+P2
+
+Başka sanal masaüstüne taşı
+
+
+—
+
+
+P1
+
+Bütün sanal masaüstlerinde göster
+
+
+—
+
+
+P2
+
+Pencereyi daima üstte tut
+
+
+—
+
+
+P2
+
+KWin döşeme düzenine yerleştir
+
+
+—
+
+
+P2
+
+Sol/sağ yarıya yasla
+
+
+—
+
+
+P1
+
+Belirli monitörde açılmasını hatırla
+
+
+—
+
+
+P2
+
+Uygulamanın bütün pencerelerini kapat
+
+
+—
+
+
+P2
+
+Pencereleri başlıklarıyla listele
+
+
+✓
+
+
+Tamam
+
+Gerçek zamanlı pencere küçük resimleri
+
+
+?
+
+
+Araştırma
+
+Önizleme üzerinde kapat/küçült/büyüt düğmeleri
+
+
+?
+
+
+Küçük resme bağlı
+
+Uygulamanın sesini doğrudan Dock'tan kapat
+
+
+—
+
+
+P2
+
+Yanıt vermeyen uygulamayı zorla kapat
+
+
+—
+
+
+P3, onaylı
+
+Hover ile pencereleri geçici öne getirme (Peek)
+
+
+?
+
+
+Araştırma
+
+Benim önceliğim: Pencereyi sanal masaüstüne taşıma, büyütme, yarıya yaslama ve pencereler arasında gezinme. Bunları KDE/KWin'in mevcut yeteneklerine bağlamak, yepyeni bir pencere yöneticisi yazmaktan daha doğru.
+C. Dock'un görünürlük ve gizlenme davranışları
+
+GNOME Dash to Dock'un ayar şeması burada özellikle zengin: farklı Intellihide modları, basınç eşiği, gecikmeler, tam ekran davranışı ve acil bildirimde görünme bulunuyor. elementary OS de Pressure Reveal kullanıyor.
+GitHub+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Her zaman görünür
+
+
+✓
+
+
+Tamam
+
+Otomatik gizlenme
+
+
+✓
+
+
+Tamam
+
+Gizlenme/açılma gecikmesi
+
+
+✓
+
+
+Tamam
+
+Ekran kenarına temasla gösterme
+
+
+✓
+
+
+Tamam
+
+Gerçek pointer-pressure eşiği
+
+
+?
+
+
+Araştırma
+
+Tam ekran uygulamada otomatik gizlenme
+
+
+◐
+
+
+P1
+
+Maksimize pencere yaklaşınca gizlenme
+
+
+—
+
+
+P1
+
+Herhangi bir pencere çakışınca gizlenme
+
+
+—
+
+
+P1
+
+Yalnızca aktif pencere çakışınca gizlenme
+
+
+—
+
+
+P1
+
+Pencere çekilince otomatik görünme
+
+
+—
+
+
+P1
+
+Dock görünürken pencere alanı ayırma
+
+
+✓
+
+
+Tamam
+
+Dock'u pencerelerin altına alma modu
+
+
+—
+
+
+P2
+
+Bütün ekran kenarını reveal alanı yapma
+
+
+—
+
+
+P2
+
+Kenar tetikleyicisinin kalınlığını ayarlama
+
+
+◐
+
+
+P2
+
+Fare hızına göre yanlış açılmayı engelleme
+
+
+—
+
+
+P2
+
+Klavye kısayoluyla Dock'u gösterme
+
+
+—
+
+
+P1
+
+Acil uygulama bildirimi geldiğinde Dock'u gösterme
+
+
+—
+
+
+P2
+
+Dock'u geçici olarak açık tutma / kilitleme
+
+
+—
+
+
+P1
+
+Oyunda özel gizlenme profili
+
+
+—
+
+
+P2
+
+Monitörler arası sınırda yanlış tetiklemeyi önleme
+
+
+?
+
+
+P1
+
+Burada Intellihide, Pressure Reveal'dan daha yüksek öncelikli. Çünkü pencere geometrisine dayalı gizlenme KWin üzerinden araştırılıp uygulanabilir bir yol sunuyor; gerçek kenar basıncı ise compositor desteğine bağlı.
+D. Sürükle-bırak ve dosya etkileşimleri
+
+Burası bence quickshell-kde'nin en çok geliştirilmesi gereken alanlarından biri. macOS Dock, elementary Dock ve nwg-dock gibi sistemlerde kullanıcı birçok işlemi menü açmadan gerçekleştirebiliyor.
+Apple Support+3
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Dock ikonlarını sürükleyerek sıralama
+
+
+—
+
+
+P0
+
+Launcher'dan uygulamayı Dock'a sürükleyip sabitleme
+
+
+—
+
+
+P0
+
+Çalışan uygulamayı sürükleyerek sabitleme
+
+
+—
+
+
+P0
+
+İkonu Dock dışına sürükleyip sabitlemeyi kaldırma
+
+
+—
+
+
+P1
+
+Sürüklerken ikonların yer açması
+
+
+—
+
+
+P1
+
+Yanlış sürüklemeleri engelleyen eşik
+
+
+—
+
+
+P0
+
+Dock düzenini kilitleme
+
+
+—
+
+
+P1
+
+Dosyayı uygulama ikonuna bırakıp açma
+
+
+—
+
+
+P1
+
+Dosyayı açık pencereye sürüklerken pencereyi öne getirme
+
+
+—
+
+
+P1
+
+Bir klasörü Dock'a sabitleme
+
+
+—
+
+
+P1
+
+Dosya veya belge kısayolu sabitleme
+
+
+—
+
+
+P2
+
+URL/web sitesi kısayolu sabitleme
+
+
+—
+
+
+P2
+
+Dock ikonunu başka monitördeki Dock'a sürükleme
+
+
+—
+
+
+P2
+
+İkonu bir klasör ikonunun üzerine bırakıp grup oluşturma
+
+
+—
+
+
+P2
+
+Dosyayı çöp kutusuna sürükleyip silme
+
+
+—
+
+
+P2
+
+Dosya sürüklerken uygulamanın farklı pencerelerinden birini seçme
+
+
+—
+
+
+P2
+
+Sürüklenen pencereyi masaüstü seçicisine bırakma
+
+
+—
+
+
+P2
+
+Sürükle-bırak işlemleri için geri al desteği
+
+
+—
+
+
+P2
+
+En değerli üçlü: sıralama, dışarıdan sabitleme, dosyayı uygulamaya bırakma.
+
+Wayland'da veri sürükleme ve bırakma için Qt'nin desteğinden yararlanabiliriz. Ancak başka uygulamanın dosyasını Dock'taki pencereye aktarırken odak değiştirme davranışı ayrıca KWin ve Wayland sınırlarıyla test edilmeli.
+E. Boyut, yerleşim ve çoklu monitör
+
+COSMIC'in applet düzeni, Latte'nin çoklu layout sistemi ve nwg-dock'un monitör davranışları iyi örnekler.
+System76 Support Documentation+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Dört kenarda yatay/dikey kullanım
+
+
+✓
+
+
+Tamam
+
+Floating / attached modları
+
+
+✓
+
+
+Tamam
+
+İkon büyüklüğü
+
+
+✓
+
+
+Tamam
+
+Kenardan uzaklık
+
+
+✓
+
+
+Tamam
+
+İçeriğe göre Dock uzunluğu
+
+
+✓
+
+
+Tamam
+
+Otomatik ortalanma
+
+
+✓
+
+
+Tamam
+
+Başlangıç / orta / bitiş hizası seçimi
+
+
+—
+
+
+P1
+
+Dock uzunluğunu yüzdeyle belirleme
+
+
+—
+
+
+P2
+
+İkonlar arası boşluk ayarı
+
+
+—
+
+
+P2
+
+İç boşluk / arka plan boşluğu ayarı
+
+
+—
+
+
+P2
+
+Çok sayıda ikon için otomatik küçülme
+
+
+—
+
+
+P1
+
+Taşan uygulamalar için overflow menüsü
+
+
+—
+
+
+P1
+
+Aynı monitörde birden fazla Dock
+
+
+—
+
+
+P2
+
+Monitör başına farklı Dock düzeni
+
+
+—
+
+
+P1
+
+Monitör başına farklı sabitlenmiş uygulamalar
+
+
+—
+
+
+P1
+
+Monitör eklenip çıkarılınca yeniden yerleşim
+
+
+◐
+
+
+P1
+
+Ekran ölçeklendirmesine uyum, fractional scaling
+
+
+◐
+
+
+P1
+
+Dikey monitörler için özel kompakt düzen
+
+
+◐
+
+
+P2
+
+Sanal masaüstüne göre otomatik Dock profili
+
+
+—
+
+
+P2
+
+KDE Activity'ye göre Dock profili
+
+
+—
+
+
+P2
+
+Uygulamalar açıldıkça Dock'un merkezini koruması
+
+
+◐
+
+
+P1
+
+Senin projede per-monitor mimari zaten bulunduğu için ayrı monitör profilleri, iyi bir sonraki adım olur. Her monitörde tamamen farklı Dock isteyen kullanıcıları karşılayabiliriz.
+F. Animasyon ve görsel etkileşim
+
+macOS, Latte, Cairo-Dock, Crystal Dock ve yeni Plasma 6 dock'larında oldukça farklı animasyon yaklaşımları var. Krema'nın parabolik büyütmesi ve farklı animasyon hızları, özellikle dikkate değer.
+Apple Support (IE)+3
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Hover ile ikon büyütme
+
+
+✓
+
+
+Tamam
+
+Komşu ikonları da büyüten gerçek parabolik zoom
+
+
+—
+
+
+P1
+
+Büyüyen ikonların birbirine yer açması
+
+
+—
+
+
+P1
+
+İmlecin ikon üzerindeki konumuna göre zoom
+
+
+—
+
+
+P2
+
+Büyütme eğrisi ayarı
+
+
+—
+
+
+P2
+
+Büyütme gücü ve hızı ayarı
+
+
+◐
+
+
+P1
+
+Yay fiziğiyle büyüme/küçülme
+
+
+◐
+
+
+P2
+
+Tıklama bounce animasyonu
+
+
+✓
+
+
+Tamam
+
+Uygulama başlatılırken bekleme animasyonu
+
+
+—
+
+
+P1
+
+Dock'un kayarak açılması
+
+
+✓
+
+
+Tamam
+
+Fade-in / fade-out
+
+
+✓
+
+
+Tamam
+
+İkon sürüklerken yerleşim animasyonu
+
+
+—
+
+
+P1
+
+Pencere küçülürken Dock'a doğru animasyon
+
+
+?
+
+
+P3
+
+Büyütülen ikonun altında perspektif efekti
+
+
+—
+
+
+P3
+
+İkon yansıması (reflection)
+
+
+—
+
+
+P3
+
+3D raf / shelf görünümü
+
+
+—
+
+
+P3
+
+Bounce, wiggle, shake, glow efekt paketleri
+
+
+◐
+
+
+P3
+
+Esnek, hareketli Dock arka planı
+
+
+—
+
+
+P3
+
+Dinamik gölge ve ambient glow
+
+
+—
+
+
+P2
+
+120/144 Hz ekranda akıcı animasyon hedefi
+
+
+◐
+
+
+P1
+
+Efektleri tamamen kapatma / Reduce Motion
+
+
+—
+
+
+P1
+
+Burada benim geliştirmek isteyeceğim şey, mevcut tek-ikon büyütmesini gerçek parabolik Dock'a dönüştürmek. Mac hissinin en büyük parçalarından biri, imleç hareket ettikçe komşu ikonların da kontrollü biçimde büyüyüp yer değiştirmesi.
+
+Sırf daha gösterişli diye 3D efekt veya yansıma eklemek ise önce yapılacak iş değil.
+G. Göstergeler, bildirimler ve uygulama durumları
+
+Windows'un taskbar rozetleri, KDE'nin oynatılan ses göstergesi ve Latte'nin ilerleme sayaçları bu grubun temel örnekleri.
+Microsoft Support+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Uygulamanın açık olduğunu gösteren nokta
+
+
+✓
+
+
+Tamam
+
+Aktif uygulama vurgusu
+
+
+✓
+
+
+Tamam
+
+Birden fazla açık pencere noktası
+
+
+✓
+
+
+Tamam
+
+Nokta/çizgi/kare/pill gösterge stilleri
+
+
+—
+
+
+P2
+
+Gösterge rengini değiştirme
+
+
+◐
+
+
+P2
+
+Okunmamış bildirim sayısı
+
+
+—
+
+
+P1
+
+Mesaj sayacı (Slack/Discord/Telegram vb.)
+
+
+—
+
+
+P1
+
+Uygulama dikkati gerekiyor göstergesi
+
+
+—
+
+
+P1
+
+İndirme / dosya kopyalama ilerleme çubuğu
+
+
+—
+
+
+P1
+
+İlerleme yüzdesi veya tamamlandı animasyonu
+
+
+—
+
+
+P2
+
+Arka planda ses çalan uygulama göstergesi
+
+
+—
+
+
+P1
+
+Uygulama bazında mikrofon kullanımı
+
+
+—
+
+
+P2
+
+Kamera kullanımı göstergesi
+
+
+—
+
+
+P2
+
+Ekran kaydı / paylaşım göstergesi
+
+
+—
+
+
+P2
+
+Küçültülmüş pencere için farklı gösterge
+
+
+—
+
+
+P2
+
+Başka masaüstündeki çalışan uygulama işareti
+
+
+—
+
+
+P1
+
+Başka monitördeki çalışan uygulama işareti
+
+
+—
+
+
+P2
+
+Arka plan uygulamaları / portal durumu
+
+
+—
+
+
+P2
+
+Uygulamanın yeni açıldığı veya yanıt vermediği durumu
+
+
+—
+
+
+P2
+
+İkon üzerinde küçük albüm kapağı veya medya rozeti
+
+
+—
+
+
+P3
+
+Bildirim sayaçlarında her uygulamanın aynı veriyi sağlamadığını unutmamalıyız. KDE'nin desteklediği uygulama/launcher göstergeleriyle başlamalıyız; örneğin hiçbir veri sağlamayan uygulamanın bildirim sayısını tahmin etmemeliyiz.
+H. Klasörler, Stacks, mini uygulamalar ve organizasyon
+
+macOS Stacks, Cairo-Dock subdock'ları, Winstep Nexus Ultimate ve ObjectDock'un sekmeli dock'ları bu kategoriye ilham veriyor.
+Apple Support (IE)+3
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Uygulama başlatıcı düğmesi
+
+
+✓
+
+
+Tamam
+
+Dock içinden ayarları açma
+
+
+✓
+
+
+Tamam
+
+Sabitlenen uygulamalarla çalışanları ayırma
+
+
+✓
+
+
+Tamam
+
+Klasör sabitleme
+
+
+—
+
+
+P1
+
+Klasörleri fan/grid/list olarak açma
+
+
+—
+
+
+P2
+
+Uygulama grupları / subdock
+
+
+—
+
+
+P2
+
+Downloads klasörüne hızlı erişim
+
+
+—
+
+
+P2
+
+Son kullanılan dosyalar
+
+
+—
+
+
+P2
+
+Son kullanılan uygulamalar
+
+
+—
+
+
+P2
+
+Çöp kutusu ikonu / boşaltma
+
+
+—
+
+
+P2
+
+Çoklu workspace seçicisi
+
+
+—
+
+
+P2
+
+Masaüstünü göster düğmesi
+
+
+—
+
+
+P2
+
+Saat / tarih widget'ı
+
+
+—
+
+
+P2
+
+Medya kontrol mini widget'ı
+
+
+—
+
+
+P1
+
+Ses ve mikrofon mini kontrolü
+
+
+—
+
+
+P2
+
+Ağ / pil / parlaklık widget'ları
+
+
+—
+
+
+P2
+
+Sistem tepsisini Dock'a taşıyabilme
+
+
+—
+
+
+P2
+
+CPU / RAM / ağ kullanımı gösterimi
+
+
+—
+
+
+P3
+
+Hava durumu ve takvim
+
+
+—
+
+
+P3
+
+Pano geçmişi
+
+
+—
+
+
+P2
+
+KRunner arama kısayolu
+
+
+—
+
+
+P1
+
+Kullanıcı tanımlı komut çalıştırıcı
+
+
+—
+
+
+P2
+
+Sekmeli Dock: Work / Gaming / Creative
+
+
+—
+
+
+P2
+
+Dinamik ve akıllı uygulama koleksiyonları
+
+
+—
+
+
+P3
+
+Üçüncü taraf widget / applet API'si
+
+
+—
+
+
+P2
+
+Burada dikkat: Bar'ımızda zaten medya, ağ, ses, pil, parlaklık ve Control Center var. Aynı servisleri Dock için yeniden yazmak yerine, gelecekte ortak bir widget altyapısıyla kullanabiliriz.
+I. Klavye, fare, touchpad ve erişilebilirlik
+
+Dash to Dock'un Super + 1…9 kısayolları, Dash to Panel'in özelleştirilebilir tıklama davranışları ve XFCE Docklike'ın hızlı uygulama geçişleri özellikle faydalı.
+GitHub+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Meta + 1…9 ile sabit uygulamalara gitme
+
+
+—
+
+
+P1
+
+Dock'u göster/gizle kısayolu
+
+
+—
+
+
+P1
+
+Klavyeyle ikonlar arasında dolaşma
+
+
+—
+
+
+P1
+
+Enter/Space ile etkinleştirme
+
+
+—
+
+
+P1
+
+Escape ile popup kapatma
+
+
+✓
+
+
+Tamam
+
+Uygulama ikonuna tekerlekle pencere değiştirme
+
+
+—
+
+
+P0
+
+Shift/Ctrl/Alt+tık davranışları
+
+
+—
+
+
+P2
+
+Kullanıcıya özel sol/orta/sağ tık eylemleri
+
+
+◐
+
+
+P2
+
+İki parmakla kaydırarak pencere değiştirme
+
+
+—
+
+
+P2
+
+Touchpad hareketiyle Dock gösterme
+
+
+?
+
+
+P2
+
+Dock'u klavye odağıyla tam kullanma
+
+
+◐
+
+
+P1
+
+Ekran okuyucuya uygun erişilebilir adlar
+
+
+?
+
+
+P1
+
+Yüksek kontrast modu
+
+
+—
+
+
+P1
+
+Hareket azaltma modu
+
+
+—
+
+
+P1
+
+Dokunmatik ekran için büyük hedefler
+
+
+—
+
+
+P2
+
+Sağdan sola dil ve yerleşim desteği
+
+
+—
+
+
+P2
+
+Simge araç ipuçlarında kısayol gösterme
+
+
+—
+
+
+P2
+
+Tek elle kullanım için alternatif yerleşimler
+
+
+—
+
+
+P3
+
+Bunlar çok gösterişli olmayabilir ama iyi bir Dock'un günlük kullanım kalitesini belirliyor.
+J. Profiller, otomasyon ve gelişmiş özelleştirme
+
+Latte'nin Activity düzenleri, Dash to Panel'in ayar içe/dışa aktarımı ve COSMIC'in applet tabanlı yaklaşımı burada yol gösterici.
+GitHub+2
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Dock ayarlarının JSON ile saklanması
+
+
+✓
+
+
+Tamam
+
+Canlı ayar değişiklikleri
+
+
+◐
+
+
+P1
+
+Düzenleri profil olarak kaydetme
+
+
+—
+
+
+P1
+
+Profiller arasında tek tıkla geçiş
+
+
+—
+
+
+P1
+
+Monitör başına profil
+
+
+—
+
+
+P1
+
+KDE Activity'ye göre otomatik profil
+
+
+—
+
+
+P2
+
+Oyuna girince otomatik Gaming profili
+
+
+—
+
+
+P2
+
+Belirli uygulama açılınca Dock davranışını değiştirme
+
+
+—
+
+
+P2
+
+Yedek alma / geri yükleme
+
+
+—
+
+
+P1
+
+Ayar içe/dışa aktarma
+
+
+—
+
+
+P1
+
+Profil önizlemesi
+
+
+—
+
+
+P2
+
+Hazır macOS / KDE / Windows düzenleri
+
+
+—
+
+
+P2
+
+Uygulama başına özel ikon
+
+
+—
+
+
+P2
+
+Uygulama başına özel tıklama eylemi
+
+
+—
+
+
+P2
+
+Eklenti sistemi
+
+
+—
+
+
+P2
+
+Kullanıcı tanımlı script/komut modülleri
+
+
+—
+
+
+P2
+
+Komut satırı / IPC ile Dock kontrolü
+
+
+—
+
+
+P2
+
+Tema ve profil paylaşım mekanizması
+
+
+—
+
+
+P3
+
+Bence Work, Gaming ve Minimal gibi profiller oldukça değerli. Ancak önce Drag-and-Drop ve Dock ayar motorunun kararlı hâle gelmesini isterim.
+K. Görünüm, tema ve kişiselleştirme
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Açık / koyu tema
+
+
+✓
+
+
+Tamam
+
+Breeze ve özel tema paletleri
+
+
+✓
+
+
+Tamam
+
+KWin native arka plan bulanıklığı
+
+
+✓
+
+
+Tamam
+
+Şeffaflık ve cam görünüm çeşitleri
+
+
+◐
+
+
+P2
+
+Pencereye yaklaşınca dinamik opaklık
+
+
+—
+
+
+P2
+
+Duvar kâğıdından dinamik renk paleti
+
+
+—
+
+
+P1
+
+İkonların görsel boyutunu normalize etme
+
+
+—
+
+
+P1
+
+Uygulamaya özel ikon değiştirme
+
+
+—
+
+
+P2
+
+İkon biçimi: kare, squircle, yuvarlak
+
+
+—
+
+
+P2
+
+Dock arka planını tamamen gizleme
+
+
+—
+
+
+P2
+
+Köşe yuvarlaklığı / kenarlık ayarı
+
+
+◐
+
+
+P2
+
+Gölge, kontur ve parlama ayarları
+
+
+◐
+
+
+P2
+
+Aktif uygulamanın rengine göre vurgu
+
+
+—
+
+
+P2
+
+Ayrı ikon, arka plan ve gösterge temaları
+
+
+—
+
+
+P2
+
+Hover ve click animasyon preset'leri
+
+
+—
+
+
+P2
+
+Monitör başına farklı görünüm
+
+
+—
+
+
+P2
+
+Cam / akrilik / mat / 3D hazır stiller
+
+
+—
+
+
+P2
+
+HDR ve geniş renk gamında görünüm doğruluğu
+
+
+?
+
+
+P2
+
+OLED için düşük parlaklıklı görünüm
+
+
+—
+
+
+P3
+
+Dinamik ışık / ikon çevresinde glow
+
+
+—
+
+
+P3
+
+Özellikle Crystal Dock'un cam/metal stilleri ve Windows tarafında Windhawk Taskbar Styler'ın tema yaklaşımı, görsel özelleştirme için incelenebilir.
+GitHub+1
+L. Performans, kararlılık ve güvenlik
+
+Bu özellikler gösterişli değil ama sürekli çalışan bir shell için önemli. Buradaki durumlar tam performans denetimi değil, mevcut mimari gözlemi.
+
+Özellik
+
+
+Bizde
+
+
+Öncelik
+
+Gereksiz yeniden render işlemlerinden kaçınma
+
+
+◐
+
+
+P0
+
+QML binding ve animasyon çakışmalarını önleme
+
+
+◐
+
+
+P0
+
+Popup'ları gerektiğinde oluşturma
+
+
+✓
+
+
+Tamam
+
+Düşük kaynak tüketimi modu
+
+
+—
+
+
+P1
+
+Güç tasarrufunda animasyon azaltma
+
+
+—
+
+
+P2
+
+FPS / animasyon kare süresi ölçümü
+
+
+—
+
+
+P1
+
+Çok pencere açıldığında performansın korunması
+
+
+◐
+
+
+P0
+
+Çöken uygulamanın Dock'ta hayalet ikon bırakmaması
+
+
+◐
+
+
+P0
+
+Bağlı monitör değişikliklerinden güvenli kurtarma
+
+
+◐
+
+
+P0
+
+Çok hızlı tıklama/hover sırasında yarış koşullarının önlenmesi
+
+
+◐
+
+
+P0
+
+Dock'u ayrı yapılandırmayla izole test etme
+
+
+✓
+
+
+Tamam
+
+Hatalı kullanıcı ayarlarından güvenli kurtarma
+
+
+◐
+
+
+P1
+
+Kullanıcı eylemlerini geri alabilme
+
+
+—
+
+
+P2
+
+Riskli pencere işlemlerinde açık onay
+
+
+◐
+
+
+P1
+
+Erişim izinlerini minimumda tutma
+
+
+◐
+
+
+P0
+
+Gizlilik dostu, telemetrisiz varsayılan
+
+
+◐
+
+
+P1
+M. Deneysel, aşırı görsel ve düşük değerli özellikler
+
+Bunları da masadan kaldırmıyorum. Cairo-Dock, Nexus ve çeşitli üçüncü taraf dock'lar, gündelik işlevin çok ötesine geçen fikirler sunuyor.
+GitHub+2
+
+Özellik
+
+
+Değer
+
+
+Karar
+
+Pencerelerin Dock'a doğru Genie efektiyle küçülmesi
+
+
+Görsel
+
+
+KWin etkisi araştırılabilir
+
+Liquid Glass benzeri hareketli optik arka plan
+
+
+Görsel
+
+
+P3
+
+3D perspektifli dönen ikonlar
+
+
+Düşük
+
+
+P3
+
+Fiziksel ataletli, yaylanan Dock
+
+
+Orta
+
+
+P3
+
+Fare imlecini takip eden renk dalgası
+
+
+Düşük
+
+
+P3
+
+İkonların su üzerindeymiş gibi salınması
+
+
+Düşük
+
+
+P3
+
+İkon yansımaları ve 3D raf
+
+
+Düşük
+
+
+P3
+
+Sesle tepki veren Dock görselleştirmesi
+
+
+Niş
+
+
+P3
+
+Radyal / dairesel Dock modu
+
+
+Niş
+
+
+P3
+
+Ekranda serbestçe gezen Dock
+
+
+Niş
+
+
+P3
+
+Uygulama kullanımını analiz edip ikon önerme
+
+
+Koşullu
+
+
+P3, gizlilik önemli
+
+Uygulama önceliğine göre Dock'u kendi kendine sıralama
+
+
+Tartışmalı
+
+
+Varsayılan kapalı
+
+Mouse shake ile Dock'u gösterme
+
+
+Niş
+
+
+P3
+
+Oyun açılınca Dock'u özel HUD'a dönüştürme
+
+
+Niş
+
+
+P3
+
+Dock ikonunun üzerinde canlı video gösterme
+
+
+Çok maliyetli
+
+
+Ertele
+
+Kendi Dock içi widget mağazamız
+
+
+Ekosistem
+
+
+Çok ileri aşama
+
+Tamamen yapay zekâyla otomatik Dock düzenleme
+
+
+Belirsiz
+
+
+Şimdilik gereksiz
+
+Burada bir kural koyardım: Görsel efekt, temel etkileşimi yavaşlatıyorsa varsayılan olarak açık gelmemeli. Kullanıcı istediğinde açılabilmesi yeterli.
+4. KDE/KWin Wayland üzerinde hangileri gerçekten uygulanabilir?
+
+Bu aşama önemli. Biz KDE'nin motorunu kullanıyoruz; bir başka compositor'ın motorunu taklit etmiyoruz.
+
+KWin'in resmî scripting API'si; pencere geometrisi, aktif pencere, monitör, sanal masaüstü, Activity, tam ekran ve pencere durumları gibi birçok bilgi ve işlem sunuyor. Qt Quick ise Dock içindeki sürükle-bırak altyapısını destekliyor.
+Developer+2
+
+Özellik grubu
+
+
+Teknik yaklaşım
+
+
+Uygulanabilirlik
+
+Parabolik zoom
+
+
+Qt Quick/QML animasyon ve layout motoru
+
+
+Yüksek
+
+İkon sıralama ve uygulama sabitleme
+
+
+Qt Drag/Drop + mevcut ConfigService
+
+
+Yüksek
+
+Pencere gezme ve hızlı eylemler
+
+
+Mevcut WindowService + KWin
+
+
+Yüksek
+
+Sanal masaüstü ve monitör filtreleri
+
+
+KWin pencere metadatası
+
+
+Yüksek
+
+Akıllı gizlenme
+
+
+KWin pencere geometrisi ve durumları
+
+
+Yüksek, ek iş
+
+Uygulama ses kontrolü
+
+
+PipeWire stream eşleştirmesi
+
+
+Orta
+
+Dosya bırakıp uygulamada açma
+
+
+Qt Drag/Drop + .desktop/uygulama desteği
+
+
+Orta
+
+KDE uygulama hızlı eylemleri
+
+
+.desktop Actions
+
+
+Yüksek
+
+Bildirim rozetleri
+
+
+KDE/freedesktop destekli veri kaynakları
+
+
+Uygulamaya bağlı
+
+Dosya aktarım ilerlemesi
+
+
+KDE Job/Launcher göstergeleri
+
+
+Uygulamaya bağlı
+
+Klasör Stacks
+
+
+Qt/QML arayüzü + KDE dosya servisleri
+
+
+Yüksek
+
+Gerçek pointer pressure
+
+
+KWin tarafında özel destek/entegrasyon araştırması
+
+
+Belirsiz
+
+Canlı pencere küçük resimleri
+
+
+KWin/Plasma iç API veya yetkili görüntü yakalama yolu
+
+
+Zor ve kısıtlı
+
+KWin'in kendi pencere küçültme efektleri
+
+
+Compositor efekt altyapısı
+
+
+Araştırma gerekli
+
+Önemli iki sınırlama:
+
+Gerçek canlı pencere küçük resimlerini, normal Wayland istemcisi olarak bütün pencerelerden serbestçe alamayız. KDE'nin kendi görev yöneticisinin erişebildiği bazı compositor iç yeteneklerine dışarıdaki Quickshell istemcisi aynı şekilde erişemez. Bu nedenle sahte ekran görüntülerini gerçek canlı önizlemeymiş gibi göstermemeliyiz.
+
+Pressure Reveal konusunda da seçenekleri araştırabiliriz; ancak standart kenar-hover mantığına pressure etiketi takmak istemiyorum. Gerekirse yalnızca o yetenek için küçük ve izole bir KWin eklentisinin fizibilitesini değerlendirebiliriz.
+5. Benim öncelik sıralamam
+
+Bu geniş envanterden quickshell-kde'yi rakiplerinin yanında gerçekten güçlü gösterecek ilk 12 özelliği seçtim.
+
+Sıra
+
+
+Özellik
+
+
+Etki
+
+
+Tahmini zorluk
+
+1
+
+
+Sürükle-bırak ile ikon sıralama ve sabitleme
+
+
+Çok yüksek
+
+
+Orta
+
+2
+
+
+Fare tekerleği / tıklamayla pencere döngüsü
+
+
+Çok yüksek
+
+
+Düşük
+
+3
+
+
+Akıllı gizlenme — Intellihide
+
+
+Çok yüksek
+
+
+Orta–yüksek
+
+4
+
+
+Gerçek parabolik zoom ve komşu ikonların hareketi
+
+
+Çok yüksek
+
+
+Yüksek
+
+5
+
+
+Masaüstü / monitör bazlı pencere filtreleri
+
+
+Yüksek
+
+
+Orta
+
+6
+
+
+KDE .desktop hızlı eylemlerini sağ tık menüsüne ekleme
+
+
+Yüksek
+
+
+Orta
+
+7
+
+
+Daha fazla native KWin pencere işlemi
+
+
+Yüksek
+
+
+Orta
+
+8
+
+
+Meta + 1…9 kısayolları ve klavye gezinimi
+
+
+Yüksek
+
+
+Orta
+
+9
+
+
+Bildirim, aciliyet ve işlem ilerleme göstergeleri
+
+
+Yüksek
+
+
+Orta–yüksek
+
+10
+
+
+Dosyayı uygulama ikonuna bırakma
+
+
+Yüksek
+
+
+Yüksek
+
+11
+
+
+Klasör ve uygulama Stacks
+
+
+Orta–yüksek
+
+
+Yüksek
+
+12
+
+
+Monitör başına bağımsız Dock profilleri
+
+
+Orta–yüksek
+
+
+Yüksek
+Zorluk dereceleri, mevcut quickshell-kde mimarisine göre benim mühendislik tahminimdir; doğrulanmış iş süresi değildir.
+6. Agresif geliştirme planına nasıl dağıtırdım?
+
+Dalga 1 — Dock Interaction 3.0
+
+Drag-and-drop, simge sıralama, pin/unpin, fare tekerleğiyle pencere değiştirme, klavye kısayolları.
+
+Kullanışlılığı en hızlı artıran paket.
+
+Dalga 2 — KDE-Native Window Intelligence
+
+Intellihide, masaüstü/monitör filtreleri, KWin pencere eylemleri, KDE uygulama hızlı eylemleri.
+
+Rakiplere karşı en güçlü teknik avantajımız.
+
+Dalga 3 — Motion & Visual Engine
+
+Gerçek parabolik zoom, ikon düzen animasyonları, başlatma animasyonları, performans ve erişilebilirlik ayarları.
+
+Dock'u görsel olarak farklılaştıran paket.
+
+Dalga 4 — Smart Dock & Organization
+
+Bildirim rozetleri, ilerleme durumları, dosya bırakma, Stacks ve monitör profilleri.
+
+Günlük üretkenlik ve gelişmiş özelleştirme.
+
+Pressure Reveal ve canlı pencere önizlemelerini ise ayrı teknik araştırma görevleri olarak tutarım. Bunların uygulanabilirliği kanıtlanmadan ana geliştirme dalgalarını onlara bağlamayız.
+7. Bu projede farklı olmamız gereken nokta
+
+Geniş envanteri inceledikten sonra bence quickshell-kde'nin hedefi yalnızca “Linux'ta macOS Dock görünümü” olmamalı.
+
+Dört ilkeye dayalı bir Dock geliştiriyoruz:
+
+    macOS kalitesinde etkileşim: Parabolik büyütme, akıcı hareket ve sürükle-bırak.
+
+    Windows kadar güçlü pencere yönetimi: Gruplama, kısayollar, eylemler ve göstergeler.
+
+    KDE'nin gerçek yetenekleri: KWin, sanal masaüstleri, Activities, native servisler ve Plasma uyumu.
+
+    Linux düzeyinde özelleştirme: Profiller, modüller, gelişmiş davranış ayarları ve farklı kullanım biçimleri.
+
+Bütün bunları Quickshell üzerinden yaparken mümkün olduğunca mevcut KDE servislerinden yararlanacağız. Zorunlu olmadıkça alternatif bir pencere yöneticisi, ses servisi, bildirim servisi veya başka daemon yazmayacağız.
+
+Son kararım: Önce sürükle-bırak ve pencere etkileşimleriyle Dock'u gerçekten kullanışlı hâle getirelim. Ardından Intellihide ve parabolik zoom ile hem teknik hem görsel açıdan ciddi bir sıçrama yapalım.
+
+Bu envanter artık geliştirme önceliklerini seçmek için temelimiz olabilir; burada sıraladıklarımızı sen kabul etmedikçe otomatik olarak AGY görevlerine veya proje kapsamına eklemiyorum.
+
+Sena ~ 26/10/26-15:16
