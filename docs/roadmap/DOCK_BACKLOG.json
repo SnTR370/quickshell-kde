@@ -45,8 +45,8 @@
       "id": "DOCK-004",
       "rank_2026_10_26": 4,
       "title": "Gerçek parabolik zoom ve komşu ikon hareketi",
-      "status": "ready",
-      "evidence_note": "AUDITED 2026-10-30: confirmed genuinely missing. modules/dock/DockItem.qml line 35 has single-icon targetScale (pressed 0.92 / hover 1.15) only; no neighbor magnification, no pointer-position-driven curve anywhere in modules/dock/. Unblocked top candidate for the next feature session (matches DOCK_FEATURE_RUSH.md), pending a sandboxed environment for unattended work.",
+      "status": "in_progress",
+      "evidence_note": "AUDITED 2026-10-30: confirmed genuinely missing. modules/dock/DockItem.qml line 35 has single-icon targetScale (pressed 0.92 / hover 1.15) only; no neighbor magnification, no pointer-position-driven curve anywhere in modules/dock/. Unblocked top candidate for the next feature session (matches DOCK_FEATURE_RUSH.md), pending a sandboxed environment for unattended work. RUSH 2026-10-30: in_progress via interactive owner-watched pilot session (supervisor dry-run validated; unattended spawn correctly refused: no sandbox).",
       "completed_commit": null,
       "live_verified": false,
       "owner": null
