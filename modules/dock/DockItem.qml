@@ -32,7 +32,17 @@ Item {
     property bool suppressClick: false
     property var acceptedDropInfo: null
     readonly property bool dropTargeted: itemDropArea.containsDrag
-    readonly property real targetScale: (dockItemMouse.pressed ? 0.92 : ((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)) * root.bounceScale
+    // DOCK-004 pointer-driven magnification state, assigned imperatively by
+    // the Dock controller (see Dock.qml updateMagnification). Defaults keep
+    // the classic single-icon contract when magnification is disabled or no
+    // controller is present (bare-item tests, drag mocks).
+    property real magnifiedScale: 1.0
+    property real magnifiedOffset: 0.0
+    readonly property real appliedMagnifiedOffset: root.isVerticalDock ? magTranslate.y : magTranslate.x
+    // Magnified curve scale composes with the preserved single-icon contracts:
+    // pressed (0.92) still wins, hover/popup floor (1.15) still applies, and the
+    // parabolic neighbor curve can only raise the scale above the floor.
+    readonly property real targetScale: (dockItemMouse.pressed ? 0.92 : Math.max(((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0), root.magnifiedScale)) * root.bounceScale
     z: root.dragging ? 10 : (root.dropTargeted ? 5 : 0)
 
     // Keyboard accessibility
@@ -178,6 +188,29 @@ Item {
     implicitHeight: baseSize + 8
     width: implicitWidth
     height: implicitHeight
+
+    // DOCK-004: lateral displacement along the layout axis, making room for
+    // magnified neighbors. Applied as a transform on the WHOLE item (mouse,
+    // drop and popup anchor areas included) so hit targets follow the visual
+    // while the layout's rest geometry - which the magnification math measures
+    // against - stays stable (no feedback loop, no centering jumps).
+    transform: Translate {
+        id: magTranslate
+        x: root.isVerticalDock ? 0 : root.magnifiedOffset
+        y: root.isVerticalDock ? root.magnifiedOffset : 0
+        Behavior on x {
+            NumberAnimation {
+                duration: Theme.animDurationFast
+                easing.type: Theme.animEasing
+            }
+        }
+        Behavior on y {
+            NumberAnimation {
+                duration: Theme.animDurationFast
+                easing.type: Theme.animEasing
+            }
+        }
+    }
 
     function acceptDropTarget(info) {
         root.acceptedDropInfo = info;

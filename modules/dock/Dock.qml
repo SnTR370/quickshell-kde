@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import "../../services"
 import "../../components"
 import "../../services/kwin/Intellihide.js" as Intellihide
+import "Magnification.js" as Magnification
 import "."
 
 Variants {
@@ -45,6 +46,73 @@ Variants {
         readonly property bool hasActivePopup: activePopupItem !== null
         property var activeDragItem: null
         readonly property bool isDragging: activeDragItem !== null
+
+        // DOCK-004 pointer-driven magnification (parabolic zoom + neighbor
+        // displacement). Pure math lives in Magnification.js; this controller
+        // only measures rest geometry, resolves, and assigns imperatively.
+        // Driven exclusively by the surface HoverHandler's point updates -
+        // no timers, no polling. magnifiedGrowth widens the surface so the
+        // displaced icons stay inside the dock background; the surface grows
+        // symmetrically around its (anchored) center, so the layout's rest
+        // positions and the dock's centering never jump.
+        property real magnifiedGrowth: 0
+        property var lastMagnifyPoint: null
+
+        function magnificationEntries() {
+            const layout = dockWindow.isVertical ? colLayout : rowLayout;
+            const res = [];
+            const kids = layout ? layout.children : [];
+            for (let i = 0; i < kids.length; i++) {
+                const c = kids[i];
+                if (c && c.visible && c.magnifiedOffset !== undefined) res.push(c);
+            }
+            return res;
+        }
+
+        function resetMagnification() {
+            const entries = dockWindow.magnificationEntries();
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                e.magnifiedOffset = 0;
+                if (e.magnifiedScale !== undefined) e.magnifiedScale = 1.0;
+            }
+            dockWindow.magnifiedGrowth = 0;
+        }
+
+        function updateMagnification(surfacePos) {
+            dockWindow.lastMagnifyPoint = surfacePos || null;
+            if (!ConfigService.dockMagnification || dockWindow.isDragging) {
+                dockWindow.resetMagnification();
+                return;
+            }
+            const entries = dockWindow.magnificationEntries();
+            if (entries.length === 0) {
+                dockWindow.magnifiedGrowth = 0;
+                return;
+            }
+            const vert = dockWindow.isVertical;
+            const pointer = surfacePos ? (vert ? surfacePos.y : surfacePos.x) : NaN;
+            const centers = [];
+            const extents = [];
+            const magnifiable = [];
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const mapped = e.mapToItem(dockSurface, e.width / 2, e.height / 2);
+                // mapToItem includes the applied (animated) displacement
+                // transform; subtract it to measure the stable REST center.
+                centers.push((vert ? mapped.y : mapped.x) - e.appliedMagnifiedOffset);
+                extents.push(vert ? e.height : e.width);
+                magnifiable.push(e.magnifiedScale !== undefined);
+            }
+            const res = Magnification.resolve(centers, extents, magnifiable, pointer,
+                ConfigService.dockMagnifyRadius, ConfigService.dockMagnifyMaxScale, Theme.spacingSmall);
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                e.magnifiedOffset = res.offsets[i];
+                if (e.magnifiedScale !== undefined) e.magnifiedScale = res.scales[i];
+            }
+            dockWindow.magnifiedGrowth = Math.max(0, res.growth);
+        }
 
         // Keyboard accessibility (local to this Dock surface). The Dock never requests
         // keyboard focus by itself: keyboardNavActive is only set through the explicit
@@ -105,9 +173,21 @@ Variants {
         onIsDraggingChanged: {
             if (isDragging) {
                 hideTimer.stop();
-            } else if (!hasActivePopup && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
-                hideTimer.restart();
+                dockWindow.resetMagnification();
+            } else {
+                // Drop finished with the pointer still over the dock: restore
+                // magnification from the last known pointer position.
+                if (dockHoverHandler.hovered && dockWindow.lastMagnifyPoint) {
+                    dockWindow.updateMagnification(dockWindow.lastMagnifyPoint);
+                }
+                if (!hasActivePopup && !dockAreaHover.hovered && !dockHoverHandler.hovered && !edgeTriggerHover.hovered && autoHide) {
+                    hideTimer.restart();
+                }
             }
+        }
+        onEdgeChanged: {
+            // Layout axis switched (horizontal <-> vertical): clear stale state.
+            dockWindow.resetMagnification();
         }
         onVisibleChanged: {
             if (!dockWindow.visible) {
@@ -119,6 +199,7 @@ Variants {
                 dockWindow.hoverRevealed = false;
                 dockWindow.keyboardNavActive = false;
                 dockWindow.focusedDockItem = null;
+                dockWindow.resetMagnification();
             }
         }
         Connections {
@@ -128,6 +209,9 @@ Variants {
             }
             function onSettingsVisibleChanged() {
                 if (ConfigService.settingsVisible) dockWindow.activePopupItem = null;
+            }
+            function onDockMagnificationChanged() {
+                if (!ConfigService.dockMagnification) dockWindow.resetMagnification();
             }
         }
         readonly property bool isRevealed: Intellihide.isRevealed(ConfigService.dockAutoHide, intellihide, intellihideObstructed,
@@ -299,8 +383,12 @@ Variants {
                 leftMargin: (dockWindow.isFloating && dockWindow.edge === "left") ? dockWindow.offset : 0
                 rightMargin: (dockWindow.isFloating && dockWindow.edge === "right") ? dockWindow.offset : 0
             }
-            implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16) : (ConfigService.dockIconSize + 16)
-            implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16)
+            // DOCK-004: + magnifiedGrowth so displaced/magnified icons stay inside
+            // the background. The surface is anchored at its center and the layout
+            // is centered in the surface, so this growth is symmetric and the
+            // layout's rest geometry does not move.
+            implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16 + dockWindow.magnifiedGrowth) : (ConfigService.dockIconSize + 16)
+            implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16 + dockWindow.magnifiedGrowth)
             radius: dockWindow.isFloating ? Theme.radiusLarge : 0
             borderVisible: dockWindow.isFloating
             color: Theme.alpha(Theme.background, ConfigService.barOpacity)
@@ -358,10 +446,17 @@ Variants {
                         hideTimer.stop();
                         dockWindow.hoverRevealed = true;
                     } else {
+                        dockWindow.resetMagnification();
                         if (dockWindow.autoHide && !dockWindow.hasActivePopup && !dockWindow.isDragging && !dockAreaHover.hovered && !edgeTriggerHover.hovered) {
                             hideTimer.restart();
                         }
                     }
+                }
+                // DOCK-004: continuous pointer tracking on the layout axis.
+                // Event-driven only (no timers); point.position is in
+                // dockSurface coordinates.
+                onPointChanged: {
+                    if (hovered) dockWindow.updateMagnification(point.position);
                 }
             }
 
@@ -373,16 +468,19 @@ Variants {
                 spacing: Theme.spacingSmall
 
                 // Launcher toggle
-                IconButton {
-                    parentWindow: dockWindow
-                    edge: dockWindow.edge
-                    size: ConfigService.dockIconSize
-                    icon: "start-here-kde"
-                    iconColor: Theme.primary
-                    backgroundColor: Theme.alpha(Theme.primary, 0.12)
-                    tooltip: "Applications"
-                    active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
-                    onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
+                MagnifySlot {
+                    dockWindowRef: dockWindow
+                    IconButton {
+                        parentWindow: dockWindow
+                        edge: dockWindow.edge
+                        size: ConfigService.dockIconSize
+                        icon: "start-here-kde"
+                        iconColor: Theme.primary
+                        backgroundColor: Theme.alpha(Theme.primary, 0.12)
+                        tooltip: "Applications"
+                        active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
+                        onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
+                    }
                 }
 
                 DockSeparator { isVertical: false }
@@ -421,15 +519,18 @@ Variants {
                 DockSeparator { isVertical: false }
 
                 // Settings toggle
-                IconButton {
-                    parentWindow: dockWindow
-                    edge: dockWindow.edge
-                    size: ConfigService.dockIconSize
-                    icon: "preferences-system"
-                    iconColor: Theme.foreground
-                    tooltip: "Settings"
-                    active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
-                    onClicked: ConfigService.toggleSettings(dockWindow.modelData)
+                MagnifySlot {
+                    dockWindowRef: dockWindow
+                    IconButton {
+                        parentWindow: dockWindow
+                        edge: dockWindow.edge
+                        size: ConfigService.dockIconSize
+                        icon: "preferences-system"
+                        iconColor: Theme.foreground
+                        tooltip: "Settings"
+                        active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
+                        onClicked: ConfigService.toggleSettings(dockWindow.modelData)
+                    }
                 }
             }
 
@@ -441,16 +542,19 @@ Variants {
                 spacing: Theme.spacingSmall
 
                 // Launcher toggle
-                IconButton {
-                    parentWindow: dockWindow
-                    edge: dockWindow.edge
-                    size: ConfigService.dockIconSize
-                    icon: "start-here-kde"
-                    iconColor: Theme.primary
-                    backgroundColor: Theme.alpha(Theme.primary, 0.12)
-                    tooltip: "Applications"
-                    active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
-                    onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
+                MagnifySlot {
+                    dockWindowRef: dockWindow
+                    IconButton {
+                        parentWindow: dockWindow
+                        edge: dockWindow.edge
+                        size: ConfigService.dockIconSize
+                        icon: "start-here-kde"
+                        iconColor: Theme.primary
+                        backgroundColor: Theme.alpha(Theme.primary, 0.12)
+                        tooltip: "Applications"
+                        active: ConfigService.launcherVisible && (ConfigService.launcherScreenName === "" || ConfigService.launcherScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
+                        onClicked: ConfigService.toggleLauncher(dockWindow.modelData)
+                    }
                 }
 
                 DockSeparator { isVertical: true }
@@ -489,15 +593,18 @@ Variants {
                 DockSeparator { isVertical: true }
 
                 // Settings toggle
-                IconButton {
-                    parentWindow: dockWindow
-                    edge: dockWindow.edge
-                    size: ConfigService.dockIconSize
-                    icon: "preferences-system"
-                    iconColor: Theme.foreground
-                    tooltip: "Settings"
-                    active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
-                    onClicked: ConfigService.toggleSettings(dockWindow.modelData)
+                MagnifySlot {
+                    dockWindowRef: dockWindow
+                    IconButton {
+                        parentWindow: dockWindow
+                        edge: dockWindow.edge
+                        size: ConfigService.dockIconSize
+                        icon: "preferences-system"
+                        iconColor: Theme.foreground
+                        tooltip: "Settings"
+                        active: ConfigService.settingsVisible && (ConfigService.settingsScreenName === "" || ConfigService.settingsScreenName === (dockWindow.modelData ? dockWindow.modelData.name : ""))
+                        onClicked: ConfigService.toggleSettings(dockWindow.modelData)
+                    }
                 }
             }
         }

@@ -6,10 +6,33 @@ Rectangle {
     id: root
     property bool isVertical: false
     property bool acceptPinDrop: false
+    // DOCK-004: lateral displacement along the layout axis, assigned by the
+    // Dock magnification controller so separators move apart with the icons.
+    property real magnifiedOffset: 0
+    readonly property real appliedMagnifiedOffset: root.isVertical ? sepTranslate.y : sepTranslate.x
     readonly property bool dropTargeted: separatorDropArea.containsDrag
 
     implicitWidth: isVertical ? 24 : 1
     implicitHeight: isVertical ? 1 : 24
+
+    // Transform-only displacement: rest layout geometry never changes.
+    transform: Translate {
+        id: sepTranslate
+        x: root.isVertical ? 0 : root.magnifiedOffset
+        y: root.isVertical ? root.magnifiedOffset : 0
+        Behavior on x {
+            NumberAnimation {
+                duration: Theme.animDurationFast
+                easing.type: Theme.animEasing
+            }
+        }
+        Behavior on y {
+            NumberAnimation {
+                duration: Theme.animDurationFast
+                easing.type: Theme.animEasing
+            }
+        }
+    }
     color: dropTargeted ? Theme.primary : Theme.alpha(Theme.border, 0.6)
     Layout.alignment: Qt.AlignCenter
     activeFocusOnTab: false

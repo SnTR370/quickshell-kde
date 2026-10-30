@@ -45,6 +45,10 @@ Singleton {
     property bool dockIntellihide: false
     property int dockHideDelay: 350
     property int dockRevealDelay: 120
+    // DOCK-004 pointer-driven magnification (parabolic zoom + neighbor displacement)
+    property bool dockMagnification: true
+    property real dockMagnifyMaxScale: 1.5
+    property int dockMagnifyRadius: 80
     property var dockMonitors: "all"
     // Dock window filter: all | desktop | monitor | desktop-and-monitor (invalid -> all)
     property string dockWindowFilter: "all"
@@ -307,6 +311,9 @@ Singleton {
             "intellihide": false,
             "hideDelay": 350,
             "revealDelay": 120,
+            "magnification": true,
+            "magnifyMaxScale": 1.5,
+            "magnifyRadius": 80,
             "monitors": "all",
             "pinned": ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
         })
@@ -337,6 +344,13 @@ Singleton {
             }
             if (typeof parsed.revealDelay === "number" && Number.isFinite(parsed.revealDelay) && !mod["revealDelay"]) {
                 root.dockRevealDelay = Math.max(0, Math.min(1000, Math.trunc(parsed.revealDelay)));
+            }
+            if (typeof parsed.magnification === "boolean" && !mod["magnification"]) root.dockMagnification = parsed.magnification;
+            if (typeof parsed.magnifyMaxScale === "number" && Number.isFinite(parsed.magnifyMaxScale) && !mod["magnifyMaxScale"]) {
+                root.dockMagnifyMaxScale = Math.max(1.0, Math.min(3.0, parsed.magnifyMaxScale));
+            }
+            if (typeof parsed.magnifyRadius === "number" && Number.isFinite(parsed.magnifyRadius) && !mod["magnifyRadius"]) {
+                root.dockMagnifyRadius = Math.max(24, Math.min(320, Math.round(parsed.magnifyRadius)));
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
@@ -750,6 +764,9 @@ Singleton {
             "intellihide": root.dockIntellihide,
             "hideDelay": root.dockHideDelay,
             "revealDelay": root.dockRevealDelay,
+            "magnification": root.dockMagnification,
+            "magnifyMaxScale": root.dockMagnifyMaxScale,
+            "magnifyRadius": root.dockMagnifyRadius,
             "monitors": root.dockMonitors,
             "windowFilter": root.dockWindowFilter,
             "pinned": root.dockPinned
@@ -819,6 +836,24 @@ Singleton {
     function setDockRevealDelay(delay) {
         root._markDockModified("revealDelay");
         root.dockRevealDelay = Math.max(0, Math.min(1000, delay));
+        saveDockConfig();
+    }
+
+    function setDockMagnification(on) {
+        root._markDockModified("magnification");
+        root.dockMagnification = on;
+        saveDockConfig();
+    }
+
+    function setDockMagnifyMaxScale(scale) {
+        root._markDockModified("magnifyMaxScale");
+        root.dockMagnifyMaxScale = Math.max(1.0, Math.min(3.0, scale));
+        saveDockConfig();
+    }
+
+    function setDockMagnifyRadius(radius) {
+        root._markDockModified("magnifyRadius");
+        root.dockMagnifyRadius = Math.max(24, Math.min(320, Math.round(radius)));
         saveDockConfig();
     }
 
