@@ -32,6 +32,42 @@ Variants {
         // Layout preset preview state (session-only, never persisted)
         property string pendingPresetId: ""
         property string presetResultMessage: ""
+        // DOCK-011: stack management session state (never persisted)
+        property string newStackTitle: ""
+        property string newStackPath: ""
+        property string stackMessage: ""
+        property string expandedStackId: ""
+        property string stackQueryText: ""
+
+        function toggleExpandedStack(id) {
+            if (settingsWin.expandedStackId === id) {
+                settingsWin.expandedStackId = "";
+            } else {
+                settingsWin.expandedStackId = id;
+                settingsWin.stackQueryText = "";
+            }
+        }
+
+        function addFolderStack() {
+            const id = ConfigService.addDockStack("folder", settingsWin.newStackTitle, settingsWin.newStackPath);
+            if (id) {
+                settingsWin.stackMessage = "Folder stack added.";
+                settingsWin.newStackTitle = "";
+                settingsWin.newStackPath = "";
+            } else {
+                settingsWin.stackMessage = "Folder stack needs a title and an absolute folder path.";
+            }
+        }
+
+        function addAppsStack() {
+            const id = ConfigService.addDockStack("apps", settingsWin.newStackTitle, "");
+            if (id) {
+                settingsWin.stackMessage = "App stack added — drag applications onto it, or expand it below to add some.";
+                settingsWin.newStackTitle = "";
+            } else {
+                settingsWin.stackMessage = "App stack needs a title.";
+            }
+        }
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:settings"
@@ -1253,6 +1289,342 @@ Variants {
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        // 3b. Dock Stacks (DOCK-011)
+                        Surface {
+                            id: stacksCard
+                            Layout.fillWidth: true
+                            implicitHeight: stacksCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            ColumnLayout {
+                                id: stacksCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Text {
+                                    text: "Dock Stacks"
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: "Folder shortcuts and application groups pinned in the Dock. Click a stack in the Dock to open it; drag applications onto an app stack to add them; right-click a stack to remove it."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+
+                                // Existing stacks
+                                Repeater {
+                                    model: ConfigService.dockStacks
+
+                                    Surface {
+                                        id: stackRow
+                                        required property var modelData
+                                        readonly property bool isFolderStack: modelData.type === "folder"
+                                        readonly property bool expanded: settingsWin.expandedStackId === modelData.id
+                                        Layout.fillWidth: true
+                                        implicitHeight: stackRowCol.implicitHeight + 16
+                                        radius: Theme.radiusSmall
+                                        color: Theme.alpha(Theme.background, 0.5)
+
+                                        ColumnLayout {
+                                            id: stackRowCol
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 8
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+
+                                                SvgIcon {
+                                                    icon: stackRow.modelData.icon
+                                                        || (stackRow.isFolderStack ? "folder" : "applications-all")
+                                                    size: 20
+                                                    color: Theme.primary
+                                                }
+
+                                                Text {
+                                                    text: stackRow.modelData.title
+                                                        + (stackRow.isFolderStack ? " (folder)" : " (apps)")
+                                                    color: Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                Text {
+                                                    visible: stackRow.isFolderStack
+                                                    text: stackRow.modelData.path || ""
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    elide: Text.ElideMiddle
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Item { Layout.fillWidth: !stackRow.isFolderStack }
+
+                                                Text {
+                                                    visible: !stackRow.isFolderStack
+                                                    text: (stackRow.modelData.appIds ? stackRow.modelData.appIds.length : 0) + " apps"
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                }
+
+                                                IconButton {
+                                                    size: 24
+                                                    icon: stackRow.expanded ? "arrow-up" : "arrow-down"
+                                                    iconColor: Theme.foreground
+                                                    onClicked: settingsWin.toggleExpandedStack(stackRow.modelData.id)
+                                                }
+
+                                                IconButton {
+                                                    size: 24
+                                                    icon: "edit-delete"
+                                                    iconColor: Theme.error
+                                                    onClicked: {
+                                                        if (ConfigService.removeDockStack(stackRow.modelData.id)) {
+                                                            settingsWin.stackMessage = "Stack removed.";
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Expanded: app stack membership + search-add
+                                            ColumnLayout {
+                                                visible: stackRow.expanded && !stackRow.isFolderStack
+                                                Layout.fillWidth: true
+                                                spacing: 6
+
+                                                Repeater {
+                                                    model: stackRow.modelData.appIds || []
+
+                                                    RowLayout {
+                                                        id: memberRow
+                                                        required property var modelData
+                                                        readonly property var memberApp: ApplicationService.getAppById(modelData)
+                                                        spacing: 6
+
+                                                        SvgIcon {
+                                                            icon: memberRow.memberApp ? memberRow.memberApp.icon : "application-x-executable"
+                                                            size: 16
+                                                        }
+
+                                                        Text {
+                                                            text: ApplicationService.cleanAppName(
+                                                                memberRow.memberApp ? memberRow.memberApp.name : memberRow.modelData)
+                                                            color: Theme.foreground
+                                                            font.family: Theme.fontFamily
+                                                            font.pixelSize: Theme.fontSizeSmall
+                                                        }
+
+                                                        IconButton {
+                                                            size: 20
+                                                            icon: "window-close"
+                                                            iconColor: Theme.error
+                                                            onClicked: ConfigService.removeAppFromDockStack(
+                                                                stackRow.modelData.id, memberRow.modelData)
+                                                        }
+
+                                                        Item { Layout.fillWidth: true }
+                                                    }
+                                                }
+
+                                                Text {
+                                                    visible: !(stackRow.modelData.appIds && stackRow.modelData.appIds.length > 0)
+                                                    text: "No applications yet — search below or drag icons onto the stack in the Dock."
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    wrapMode: Text.WordWrap
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                TextField {
+                                                    Layout.fillWidth: true
+                                                    placeholderText: "Search applications to add…"
+                                                    color: Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    text: settingsWin.stackQueryText
+                                                    onTextChanged: settingsWin.stackQueryText = text
+                                                }
+
+                                                Flow {
+                                                    visible: settingsWin.stackQueryText.trim().length > 1
+                                                    Layout.fillWidth: true
+                                                    spacing: 6
+
+                                                    Repeater {
+                                                        model: settingsWin.stackQueryText.trim().length > 1
+                                                            ? ApplicationService.search(settingsWin.stackQueryText, "all").slice(0, 6)
+                                                            : []
+
+                                                        Rectangle {
+                                                            id: resultChip
+                                                            required property var modelData
+                                                            readonly property bool alreadyMember: (stackRow.modelData.appIds || []).indexOf(modelData.id) !== -1
+                                                            implicitWidth: chipRow.implicitWidth + 16
+                                                            implicitHeight: 28
+                                                            radius: Theme.radiusSmall
+                                                            color: chipMouse.containsMouse ? Theme.hover : Theme.surfaceVariant
+
+                                                            RowLayout {
+                                                                id: chipRow
+                                                                anchors.centerIn: parent
+                                                                spacing: 6
+
+                                                                SvgIcon {
+                                                                    icon: resultChip.modelData.icon || "application-x-executable"
+                                                                    size: 14
+                                                                }
+
+                                                                Text {
+                                                                    text: resultChip.alreadyMember
+                                                                        ? "✓ " + resultChip.modelData.name
+                                                                        : "+ " + resultChip.modelData.name
+                                                                    color: Theme.foreground
+                                                                    font.family: Theme.fontFamily
+                                                                    font.pixelSize: Theme.fontSizeSmall
+                                                                }
+                                                            }
+
+                                                            MouseArea {
+                                                                id: chipMouse
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (!resultChip.alreadyMember) {
+                                                                        ConfigService.addAppToDockStack(
+                                                                            stackRow.modelData.id, resultChip.modelData.id);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Expanded: folder stack path editor
+                                            ColumnLayout {
+                                                visible: stackRow.expanded && stackRow.isFolderStack
+                                                Layout.fillWidth: true
+                                                spacing: 6
+
+                                                TextField {
+                                                    id: folderPathField
+                                                    Layout.fillWidth: true
+                                                    placeholderText: "Absolute folder path (e.g. /home/user/Downloads)"
+                                                    color: Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    text: stackRow.modelData.path || ""
+                                                }
+
+                                                RowLayout {
+                                                    spacing: 8
+
+                                                    IconButton {
+                                                        size: 26
+                                                        text: "Save Path"
+                                                        icon: "document-save"
+                                                        iconColor: Theme.foreground
+                                                        onClicked: {
+                                                            if (ConfigService.setDockStackPath(stackRow.modelData.id, folderPathField.text)) {
+                                                                settingsWin.stackMessage = "Stack folder updated.";
+                                                            } else {
+                                                                settingsWin.stackMessage = "Invalid folder path (must be absolute, no ..).";
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Item { Layout.fillWidth: true }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: (ConfigService.dockStacks || []).length === 0
+                                    text: "No stacks yet."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+
+                                // Create new stacks
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        placeholderText: "Stack title"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        text: settingsWin.newStackTitle
+                                        onTextChanged: settingsWin.newStackTitle = text
+                                    }
+
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        placeholderText: "Folder path (folder stacks only)"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        text: settingsWin.newStackPath
+                                        onTextChanged: settingsWin.newStackPath = text
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    IconButton {
+                                        text: "Add Folder Stack"
+                                        size: 28
+                                        icon: "folder-new"
+                                        iconColor: Theme.foreground
+                                        onClicked: settingsWin.addFolderStack()
+                                    }
+
+                                    IconButton {
+                                        text: "Add App Stack"
+                                        size: 28
+                                        icon: "list-add"
+                                        iconColor: Theme.foreground
+                                        onClicked: settingsWin.addAppsStack()
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+                                }
+
+                                Text {
+                                    visible: settingsWin.stackMessage.length > 0
+                                    text: settingsWin.stackMessage
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
                                 }
                             }
                         }

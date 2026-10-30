@@ -57,7 +57,7 @@ class TestDockBlitz(unittest.TestCase):
 
     def test_04_popup_stabilization_and_anti_flicker(self):
         """Verify popup ownership stabilization prevents icon shrink/jitter and suppresses tooltips."""
-        self.assertIn("readonly property bool isPopupOpen: menuOpen || chooserOpen", self.dock_item_qml)
+        self.assertIn("readonly property bool isPopupOpen: menuOpen || chooserOpen || stackOpen", self.dock_item_qml)
         self.assertIn("root.isPopupOpen ? Theme.alpha(Theme.primary, 0.22)", self.dock_item_qml)
         self.assertIn("((dockItemMouse.containsMouse || root.isPopupOpen) ? 1.15 : 1.0)", self.dock_item_qml)
         self.assertIn("!(root.parentWindowRef && root.parentWindowRef.hasActivePopup)", self.dock_item_qml)

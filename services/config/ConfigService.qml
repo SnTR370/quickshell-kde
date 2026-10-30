@@ -6,6 +6,7 @@ import "../core"
 import "../kwin"
 import "../kwin/WindowFilter.js" as WindowFilter
 import "LayoutPresets.js" as LayoutPresets
+import "DockStacks.js" as DockStacks
 
 Singleton {
     id: root
@@ -59,6 +60,10 @@ Singleton {
     // Dock window filter: all | desktop | monitor | desktop-and-monitor (invalid -> all)
     property string dockWindowFilter: "all"
     property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
+    // DOCK-011: folder and application stacks. Array of
+    // { id, type: "apps"|"folder", title, icon?, path?, appIds } objects,
+    // referenced from dockPinned via "stack:<id>" markers (see DockStacks.js).
+    property var dockStacks: []
     property var canonicalAppIdResolver: null
 
     // --- Window Visibility State ---
@@ -364,6 +369,11 @@ Singleton {
             }
             if (parsed.windowFilter !== undefined && !mod["windowFilter"]) {
                 root.dockWindowFilter = WindowFilter.normalizeMode(parsed.windowFilter);
+            }
+            // Stacks must be assigned BEFORE the pinned list: sanitizeDockPinned
+            // keeps "stack:<id>" markers only while the referenced stack exists.
+            if (parsed.stacks !== undefined && !mod["stacks"]) {
+                root.dockStacks = DockStacks.sanitizeStacks(parsed.stacks, root.normalizeDockAppId);
             }
             if (parsed.pinned && typeof parsed.pinned === "object" && parsed.pinned.length !== undefined && !mod["pinned"]) {
                 root.dockPinned = root.sanitizeDockPinned(root._jsArray(parsed.pinned));
@@ -713,8 +723,24 @@ Singleton {
         if (!list || typeof list === "string" || list.length === undefined) return [];
         const clean = [];
         const seen = {};
+        // Stack markers survive only while the referenced stack exists (ids
+        // are unique, so exact-string dedupe is enough for markers).
+        const stackIds = {};
+        const stacksList = DockStacks.toArray(root.dockStacks);
+        for (let s = 0; s < stacksList.length; s++) {
+            if (stacksList[s] && stacksList[s].id) stackIds[stacksList[s].id] = true;
+        }
         for (let i = 0; i < list.length; i++) {
-            const norm = normalizeDockAppId(list[i]);
+            const raw = list[i];
+            if (DockStacks.isStackEntry(raw)) {
+                const sid = DockStacks.stackIdFromEntry(raw);
+                if (stackIds[sid] && !seen[raw]) {
+                    seen[raw] = true;
+                    clean.push(raw);
+                }
+                continue;
+            }
+            const norm = normalizeDockAppId(raw);
             if (!norm) continue;
             const key = norm.toLowerCase();
             const canonKey = resolveCanonicalDockAppKey(norm);
@@ -728,6 +754,16 @@ Singleton {
     }
 
     function findDockPinnedIndex(appId, list) {
+        // Stack markers are matched exactly (normalizeDockAppId rejects the
+        // ':' character); they never alias to applications.
+        if (DockStacks.isStackEntry(appId)) {
+            const arr0 = (list !== undefined && list !== null) ? list : (root.dockPinned || []);
+            if (!arr0 || typeof arr0 === "string" || arr0.length === undefined) return -1;
+            for (let i = 0; i < arr0.length; i++) {
+                if (arr0[i] === appId) return i;
+            }
+            return -1;
+        }
         const norm = normalizeDockAppId(appId).toLowerCase();
         if (!norm) return -1;
         const arr = (list !== undefined && list !== null) ? list : (root.dockPinned || []);
@@ -755,6 +791,7 @@ Singleton {
         // on-disk pinned apps whenever an unrelated dock setting (or a
         // layout preset) is saved before the config store finished loading.
         root.dockPinned = sanitizeDockPinned(root.dockPinned);
+        root.dockStacks = DockStacks.sanitizeStacks(root.dockStacks, root.normalizeDockAppId);
         if (!dockStore.loaded) {
             dockStore.saveRequestedBeforeLoad = true;
             return;
@@ -777,7 +814,8 @@ Singleton {
             "magnifyRadius": root.dockMagnifyRadius,
             "monitors": root.dockMonitors,
             "windowFilter": root.dockWindowFilter,
-            "pinned": root.dockPinned
+            "pinned": root.dockPinned,
+            "stacks": root.dockStacks
         });
     }
 
@@ -1026,6 +1064,139 @@ Singleton {
 
     function moveDockPinnedRight(appId) {
         return moveDockPinned(appId, "right");
+    }
+
+    // --- Dock Stacks (DOCK-011) ---
+    // All mutations reassign the whole dockStacks array (and dockPinned when
+    // the dock row changes) so var-property bindings re-evaluate; nested
+    // in-place mutation would leave the UI stale.
+
+    function getDockStack(id) {
+        return DockStacks.findStack(root.dockStacks, id);
+    }
+
+    function isDockStackEntry(entry) {
+        return DockStacks.isStackEntry(entry);
+    }
+
+    // Create a stack and append its marker to the end of the pinned row.
+    // type: "apps" | "folder" (folder requires an absolute path).
+    // Returns the new stack id, or "" on rejection.
+    function addDockStack(type, title, path) {
+        const t = String(type || "").trim().toLowerCase();
+        if (t !== "apps" && t !== "folder") return "";
+        let folderPath = "";
+        if (t === "folder") {
+            folderPath = DockStacks.sanitizePath(path);
+            if (!folderPath) return "";
+        }
+        const cleanTitle = DockStacks.sanitizeTitle(title, t === "folder" ? "Folder" : "Stack");
+        if (!cleanTitle) return "";
+        const id = DockStacks.nextStackId(root.dockStacks);
+        const stack = { id: id, type: t, title: cleanTitle, appIds: [] };
+        if (t === "folder") stack.path = folderPath;
+        const nextStacks = DockStacks.toArray(root.dockStacks).slice();
+        nextStacks.push(stack);
+        const nextPinned = sanitizeDockPinned(root.dockPinned);
+        nextPinned.push("stack:" + id);
+        root._markDockModified("stacks");
+        root._markDockModified("pinned");
+        root.dockStacks = nextStacks;
+        root.dockPinned = nextPinned;
+        saveDockConfig();
+        return id;
+    }
+
+    // Remove a stack and its dock-row marker. Member applications of an apps
+    // stack are dropped with it (they were only reachable through the stack).
+    function removeDockStack(id) {
+        const stack = root.getDockStack(id);
+        if (!stack) return false;
+        const nextStacks = [];
+        const stacksList = DockStacks.toArray(root.dockStacks);
+        for (let i = 0; i < stacksList.length; i++) {
+            if (stacksList[i] && stacksList[i].id !== stack.id) nextStacks.push(stacksList[i]);
+        }
+        root._markDockModified("stacks");
+        root.dockStacks = nextStacks;
+        // The marker is now dangling: sanitizeDockPinned drops it.
+        root._markDockModified("pinned");
+        root.dockPinned = sanitizeDockPinned(root.dockPinned);
+        saveDockConfig();
+        return true;
+    }
+
+    function renameDockStack(id, title) {
+        const stack = root.getDockStack(id);
+        if (!stack) return false;
+        const cleanTitle = DockStacks.sanitizeTitle(title, stack.title);
+        if (!cleanTitle || cleanTitle === stack.title) return false;
+        root._updateDockStack(stack, { title: cleanTitle });
+        return true;
+    }
+
+    function setDockStackPath(id, path) {
+        const stack = root.getDockStack(id);
+        if (!stack || stack.type !== "folder") return false;
+        const cleanPath = DockStacks.sanitizePath(path);
+        if (!cleanPath || cleanPath === stack.path) return false;
+        root._updateDockStack(stack, { path: cleanPath });
+        return true;
+    }
+
+    function addAppToDockStack(id, appId) {
+        const stack = root.getDockStack(id);
+        if (!stack || stack.type !== "apps") return false;
+        const norm = normalizeDockAppId(appId);
+        if (!norm) return false;
+        const current = DockStacks.toArray(stack.appIds);
+        for (let i = 0; i < current.length; i++) {
+            if (current[i].toLowerCase() === norm.toLowerCase()) return false;
+        }
+        current.push(norm);
+        if (current.length > DockStacks.MAX_STACK_APPS) return false;
+        root._updateDockStack(stack, { appIds: current });
+        return true;
+    }
+
+    function removeAppFromDockStack(id, appId) {
+        const stack = root.getDockStack(id);
+        if (!stack || stack.type !== "apps") return false;
+        const norm = normalizeDockAppId(appId);
+        if (!norm) return false;
+        const current = DockStacks.toArray(stack.appIds);
+        const next = [];
+        let removed = false;
+        for (let i = 0; i < current.length; i++) {
+            if (!removed && current[i].toLowerCase() === norm.toLowerCase()) {
+                removed = true;
+                continue;
+            }
+            next.push(current[i]);
+        }
+        if (!removed) return false;
+        root._updateDockStack(stack, { appIds: next });
+        return true;
+    }
+
+    // Replace one stack object with a merged copy (new object identity so
+    // the dockStacks reassignment notifies), then persist.
+    function _updateDockStack(stack, changes) {
+        const nextStacks = [];
+        const stacksList = DockStacks.toArray(root.dockStacks);
+        for (let i = 0; i < stacksList.length; i++) {
+            if (stacksList[i] && stacksList[i].id === stack.id) {
+                const copy = {};
+                for (const k in stacksList[i]) copy[k] = stacksList[i][k];
+                for (const c in changes) copy[c] = changes[c];
+                nextStacks.push(copy);
+            } else {
+                nextStacks.push(stacksList[i]);
+            }
+        }
+        root._markDockModified("stacks");
+        root.dockStacks = nextStacks;
+        saveDockConfig();
     }
 
     // --- Layout Presets ---

@@ -485,15 +485,16 @@ Variants {
 
                 DockSeparator { isVertical: false }
 
-                // Pinned apps
+                // Pinned apps and stacks (DOCK-011: merged ordered model)
                 Repeater {
-                    model: ApplicationService.pinnedApps
+                    model: ApplicationService.dockEntries
 
                     DockItem {
                         required property var modelData
                         parentWindowRef: dockWindow
-                        appId: modelData
-                        app: ApplicationService.getAppById(modelData)
+                        appId: modelData.kind === "stack" ? ("stack:" + modelData.stack.id) : modelData.appId
+                        stack: modelData.kind === "stack" ? modelData.stack : null
+                        app: modelData.kind === "stack" ? null : ApplicationService.getAppById(modelData.appId)
                     }
                 }
 
@@ -559,15 +560,16 @@ Variants {
 
                 DockSeparator { isVertical: true }
 
-                // Pinned apps
+                // Pinned apps and stacks (DOCK-011: merged ordered model)
                 Repeater {
-                    model: ApplicationService.pinnedApps
+                    model: ApplicationService.dockEntries
 
                     DockItem {
                         required property var modelData
                         parentWindowRef: dockWindow
-                        appId: modelData
-                        app: ApplicationService.getAppById(modelData)
+                        appId: modelData.kind === "stack" ? ("stack:" + modelData.stack.id) : modelData.appId
+                        stack: modelData.kind === "stack" ? modelData.stack : null
+                        app: modelData.kind === "stack" ? null : ApplicationService.getAppById(modelData.appId)
                     }
                 }
 

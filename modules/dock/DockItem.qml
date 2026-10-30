@@ -2,6 +2,7 @@ import QtQuick
 import "../../services"
 import "../../components"
 import "../../services/applications/FileDrop.js" as FileDrop
+import "../../services/config/DockStacks.js" as DockStacks
 import "."
 
 Item {
@@ -9,14 +10,24 @@ Item {
 
     property var parentWindowRef: null
     property var app: null
+    // DOCK-011: when non-null, this item is a dock stack (app group or
+    // folder shortcut) and appId is its "stack:<id>" marker. Stack mode
+    // reuses the same drag / drop / keyboard / magnification machinery as
+    // pinned apps; only activation, popup content and drop semantics differ.
+    property var stack: null
     property string appId: ""
-    property string appName: ApplicationService.cleanAppName(app ? app.name : appId)
-    property string appIcon: app ? app.icon : appId
-    property bool isRunning: WindowService.isAppRunning(root.appId)
-    property bool isPinned: ApplicationService.isPinned(root.appId)
-    readonly property int pinnedIndex: ApplicationService.getPinnedIndex(root.appId)
-    readonly property bool canMoveLeft: isPinned && ApplicationService.canMovePinned(root.appId, "left")
-    readonly property bool canMoveRight: isPinned && ApplicationService.canMovePinned(root.appId, "right")
+    readonly property bool isStack: stack !== null
+    readonly property bool isAppsStack: isStack && stack.type === "apps"
+    readonly property bool isFolderStack: isStack && stack.type === "folder"
+    property string appName: isStack ? String(stack.title || "") : ApplicationService.cleanAppName(app ? app.name : appId)
+    property string appIcon: isStack ? DockStacks.stackIcon(stack) : (app ? app.icon : appId)
+    property bool isRunning: isStack ? false : WindowService.isAppRunning(root.appId)
+    property bool isPinned: isStack ? ConfigService.isDockPinned(root.appId) : ApplicationService.isPinned(root.appId)
+    readonly property int pinnedIndex: isStack
+        ? ConfigService.findDockPinnedIndex(root.appId, ConfigService.dockPinned)
+        : ApplicationService.getPinnedIndex(root.appId)
+    readonly property bool canMoveLeft: !isStack && isPinned && ApplicationService.canMovePinned(root.appId, "left")
+    readonly property bool canMoveRight: !isStack && isPinned && ApplicationService.canMovePinned(root.appId, "right")
     // Filtered view for THIS dock surface's own screen (not the Dock-visibility monitor list).
     readonly property string filterScreenName: (root.parentWindowRef && root.parentWindowRef.modelData) ? root.parentWindowRef.modelData.name : ""
     readonly property var appWindows: WindowService.getFilteredWindowsForApp(root.appId, ConfigService.dockWindowFilter, root.filterScreenName)
@@ -25,7 +36,8 @@ Item {
     property real baseSize: ConfigService.dockIconSize
     property bool menuOpen: false
     property bool chooserOpen: false
-    readonly property bool isPopupOpen: menuOpen || chooserOpen
+    property bool stackOpen: false
+    readonly property bool isPopupOpen: menuOpen || chooserOpen || stackOpen
     property bool tooltipActive: false
     property real bounceScale: 1.0
     property bool dragging: false
@@ -51,6 +63,7 @@ Item {
 
     // Keyboard accessibility
     readonly property string accessibleLabel: root.appName
+        + (root.isStack ? (", " + (root.isFolderStack ? "folder stack" : "application stack")) : "")
         + (root.windowCount > 1 ? (", " + root.windowCount + " windows")
            : (root.windowCount === 1 ? ", running" : ""))
         + (root.isPinned ? ", pinned" : "")
@@ -60,7 +73,9 @@ Item {
     activeFocusOnTab: root.visible && root.enabled && !root.dragging && (root.isPinned || root.isRunning)
     Accessible.role: Accessible.Button
     Accessible.name: root.accessibleLabel
-    Accessible.description: root.menuOpen ? "Context menu open" : (root.chooserOpen ? "Window chooser open" : "")
+    Accessible.description: root.menuOpen ? "Context menu open"
+        : (root.stackOpen ? "Stack popup open"
+        : (root.chooserOpen ? "Window chooser open" : ""))
     Accessible.focusable: true
     Accessible.focused: root.activeFocus
     Accessible.onPressAction: root.activateItem()
@@ -94,26 +109,42 @@ Item {
     }
 
     onMenuOpenChanged: {
-        if (menuOpen && chooserOpen) {
+        if (menuOpen) {
             chooserOpen = false;
+            stackOpen = false;
         }
         if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
             if (menuOpen) {
                 parentWindowRef.activePopupItem = root;
-            } else if (parentWindowRef.activePopupItem === root && !root.chooserOpen) {
+            } else if (parentWindowRef.activePopupItem === root && !root.chooserOpen && !root.stackOpen) {
                 parentWindowRef.activePopupItem = null;
             }
         }
     }
 
     onChooserOpenChanged: {
-        if (chooserOpen && menuOpen) {
+        if (chooserOpen) {
             menuOpen = false;
+            stackOpen = false;
         }
         if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
             if (chooserOpen) {
                 parentWindowRef.activePopupItem = root;
-            } else if (parentWindowRef.activePopupItem === root && !root.menuOpen) {
+            } else if (parentWindowRef.activePopupItem === root && !root.menuOpen && !root.stackOpen) {
+                parentWindowRef.activePopupItem = null;
+            }
+        }
+    }
+
+    onStackOpenChanged: {
+        if (stackOpen) {
+            menuOpen = false;
+            chooserOpen = false;
+        }
+        if (parentWindowRef && parentWindowRef.activePopupItem !== undefined) {
+            if (stackOpen) {
+                parentWindowRef.activePopupItem = root;
+            } else if (parentWindowRef.activePopupItem === root && !root.menuOpen && !root.chooserOpen) {
                 parentWindowRef.activePopupItem = null;
             }
         }
@@ -229,6 +260,7 @@ Item {
         root.tooltipActive = false;
         root.menuOpen = false;
         root.chooserOpen = false;
+        root.stackOpen = false;
         if (root.parentWindowRef) {
             if (root.parentWindowRef.activePopupItem !== undefined) {
                 root.parentWindowRef.activePopupItem = null;
@@ -261,6 +293,44 @@ Item {
 
     function commitDrop(info) {
         if (!info || root.dragCancelled || !root.appId || !root.visible || !root.enabled) return false;
+        if (root.isStack) {
+            // This stack was dragged within the pinned row: reorder by ids
+            // (or raw index) exactly like pinned apps. Stacks never join
+            // other stacks.
+            if (info.stackTarget) return false;
+            if (!ConfigService.isDockPinned(root.appId)) return false;
+            if (info.targetAppId) {
+                if (!ConfigService.isDockPinned(info.targetAppId)) return false;
+                return ConfigService.reorderDockPinnedByAppId(root.appId, info.targetAppId);
+            }
+            if (typeof info.targetIndex === "number" && info.targetIndex >= 0) {
+                const fromIdx = ConfigService.findDockPinnedIndex(root.appId, ConfigService.dockPinned);
+                if (fromIdx >= 0 && fromIdx !== info.targetIndex) {
+                    return ConfigService.reorderDockPinned(fromIdx, info.targetIndex);
+                }
+            }
+            return false;
+        }
+        if (info.stackTarget) {
+            // This app was dropped onto an apps stack: it joins the stack.
+            // Pinned apps additionally leave the flat row (the stack becomes
+            // their dock home); running unpinned apps simply join.
+            const targetStack = ConfigService.getDockStack(info.stackTarget);
+            if (!targetStack || targetStack.type !== "apps") return false;
+            if (root.isPinned) {
+                if (!ApplicationService.isPinned(root.appId)) return false;
+            } else if (root.isRunning) {
+                if (!WindowService.isAppRunning(root.appId) || ApplicationService.isPinned(root.appId)) return false;
+            } else {
+                return false;
+            }
+            if (!ApplicationService.getAppById(root.appId)) return false;
+            if (!ConfigService.addAppToDockStack(info.stackTarget, root.appId)) return false;
+            if (root.isPinned) {
+                ApplicationService.togglePin(root.appId);
+            }
+            return true;
+        }
         if (root.isPinned) {
             if (!ApplicationService.isPinned(root.appId)) return false;
             if (info.targetAppId) {
@@ -364,6 +434,47 @@ Item {
                 drop.accepted = false;
                 return;
             }
+            // DOCK-011: this item is a stack target. App drops join an apps
+            // stack (pinned apps move in, running apps join in place); stack
+            // drops reorder the row. Folder stacks accept nothing.
+            if (root.isStack) {
+                if (src.isStack) {
+                    if (src.appId === root.appId || !src.acceptDropTarget) {
+                        drop.accepted = false;
+                        return;
+                    }
+                    src.acceptDropTarget({ targetAppId: root.appId });
+                    drop.accept(Qt.MoveAction);
+                } else if (root.isAppsStack && (src.isPinned || src.isRunning)) {
+                    if (!ApplicationService.getAppById(src.appId)) {
+                        drop.accepted = false;
+                        return;
+                    }
+                    if (src.isPinned && !ApplicationService.isPinned(src.appId)) {
+                        drop.accepted = false;
+                        return;
+                    }
+                    if (!src.acceptDropTarget) {
+                        drop.accepted = false;
+                        return;
+                    }
+                    src.acceptDropTarget({ stackTarget: root.stack.id });
+                    drop.accept(Qt.MoveAction);
+                } else {
+                    drop.accepted = false;
+                }
+                return;
+            }
+            // DOCK-011: a stack was dropped onto this pinned app: reorder.
+            if (src.isStack) {
+                if (!src.acceptDropTarget || !ConfigService.isDockPinned(root.appId)) {
+                    drop.accepted = false;
+                    return;
+                }
+                src.acceptDropTarget({ targetAppId: root.appId });
+                drop.accept(Qt.MoveAction);
+                return;
+            }
             if (src.isPinned) {
                 if (ConfigService.dockAppIdsMatch(src.appId, root.appId) ||
                     src.pinnedIndex < 0 || src.pinnedIndex === root.pinnedIndex) {
@@ -419,6 +530,29 @@ Item {
         Drag.keys: ["quickshell-dock-item"]
     }
 
+    // DOCK-011: stack fan — an offset card behind the icon marks a group.
+    // Declared before iconContainer so it stacks below it; anchored to the
+    // icon container so it follows hover/press scale, with the same drag
+    // translate so the fan never detaches mid-drag.
+    Rectangle {
+        id: stackFanCard
+        visible: root.isStack
+        anchors.centerIn: iconContainer
+        anchors.horizontalCenterOffset: root.isVerticalDock ? 3 : 6
+        anchors.verticalCenterOffset: root.isVerticalDock ? 6 : 3
+        width: root.baseSize
+        height: root.baseSize
+        radius: Theme.radiusSmall
+        color: Theme.alpha(Theme.background, 0.55)
+        border.width: 1
+        border.color: Theme.alpha(Theme.border, 0.9)
+        scale: iconContainer.scale
+        transform: Translate {
+            x: root.dragging ? dragProxy.x : 0
+            y: root.dragging ? dragProxy.y : 0
+        }
+    }
+
     Rectangle {
         id: iconContainer
         anchors.centerIn: parent
@@ -466,6 +600,18 @@ Item {
             size: root.baseSize * 0.8
         }
 
+        // DOCK-011: member count for app stacks (folder contents are live
+        // and unbounded; no count is shown for them).
+        Badge {
+            visible: root.isAppsStack && root.stack.appIds !== undefined && root.stack.appIds.length > 0
+            anchors.top: iconContainer.top
+            anchors.right: iconContainer.right
+            anchors.topMargin: -6
+            anchors.rightMargin: -6
+            count: root.stack.appIds ? root.stack.appIds.length : 0
+            badgeColor: Theme.primary
+        }
+
         // Multi-window / Running indicator
         Row {
             anchors.bottom: parent.bottom
@@ -511,7 +657,10 @@ Item {
         anchorItem: iconContainer
         edge: ConfigService.dockEdge
         offset: 4
-        text: root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : "")
+        text: root.isStack
+            ? (root.appName + (root.isAppsStack && root.stack.appIds && root.stack.appIds.length > 0
+                ? (" (" + root.stack.appIds.length + " Apps)") : ""))
+            : (root.appName + (root.windowCount > 1 ? (" (" + root.windowCount + " Windows)") : ""))
         show: root.tooltipActive && dockItemMouse.containsMouse && !dockItemMouse.pressed && !root.dragging && !root.isPopupOpen && !(root.parentWindowRef && root.parentWindowRef.hasActivePopup) && !(root.parentWindowRef && root.parentWindowRef.isDragging) && (root.parentWindowRef ? root.parentWindowRef.isRevealed : true)
     }
 
@@ -531,28 +680,68 @@ Item {
         }
     }
 
-    // Lazy-loaded Context Menu Popup
+    // Lazy-loaded Stack Popup (DOCK-011): app grid or folder listing.
     Loader {
-        id: menuLoader
-        active: root.menuOpen
-        sourceComponent: DockMenu {
+        id: stackLoader
+        active: root.stackOpen
+        sourceComponent: StackPopup {
             parentWindow: root.parentWindowRef || root.Window.window
             anchorItem: iconContainer
             edge: ConfigService.dockEdge
-            appId: root.appId
-            filterScreenName: root.filterScreenName
-            app: root.app
-            isRunning: root.isRunning
-            isPinned: root.isPinned
-            onActionTriggered: root.menuOpen = false
-            onClosed: root.menuOpen = false
+            stack: root.stack
+            onClosed: root.stackOpen = false
+        }
+    }
+
+    // Lazy-loaded Context Menu Popup (app menu, or the stack menu for stacks)
+    Loader {
+        id: menuLoader
+        active: root.menuOpen
+        sourceComponent: root.isStack ? stackMenuComponent : appMenuComponent
+
+        Component {
+            id: appMenuComponent
+            DockMenu {
+                parentWindow: root.parentWindowRef || root.Window.window
+                anchorItem: iconContainer
+                edge: ConfigService.dockEdge
+                appId: root.appId
+                filterScreenName: root.filterScreenName
+                app: root.app
+                isRunning: root.isRunning
+                isPinned: root.isPinned
+                onActionTriggered: root.menuOpen = false
+                onClosed: root.menuOpen = false
+            }
+        }
+
+        Component {
+            id: stackMenuComponent
+            StackMenu {
+                parentWindow: root.parentWindowRef || root.Window.window
+                anchorItem: iconContainer
+                edge: ConfigService.dockEdge
+                stack: root.stack
+                onActionTriggered: root.menuOpen = false
+                onClosed: root.menuOpen = false
+            }
         }
     }
 
     // Primary activation (left click / Enter / Space): launch, toggle window, or window chooser.
+    // Stacks toggle their popup (app grid / folder listing).
     function activateItem() {
         if (root.dragging) return false;
         clickBounceAnim.restart();
+        if (root.isStack) {
+            root.menuOpen = false;
+            root.chooserOpen = false;
+            if (root.parentWindowRef && root.parentWindowRef.activePopupItem && !root.stackOpen) {
+                root.parentWindowRef.activePopupItem = null;
+            }
+            root.stackOpen = !root.stackOpen;
+            return true;
+        }
         if (root.windowCount === 0 && root.isRunning) {
             // App runs globally but has no window in the filtered view: never launch a duplicate.
             root.chooserOpen = false;
@@ -610,6 +799,7 @@ Item {
     function currentPopupItem() {
         if (root.menuOpen && menuLoader.item) return menuLoader.item;
         if (root.chooserOpen && chooserLoader.item) return chooserLoader.item;
+        if (root.stackOpen && stackLoader.item) return stackLoader.item;
         return null;
     }
 

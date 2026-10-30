@@ -63,20 +63,24 @@ function entryKeysForApp(appId, app) {
     return keys;
 }
 
-// pinnedList: ConfigService.dockPinned (array of app ids);
+// pinnedList: ConfigService.dockPinned (array of app ids and, since DOCK-011,
+// possible "stack:<id>" markers for dock stacks);
 // resolveApp: function(rawId) -> app object or null (ApplicationService.getAppById).
-// Returns at most MAX_SLOTS entries, one per dock position in order; slots
-// with no resolvable keys stay as empty arrays so dock indices remain stable.
+// Returns at most MAX_SLOTS entries, one per pinned APPLICATION in order
+// (stack markers are skipped: Meta+N activates the Nth app, not a stack);
+// slots with no resolvable keys stay as empty arrays so dock indices remain
+// stable.
 function buildPinnedEntries(pinnedList, resolveApp) {
     if (!pinnedList || typeof pinnedList === "string" || pinnedList.length === undefined) {
         return [];
     }
     var out = [];
-    var count = Math.min(pinnedList.length, MAX_SLOTS);
-    for (var i = 0; i < count; i++) {
+    for (var i = 0; i < pinnedList.length; i++) {
         var raw = pinnedList[i];
+        if (typeof raw === "string" && raw.indexOf("stack:") === 0) continue;
         var app = (typeof resolveApp === "function" && raw) ? resolveApp(raw) : null;
         out.push(entryKeysForApp(raw, app));
+        if (out.length >= MAX_SLOTS) break;
     }
     return out;
 }

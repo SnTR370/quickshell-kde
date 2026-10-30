@@ -5,6 +5,7 @@ import Quickshell.Io
 import "../config"
 import "../core/Log.js" as Log
 import "FileDrop.js" as FileDrop
+import "../config/DockStacks.js" as DockStacks
 
 Singleton {
     id: root
@@ -34,6 +35,21 @@ Singleton {
             }
         }
         return valid;
+    }
+
+    // DOCK-011: merged pinned-row model — pinned applications interleaved
+    // with stack markers ("stack:<id>"), in ConfigService.dockPinned order.
+    // App entries carry the RAW pinned id (resolvePinnedKey compatibility);
+    // stack entries carry the live ConfigService stack object. Pure ordering
+    // logic lives in DockStacks.buildDockEntries (node-tested).
+    readonly property var dockEntries: {
+        const raw = ConfigService.dockPinned || [];
+        const stacks = ConfigService.dockStacks || [];
+        const _apps = root.applications;
+        const _map = root.aliasMap;
+        return DockStacks.buildDockEntries(raw, stacks, function(id) {
+            return root.getAppById(id);
+        });
     }
     property bool loading: true
 
@@ -582,6 +598,27 @@ Singleton {
         if (!cmd) return false;
         Log.info("ApplicationService", "Opening " + paths.length + " file(s) with app: " + (app.name || app.id));
         root.lastLaunchedCommand = { type: "files", appId: app.id || "", args: cmd };
+        if (!root.launchDryRun) {
+            Quickshell.execDetached(cmd);
+        }
+        return true;
+    }
+
+    // DOCK-011: open files/folders with the user's default associations
+    // (freedesktop standard via gio; the repo already prefers gio launch in
+    // launch()). Used by folder stacks: directory rows in the popup and the
+    // "open in file manager" action. Argv array only; dry-run aware.
+    function openPaths(paths) {
+        if (!paths || paths.length === undefined || paths.length === 0) return false;
+        const clean = [];
+        for (let i = 0; i < paths.length; i++) {
+            const p = String(paths[i] === undefined || paths[i] === null ? "" : paths[i]).trim();
+            if (p.length > 0) clean.push(p);
+        }
+        if (clean.length === 0) return false;
+        const cmd = ["gio", "open"].concat(clean);
+        Log.info("ApplicationService", "Opening " + clean.length + " path(s) with default apps");
+        root.lastLaunchedCommand = { type: "open", appId: "", args: cmd };
         if (!root.launchDryRun) {
             Quickshell.execDetached(cmd);
         }
