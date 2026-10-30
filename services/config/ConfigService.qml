@@ -43,6 +43,12 @@ Singleton {
     property int dockIconSize: 44
     property bool dockAutoHide: false
     property bool dockIntellihide: false
+    // DOCK-008: Meta+1..9 global shortcuts for pinned dock applications
+    // (resident KWin script). Opt-in: registering system-wide shortcuts in
+    // kglobalaccel is intrusive (System Settings entry, possible conflicts
+    // with existing user bindings), matching the off-defaults of the other
+    // dock behavior toggles (autohide, intellihide).
+    property bool dockMetaShortcuts: false
     property int dockHideDelay: 350
     property int dockRevealDelay: 120
     // DOCK-004 pointer-driven magnification (parabolic zoom + neighbor displacement)
@@ -339,6 +345,7 @@ Singleton {
             }
             if (typeof parsed.autoHide === "boolean" && !mod["autoHide"]) root.dockAutoHide = parsed.autoHide;
             if (typeof parsed.intellihide === "boolean" && !mod["intellihide"]) root.dockIntellihide = parsed.intellihide;
+            if (typeof parsed.metaShortcuts === "boolean" && !mod["metaShortcuts"]) root.dockMetaShortcuts = parsed.metaShortcuts;
             if (typeof parsed.hideDelay === "number" && Number.isFinite(parsed.hideDelay) && !mod["hideDelay"]) {
                 root.dockHideDelay = Math.max(50, Math.min(2000, Math.trunc(parsed.hideDelay)));
             }
@@ -762,6 +769,7 @@ Singleton {
             "iconSize": root.dockIconSize,
             "autoHide": root.dockAutoHide,
             "intellihide": root.dockIntellihide,
+            "metaShortcuts": root.dockMetaShortcuts,
             "hideDelay": root.dockHideDelay,
             "revealDelay": root.dockRevealDelay,
             "magnification": root.dockMagnification,
@@ -824,6 +832,12 @@ Singleton {
     function setDockIntellihide(on) {
         root._markDockModified("intellihide");
         root.dockIntellihide = on;
+        saveDockConfig();
+    }
+
+    function setDockMetaShortcuts(on) {
+        root._markDockModified("metaShortcuts");
+        root.dockMetaShortcuts = on;
         saveDockConfig();
     }
 
