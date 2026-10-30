@@ -364,10 +364,11 @@ class RushSupervisor:
     def gate_base(self, expected_base: Optional[str]) -> str:
         dirty = self.git.status_porcelain().strip()
         # Allowed untracked entries: the bootstrap staging inbox, this supervisor's own
-        # lock file (acquired before this gate runs) and a possible /sandbox settings
-        # leftover. Anything else means an unexpected dirty base -> stop.
+        # artifacts (lock file acquired before this gate runs; scrubbed run logs) and a
+        # possible /sandbox settings leftover. Anything else is an unexpected dirty
+        # base -> stop.
         allowed_names = (".rush-inbox/", ".rush-supervisor-lock.json",
-                         ".claude/settings.local.json")
+                         "tools/rush/runs/", ".claude/settings.local.json")
         allowed = [l for l in dirty.splitlines()
                    if l.startswith("?? ") and l[3:].strip() in allowed_names]
         if len(dirty.splitlines()) > len(allowed):
@@ -485,7 +486,7 @@ class RushSupervisor:
 
         if self.dry_run:
             outcome.status = "dry_run"
-            outcome.detail = json.dumps({"argv": argv[:8] + [argv[-1][:120] + "..."],
+            outcome.detail = json.dumps({"argv": argv[:-1] + [argv[-1][:120] + "..."],
                                          "feature_branch": feature_branch,
                                          "base_sha": base_sha}, ensure_ascii=False)
             return outcome
