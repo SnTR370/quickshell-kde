@@ -71,7 +71,8 @@ Capabilities are categorized below by their verification level in the repository
 | **Theming & Settings UI** | Live theme switching (*Breeze Dark*, *Catppuccin Mocha*, *Nord*, *Tokyo Night*) and graphical `SettingsWindow` for surface, monitor, and tray policy management | `feat/composable-shell-ux` | **Implemented (Verified)** | Config persistence, migration from Milestone 2, and narrow/normal layout verified (`test_03`, `test_08`, `test_10`). |
 | **Multi-Monitor Filtering** | Per-surface monitor selection (`"all"` or explicit output list) with lockout prevention when displays disconnect | `main` & `feat/composable-shell-ux` | **Code Complete (Manual Multi-Monitor Unverified)** | Filtering logic and fallback rules verified in synthetic multi-screen tests (`test_08`); physical multi-monitor hotplug is not verified in headless CI. |
 | **Toast Notifications** | Built-in `org.freedesktop.Notifications` server and `ToastHost` overlay | `main` & `feat/composable-shell-ux` | **Opt-in (`false` by default)** | Disabled by default to avoid conflicting with KDE Plasma's native notification service. |
-| **Dynamic Wallpaper Palettes & Layout Presets** | Automatic Material You / wallpaper color extraction and one-click layout presets | *Planned* | **Planned (Roadmap)** | Scheduled for Milestone 3B/3C. |
+| **Layout Presets** | One-click ready-to-use layouts (*Everyday*, *Classic*, *Minimal*) in the Settings UI with an exact change preview before applying; Bar/Dock geometry, module slots and visibility only — pinned apps, displays, theme and other preferences are always preserved | `feat/beta-layout-presets` | **Implemented (Verified)** | Preset validation (surface/Settings lockout prevention), persistence, restart survival, preservation of unrelated settings, and the apply-before-load race verified (`tests/test_layout_presets.py`). |
+| **Dynamic Wallpaper Palettes** | Automatic Material You / wallpaper color extraction | *Planned* | **Planned (Roadmap)** | Scheduled for Milestone 3B/3C. |
 
 ---
 
@@ -346,8 +347,11 @@ Switch themes live in the Settings UI or via `activeTheme` in `theme_config.json
   * [x] System tray per-item visibility policies (`auto`/`always`/`hidden`), overflow popup, and `_status_icon_N` collision safety
   * [x] Deterministic KWin window identity resolution & cached `getWindowInfo` metadata
   * [x] UUID-targeted KWin 6 window actions (activate, toggle minimize, graceful close, move to screen) with non-optimistic state reconciliation
+* [x] **Layout Presets (`feat/beta-layout-presets`)**:
+  * [x] Three ready-to-use presets — *Everyday* (top Bar + bottom Dock), *Classic* (attached bottom taskbar panel, Dock off), *Minimal* (compact Bar + small auto-hiding Dock)
+  * [x] Exact change preview before applying; pinned apps, monitor choices, theme and other preferences always preserved
+  * [x] Validation preventing invalid layouts and surface/Settings lockout; Shell Settings entry in the Control Center
 * [ ] **Milestone 3B / 3C — Planned**:
-  * [ ] Layout presets (Floating macOS-style, Classic KDE/Windows panel, Minimal top bar)
   * [ ] Dynamic wallpaper color extraction (Material You / `matugen` palette generation)
   * [ ] GitHub Actions CI workflow for automated `qmllint` and headless QML unit tests
 

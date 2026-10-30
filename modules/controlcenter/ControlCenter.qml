@@ -50,6 +50,22 @@ Surface {
             IconButton {
                 parentWindow: root.parentWindow
                 size: 24
+                icon: "preferences-system"
+                iconSize: 14
+                iconColor: Theme.foregroundMuted
+                tooltip: "Shell Settings"
+                onClicked: {
+                    // Second Settings entry point besides the Dock button,
+                    // so a layout without the Dock can never lock the user
+                    // out of the Settings window.
+                    ConfigService.toggleSettings(root.parentWindow && root.parentWindow.screen ? root.parentWindow.screen : null);
+                    root.closeRequested();
+                }
+            }
+
+            IconButton {
+                parentWindow: root.parentWindow
+                size: 24
                 icon: "window-close"
                 iconSize: 14
                 iconColor: Theme.foregroundMuted

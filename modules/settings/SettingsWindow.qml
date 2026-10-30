@@ -28,6 +28,11 @@ Variants {
         }
 
         exclusiveZone: 0
+
+        // Layout preset preview state (session-only, never persisted)
+        property string pendingPresetId: ""
+        property string presetResultMessage: ""
+
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:settings"
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
@@ -106,6 +111,246 @@ Variants {
                     ColumnLayout {
                         width: parent.width - 16
                         spacing: 14
+
+                        // 0. Layout Presets
+                        Surface {
+                            id: presetCard
+                            Layout.fillWidth: true
+                            implicitHeight: presetCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            ColumnLayout {
+                                id: presetCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Text {
+                                    text: "Layout Presets"
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: "Ready-to-use starting points for the Bar and Dock. Select a preset to preview exactly what will change — pinned applications, display selection, theme and other preferences are always preserved, and everything stays fully customizable afterwards."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Repeater {
+                                        model: ConfigService.layoutPresetList
+
+                                        Rectangle {
+                                            id: presetBtn
+                                            required property var modelData
+                                            readonly property bool isActive: ConfigService.layoutPresetMatches(modelData.id)
+                                            readonly property bool isPending: settingsWin.pendingPresetId === modelData.id
+                                            Layout.fillWidth: true
+                                            implicitHeight: 78
+                                            radius: Theme.radiusSmall
+                                            color: presetBtn.isPending ? Theme.primary
+                                                 : (presetBtn.isActive ? Theme.alpha(Theme.primary, 0.25)
+                                                 : (prMouse.containsMouse ? Theme.hover : Theme.surfaceVariant))
+                                            Accessible.role: Accessible.Button
+                                            Accessible.name: "Layout preset " + modelData.name
+
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 2
+
+                                                Item { Layout.fillHeight: true }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 4
+
+                                                    SvgIcon {
+                                                        icon: presetBtn.modelData.icon
+                                                        size: 14
+                                                        color: presetBtn.isPending ? Theme.contrastColor(Theme.primary) : Theme.primary
+                                                    }
+
+                                                    Text {
+                                                        text: presetBtn.modelData.name
+                                                        color: presetBtn.isPending ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: Theme.fontSizeSmall
+                                                        font.bold: true
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: presetBtn.modelData.description
+                                                    color: presetBtn.isPending ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeCaption - 1
+                                                    wrapMode: Text.Wrap
+                                                    elide: Text.ElideRight
+                                                    maximumLineCount: 3
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Item { Layout.fillHeight: true }
+                                            }
+
+                                            MouseArea {
+                                                id: prMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    settingsWin.presetResultMessage = "";
+                                                    settingsWin.pendingPresetId = presetBtn.modelData.id;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Change preview: shows precisely what applying the
+                                // pending preset will change before anything is applied.
+                                Rectangle {
+                                    id: presetPreview
+                                    visible: settingsWin.pendingPresetId !== ""
+                                    Layout.fillWidth: true
+                                    implicitHeight: previewCol.implicitHeight + 16
+                                    radius: Theme.radiusSmall
+                                    color: Theme.alpha(Theme.surface, 0.6)
+                                    border.color: Theme.border
+                                    border.width: 1
+
+                                    readonly property var pendingChanges: settingsWin.pendingPresetId !== ""
+                                        ? (ConfigService.getLayoutPresetDiff(settingsWin.pendingPresetId) || [])
+                                        : []
+
+                                    ColumnLayout {
+                                        id: previewCol
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 8
+
+                                        Text {
+                                            readonly property var pendingPreset: settingsWin.pendingPresetId !== ""
+                                                ? ConfigService.getLayoutPreset(settingsWin.pendingPresetId)
+                                                : null
+                                            text: "What will change — " + (pendingPreset ? pendingPreset.name : "")
+                                            color: Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.bold: true
+                                        }
+
+                                        Text {
+                                            visible: presetPreview.pendingChanges.length === 0
+                                            text: "This layout is already active. Nothing to change."
+                                            color: Theme.foregroundMuted
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Repeater {
+                                            model: presetPreview.pendingChanges
+
+                                            RowLayout {
+                                                id: changeRow
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                spacing: 6
+
+                                                Text {
+                                                    text: changeRow.modelData.label
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeCaption
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Text {
+                                                    text: changeRow.modelData.fromText
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeCaption
+                                                    elide: Text.ElideMiddle
+                                                }
+
+                                                Text {
+                                                    text: "→"
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeCaption
+                                                }
+
+                                                Text {
+                                                    text: changeRow.modelData.toText
+                                                    color: Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeCaption
+                                                    font.bold: true
+                                                    elide: Text.ElideMiddle
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            visible: settingsWin.presetResultMessage !== ""
+                                            text: settingsWin.presetResultMessage
+                                            color: Theme.primary
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                        }
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+
+                                            Item { Layout.fillWidth: true }
+
+                                            IconButton {
+                                                text: "Cancel"
+                                                size: 28
+                                                backgroundColor: Theme.surfaceVariant
+                                                onClicked: {
+                                                    settingsWin.pendingPresetId = "";
+                                                    settingsWin.presetResultMessage = "";
+                                                }
+                                            }
+
+                                            IconButton {
+                                                text: "Apply Preset"
+                                                size: 28
+                                                enabled: presetPreview.pendingChanges.length > 0
+                                                backgroundColor: enabled ? Theme.primary : Theme.surfaceVariant
+                                                iconColor: enabled ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                                onClicked: {
+                                                    const res = ConfigService.applyLayoutPreset(settingsWin.pendingPresetId);
+                                                    settingsWin.presetResultMessage = res.ok
+                                                        ? (res.alreadyActive ? "This layout is already active." : "Preset applied.")
+                                                        : ("Could not apply preset: " + res.reason);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         // 1. Appearance Section
                         Surface {

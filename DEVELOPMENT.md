@@ -85,6 +85,8 @@ All core services export reactive QML properties and signals. UI components decl
 * **`services/config/ConfigService.qml`**:
   * Persistent JSON settings store for bar position, height, opacity, output filtering, dock autohide, and theme settings.
   * Loads default schemas from `config/` via `JsonStore.fallbackPath` without hardcoding user/app IDs in QML.
+  * Layout preset API (`applyLayoutPreset`, `getLayoutPresetDiff`, `layoutPresetMatches`) backed by the pure `services/config/LayoutPresets.js` library: presets touch surface geometry and Bar module slots only, are validated against the module registry plus surface/Settings lockout rules before applying, and always preserve pinned apps, monitor choices, theme, tray policies and other user preferences.
+  * Converts QVariant-marshaled sequence values from the `JsonStore` load signal back to real JS arrays (`_jsArray`); without this, slot and monitor lists loaded from disk fail `Array.isArray` and silently fall back to defaults.
 
 ### `components/`
 * `SvgIcon.qml`: Universal icon delegate supporting freedesktop system theme icons and SVG files.
@@ -102,7 +104,7 @@ All core services export reactive QML properties and signals. UI components decl
 * `modules/notifications/`: Floating toast popup notifications.
 * `modules/osd/`: HUD overlay for PipeWire volume and KDE display brightness adjustments.
 * `modules/media/`: Extended popup player with album art and track details.
-* `modules/settings/`: Comprehensive settings configuration window.
+* `modules/settings/`: Comprehensive settings configuration window, including the Layout Presets section (preset selection, exact change preview, apply) built on the ConfigService preset API.
 
 ---
 
@@ -145,7 +147,7 @@ snapshot-based window sync.
 # Node/offscreen/static suites — safe anywhere, no live session interaction
 python3 -m unittest tests.test_bridge_records tests.test_bridge_fallback \
     tests.test_dock_keyboard tests.test_dock_window_filter \
-    tests.test_intellihide tests.test_milestone_3a
+    tests.test_intellihide tests.test_layout_presets tests.test_milestone_3a
 
 # Isolated KWin E2E (spawns its own private D-Bus session and a nested
 # kwin_wayland --virtual; never touches the live Plasma session)
@@ -172,7 +174,7 @@ test; run the whole inventory inside the isolated session when in doubt.
 * **Design System & Settings UX**: Centralized design tokens and structured in-shell settings dashboard.
 
 ### Milestone 3 Objectives
-1. Layout presets (macOS floating dock, Windows/KDE classic taskbar, Minimalist top panel).
+1. Layout presets (macOS floating dock, Windows/KDE classic taskbar, Minimalist top panel) — **implemented on `feat/beta-layout-presets`**: Everyday / Classic / Minimal presets with change preview, lockout-safe validation, persistence and restart survival (`tests/test_layout_presets.py`).
 2. Wallpaper color extraction (Material You / pywal color palette generation).
 3. Window preview tooltips on dock hover.
 4. Comprehensive automated test suite and CI workflow.

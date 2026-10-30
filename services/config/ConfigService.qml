@@ -5,6 +5,7 @@ import Quickshell.Services.SystemTray
 import "../core"
 import "../kwin"
 import "../kwin/WindowFilter.js" as WindowFilter
+import "LayoutPresets.js" as LayoutPresets
 
 Singleton {
     id: root
@@ -230,9 +231,9 @@ Singleton {
             if (typeof parsed.height === "number" && Number.isFinite(parsed.height) && !mod["height"]) {
                 root.barHeight = Math.max(24, Math.min(120, Math.trunc(parsed.height)));
             }
-            if (parsed.left && !mod["left"]) root.barLeft = ModuleRegistry.sanitizeSlotList(parsed.left, root.barLeft);
-            if (parsed.center && !mod["center"]) root.barCenter = ModuleRegistry.sanitizeSlotList(parsed.center, root.barCenter);
-            if (parsed.right && !mod["right"]) root.barRight = ModuleRegistry.sanitizeSlotList(parsed.right, root.barRight);
+            if (parsed.left && !mod["left"]) root.barLeft = ModuleRegistry.sanitizeSlotList(root._jsArray(parsed.left), root.barLeft);
+            if (parsed.center && !mod["center"]) root.barCenter = ModuleRegistry.sanitizeSlotList(root._jsArray(parsed.center), root.barCenter);
+            if (parsed.right && !mod["right"]) root.barRight = ModuleRegistry.sanitizeSlotList(root._jsArray(parsed.right), root.barRight);
             if (parsed.controlCenterMigrated === true) {
                 root.controlCenterMigrated = true;
             } else if (!mod["right"]) {
@@ -255,7 +256,7 @@ Singleton {
                 root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
-                root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
+                root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
             }
             if (typeof parsed.blur === "boolean" && !mod["blur"]) root.blurEnabled = parsed.blur;
             if (typeof parsed.notificationsEnabled === "boolean" && !mod["notificationsEnabled"]) {
@@ -338,13 +339,13 @@ Singleton {
                 root.dockRevealDelay = Math.max(0, Math.min(1000, Math.trunc(parsed.revealDelay)));
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
-                root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : parsed.monitors;
+                root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
             }
             if (parsed.windowFilter !== undefined && !mod["windowFilter"]) {
                 root.dockWindowFilter = WindowFilter.normalizeMode(parsed.windowFilter);
             }
             if (parsed.pinned && typeof parsed.pinned === "object" && parsed.pinned.length !== undefined && !mod["pinned"]) {
-                root.dockPinned = root.sanitizeDockPinned(parsed.pinned);
+                root.dockPinned = root.sanitizeDockPinned(root._jsArray(parsed.pinned));
             }
             dockStore.modifiedBeforeLoad = ({});
             if (dockStore.saveRequestedBeforeLoad) {
@@ -363,6 +364,22 @@ Singleton {
                 }
             }
         }
+    }
+
+    // Values arriving through the JsonStore loadedValue(var) signal are
+    // marshaled via QVariant: JS arrays become sequence objects for which
+    // Array.isArray() is false. Convert them back to real arrays so slot
+    // lists and monitor lists from disk keep working with array-based
+    // validation (sanitizeSlotList / isScreenAllowed). Strings and other
+    // non-array values pass through unchanged.
+    function _jsArray(value) {
+        if (Array.isArray(value)) return value;
+        if (value !== null && typeof value === "object" && typeof value.length === "number") {
+            const arr = [];
+            for (let i = 0; i < value.length; i++) arr.push(value[i]);
+            return arr;
+        }
+        return value;
     }
 
     function _markBarModified(key) {
@@ -711,7 +728,11 @@ Singleton {
     }
 
     function saveDockConfig() {
-        root._markDockModified("pinned");
+        // NOTE: do NOT unconditionally mark "pinned" as modified-before-load
+        // here. Callers that actually change the pinned list mark it
+        // themselves; marking it on every save would discard the user's
+        // on-disk pinned apps whenever an unrelated dock setting (or a
+        // layout preset) is saved before the config store finished loading.
         root.dockPinned = sanitizeDockPinned(root.dockPinned);
         if (!dockStore.loaded) {
             dockStore.saveRequestedBeforeLoad = true;
@@ -956,5 +977,125 @@ Singleton {
 
     function moveDockPinnedRight(appId) {
         return moveDockPinned(appId, "right");
+    }
+
+    // --- Layout Presets ---
+    // Presets are starting points built from the existing module registry,
+    // slot placement and surface configuration. They only touch layout keys
+    // (surface geometry + Bar module slots); pinned applications, monitor
+    // choices, theme, opacity, blur, tray policies, notifications and the
+    // dock window filter are always preserved. Full customization remains
+    // available after a preset is applied.
+    readonly property var layoutPresetList: LayoutPresets.PRESETS
+
+    function _layoutSnapshot() {
+        return {
+            bar: {
+                enabled: root.barEnabled,
+                floating: root.barFloating,
+                edge: root.barEdge,
+                edgeOffset: root.barEdgeOffset,
+                reserveSpace: root.barReserveSpace,
+                height: root.barHeight,
+                left: root.barLeft,
+                center: root.barCenter,
+                right: root.barRight
+            },
+            dock: {
+                enabled: root.dockEnabled,
+                floating: root.dockFloating,
+                edge: root.dockEdge,
+                edgeOffset: root.dockEdgeOffset,
+                reserveSpace: root.dockReserveSpace,
+                iconSize: root.dockIconSize,
+                autoHide: root.dockAutoHide,
+                intellihide: root.dockIntellihide
+            }
+        };
+    }
+
+    function _moduleNameMap() {
+        const map = {};
+        const mods = ModuleRegistry.registeredModules;
+        for (let i = 0; i < mods.length; i++) {
+            map[mods[i].id] = mods[i].name;
+        }
+        return map;
+    }
+
+    function getLayoutPreset(presetId) {
+        return LayoutPresets.getPreset(presetId);
+    }
+
+    // Human-readable preview of exactly what applying the preset would
+    // change right now: [{ section, key, label, fromText, toText }].
+    function getLayoutPresetDiff(presetId) {
+        const preset = LayoutPresets.getPreset(presetId);
+        if (!preset) return null;
+        const valid = ModuleRegistry.getAvailableModuleIds();
+        const target = LayoutPresets.buildTargetLayout(preset, valid);
+        return LayoutPresets.describeChanges(root._layoutSnapshot(), target, root._moduleNameMap());
+    }
+
+    // True when the current layout already equals the preset target.
+    function layoutPresetMatches(presetId) {
+        const preset = LayoutPresets.getPreset(presetId);
+        if (!preset) return false;
+        const valid = ModuleRegistry.getAvailableModuleIds();
+        return LayoutPresets.matchesPreset(root._layoutSnapshot(), preset, valid);
+    }
+
+    // Validate, apply and persist a layout preset. Returns
+    // { ok, reason, alreadyActive, changes }. Live UI updates flow from the
+    // reactive property assignments below (Bar/Dock bind to them directly).
+    function applyLayoutPreset(presetId) {
+        const preset = LayoutPresets.getPreset(presetId);
+        if (!preset) {
+            return { ok: false, reason: "Unknown preset: " + presetId, alreadyActive: false, changes: [] };
+        }
+        const valid = ModuleRegistry.getAvailableModuleIds();
+        const target = LayoutPresets.buildTargetLayout(preset, valid);
+        const check = LayoutPresets.validateLayout(target, valid);
+        if (!check.valid) {
+            return { ok: false, reason: check.reason, alreadyActive: false, changes: [] };
+        }
+
+        const before = root._layoutSnapshot();
+        const changes = LayoutPresets.describeChanges(before, target, root._moduleNameMap());
+        if (changes.length === 0) {
+            return { ok: true, reason: "", alreadyActive: true, changes: [] };
+        }
+
+        const barKeys = ["enabled", "floating", "edge", "edgeOffset", "reserveSpace", "height", "left", "center", "right"];
+        for (let i = 0; i < barKeys.length; i++) root._markBarModified(barKeys[i]);
+        root.barEnabled = target.bar.enabled;
+        root.barFloating = target.bar.floating;
+        root.barEdge = target.bar.edge;
+        root.barEdgeOffset = target.bar.edgeOffset;
+        root.barReserveSpace = target.bar.reserveSpace;
+        root.barHeight = target.bar.height;
+        root.barLeft = target.bar.left;
+        root.barCenter = target.bar.center;
+        root.barRight = target.bar.right;
+        // The preset explicitly places the control center module (required
+        // by validation whenever the Dock is off), so the legacy one-time
+        // insertion migration must not run again and mutate the applied
+        // layout on the next startup.
+        root.controlCenterMigrated = true;
+        saveBarConfig();
+
+        const dockKeys = ["enabled", "floating", "edge", "edgeOffset", "reserveSpace", "iconSize", "autoHide", "intellihide"];
+        for (let j = 0; j < dockKeys.length; j++) root._markDockModified(dockKeys[j]);
+        root.dockEnabled = target.dock.enabled;
+        root.dockFloating = target.dock.floating;
+        root.dockEdge = target.dock.edge;
+        root.dockEdgeOffset = target.dock.edgeOffset;
+        root.dockReserveSpace = target.dock.reserveSpace;
+        root.dockIconSize = target.dock.iconSize;
+        root.dockAutoHide = target.dock.autoHide;
+        root.dockIntellihide = target.dock.intellihide;
+        saveDockConfig();
+
+        return { ok: true, reason: "", alreadyActive: false, changes: changes };
     }
 }
