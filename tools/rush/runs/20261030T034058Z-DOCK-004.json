@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-10-30T03:40:58+00:00",
+  "task_title": "Gerçek parabolik zoom ve komşu ikon hareketi",
+  "sandbox_probe": {
+    "probed_at": "2026-10-30T03:40:58+00:00",
+    "home_write": "allowed",
+    "external_network": "allowed",
+    "seccomp": "0",
+    "isolated": false
+  },
+  "expected_base": null,
+  "dry_run": true,
+  "outcome": {
+    "feature_id": "DOCK-004",
+    "status": "dry_run",
+    "detail": "{\"argv\": [\"/home/sena/.local/share/evren-cli/node_modules/.bin/ccr\", \"EVREN - QS KDE\", \"cli\", \"--\", \"-p\", \"--output-format\", \"json\", \"--permission-mode\", \"acceptEdits\", \"You are a rush worker session for quickshell-kde (KDE Plasma 6 / KWin Wayland shell).\\n\\nFirst read, in this order: CLAUDE...\"], \"feature_branch\": \"feat/rush-dock-004\", \"base_sha\": \"780bd162e7eed3d9c38b2264ee8077e1f7948079\"}",
+    "base_sha": "780bd162e7eed3d9c38b2264ee8077e1f7948079",
+    "branch": "feat/rush-dock-004",
+    "commit": null,
+    "files_changed": [],
+    "tests": [],
+    "provider_route": null,
+    "attempts": 0,
+    "error_kind": null
+  }
+}
