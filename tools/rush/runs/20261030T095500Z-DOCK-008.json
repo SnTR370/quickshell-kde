@@ -1,0 +1,58 @@
+{
+  "recorded_at": "2026-10-30T07:19:30+00:00",
+  "task_id": "DOCK-008",
+  "task_title": "Klavye gezinimi ve Meta+1..9 (Meta+1..9 completion)",
+  "mode": "interactive-owner-watched-pilot task 2 (supervisor dry-run validated; unattended spawn refused: no sandbox)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true
+  },
+  "feature_branch": "feat/rush-dock-008",
+  "feature_commit": "9b35e98",
+  "merged_to": "feat/rush-orchestrator @ 28a11be",
+  "attempts": 1,
+  "outcome": {
+    "feature_id": "DOCK-008",
+    "status": "done",
+    "files_changed": [
+      "services/kwin/scripts/kwin-meta-shortcuts.js",
+      "services/kwin/MetaShortcuts.js",
+      "services/kwin/scripts/kwin-meta-shortcuts.sh",
+      "services/kwin/WindowService.qml",
+      "services/config/ConfigService.qml",
+      "modules/settings/SettingsWindow.qml",
+      "tests/test_dock_meta_shortcuts.py",
+      "docs/roadmap/DOCK_BACKLOG.json"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_meta_shortcuts",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_meta_shortcuts",
+        "count": 23,
+        "detail": "incl. isolated-rig integration: real kwin_wayland --virtual registerShortcut + kglobalaccel invokeShortcut"
+      },
+      {
+        "name": "full-suite",
+        "result": "pass_env_failures_tolerated",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 203,
+        "detail": "1 failure = documented environmental live-session test; 2 pre-existing skips"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint <changed files>"
+      }
+    ],
+    "known_limitations": "KWin scripts cannot launch apps (no-op when pinned app has no windows); multi-window chooser becomes cycling; shortcuts lost on KWin restart until next reload trigger; dockMetaShortcuts opt-in default false."
+  }
+}
