@@ -4,3 +4,4 @@ DockSeparator 1.0 DockSeparator.qml
 DockMenu 1.0 DockMenu.qml
 WindowChooserPopup 1.0 WindowChooserPopup.qml
 DockKeyboardNav 1.0 DockKeyboardNav.qml
+MagnifySlot 1.0 MagnifySlot.qml

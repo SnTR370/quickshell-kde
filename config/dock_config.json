@@ -9,6 +9,9 @@
   "autoHide": false,
   "hideDelay": 350,
   "revealDelay": 120,
+  "magnification": true,
+  "magnifyMaxScale": 1.5,
+  "magnifyRadius": 80,
   "monitors": "all",
   "pinned": [
     "org.kde.dolphin",

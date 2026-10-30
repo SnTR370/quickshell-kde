@@ -1009,6 +1009,70 @@ Variants {
                                     Layout.fillWidth: true
 
                                     Text {
+                                        text: "Magnify Dock Icons (pointer-follow parabolic zoom)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockMagnification ? "Magnification On" : "Magnification Off"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockMagnification ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockMagnification ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockMagnification(!ConfigService.dockMagnification)
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    visible: ConfigService.dockMagnification
+
+                                    Text {
+                                        text: "Magnification Strength (" + ConfigService.dockMagnifyMaxScale.toFixed(2) + "x max)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 1.1
+                                        maximumValue: 2.5
+                                        stepSize: 0.05
+                                        value: ConfigService.dockMagnifyMaxScale
+                                        onValueModified: val => ConfigService.setDockMagnifyMaxScale(val)
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    visible: ConfigService.dockMagnification
+
+                                    Text {
+                                        text: "Magnification Radius (" + ConfigService.dockMagnifyRadius + " px)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 24
+                                        maximumValue: 240
+                                        stepSize: 2
+                                        value: ConfigService.dockMagnifyRadius
+                                        onValueModified: val => ConfigService.setDockMagnifyRadius(Math.round(val))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
                                         text: "Auto-hide Dock on Inactivity"
                                         color: Theme.foregroundMuted
                                         font.family: Theme.fontFamily
