@@ -440,7 +440,9 @@ class TestDockKeyboardStatic(unittest.TestCase):
         self.assertNotIn("WlrKeyboardFocus.Exclusive", dock)
         self.assertIn("property bool keyboardNavActive: false", dock)
         # Reveal when keyboard-driven, re-arm hide timer when released.
-        self.assertIn("|| keyboardNavActive\n", dock)
+        # (Formatting-tolerant: keyboardNavActive must be OR-ed into a reveal
+        # condition, wherever line wrapping puts it.)
+        self.assertIn("|| keyboardNavActive", dock)
         self.assertIn("if (!keyboardNavActive && autoHide", dock)
         # Local IPC entry only; no global shortcut API or KDE shortcut configuration.
         self.assertIn("IpcHandler", dock)

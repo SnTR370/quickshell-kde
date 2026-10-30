@@ -1,4 +1,5 @@
 # Built plugin binaries: rebuild with the cmake command in CMakeLists.txt /
-# docs/development/P0_9_CHECKPOINT.md. Deliberately not committed while P0 #9
-# is a WIP checkpoint (see checkpoint doc for the final artifact decision).
+# README.md in this directory. Not committed — they are specific to the local
+# Qt build and CPU; sources + qmldir + qmltypes are the tracked artifacts and
+# the shell falls back to snapshot sync when the binaries are absent.
 *.so

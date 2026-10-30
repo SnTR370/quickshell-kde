@@ -175,11 +175,12 @@ Scope {
         with open(os.path.join(REPO_DIR, "services/applications/ApplicationService.qml")) as f:
             app_service_qml = f.read()
 
-        # Feature 1: Window cycling contracts
-        self.assertIn("function cycleAppWindows(appId, reverse)", win_service_qml)
+        # Feature 1: Window cycling contracts (P0 #8 added the screenName
+        # argument for per-monitor filtering)
+        self.assertIn("function cycleAppWindows(appId, reverse, screenName)", win_service_qml)
         self.assertIn("onWheel: wheel =>", self.dock_item_qml)
         self.assertIn("function handleWheel(delta)", self.dock_item_qml)
-        self.assertIn("WindowService.cycleAppWindows(root.appId, delta < 0)", self.dock_item_qml)
+        self.assertIn("WindowService.cycleAppWindows(root.appId, delta < 0, root.filterScreenName)", self.dock_item_qml)
 
         # Feature 2: Pinned app ordering contracts
         self.assertIn("function reorderDockPinned(fromIndex, toIndex)", cfg_service_qml)

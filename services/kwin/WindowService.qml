@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "../applications"
+import "../config"
 import "../core/Log.js" as Log
 import "."
 

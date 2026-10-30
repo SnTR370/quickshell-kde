@@ -1,5 +1,13 @@
 # P0 #9 Intellihide — WIP checkpoint (2026-10-29, PAUSED for public beta rush)
 
+> **COMPLETED (2026-10-30).** Beta verification finished: all suites green,
+> one real defect fixed (missing `import "../config"` in WindowService.qml)
+> and three stale test assertions updated. Full results in
+> [`P0_9_VERIFICATION_REPORT.md`](P0_9_VERIFICATION_REPORT.md), which
+> supersedes `P0_9_INTELLIHIDE_BLOCKED.md` (removed; preserved in git
+> history). This checkpoint document is kept for the KWin 6.8 findings and
+> rig instructions below.
+
 > **RESUMED & INTEGRATED (2026-10-29, later session).** The bridge is now
 > wired into the shell exactly as planned in "Remaining tasks" below:
 > `WindowService` loads `bridge/BridgeHost.qml` through a `Loader`

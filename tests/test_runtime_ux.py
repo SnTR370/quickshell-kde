@@ -577,7 +577,10 @@ class TestDesktopUX(unittest.TestCase):
         self.assertIn("HoverHandler {", dock_content)
         self.assertIn("id: dockHoverHandler", dock_content)
         self.assertIn("readonly property bool hasActivePopup: activePopupItem !== null", dock_content)
-        self.assertIn("readonly property bool isRevealed: !autoHide || hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup", dock_content)
+        # Reveal path (P0 #9 Intellihide): hover/popup/drag/keyboard interaction
+        # OR-chain feeds Intellihide.isRevealed as the "interacting" argument.
+        self.assertIn("Intellihide.isRevealed(", dock_content)
+        self.assertIn("hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup", dock_content)
 
         # DockItem must synchronize activePopupItem with parentWindowRef
         self.assertIn("parentWindowRef.activePopupItem = root", item_content)

@@ -53,6 +53,7 @@ All core services export reactive QML properties and signals. UI components decl
   * Queries running windows via KWin's D-Bus runner interface (`org.kde.KWin /WindowsRunner`) and caches per-UUID window metadata (`desktopFile`, `resourceClass`, `resourceName`) from `org.kde.KWin.getWindowInfo`.
   * Manages UUID-targeted window activation (`activateWindow`), minimize/restore toggling, multi-window cycling (`cycleAppWindows`), graceful window close (`closeWindow`), and multi-monitor movement (`moveWindowToOutput`) via transient KWin 6 scripts (`services/kwin/scripts/`).
   * Employs a 1000ms `/WindowsRunner` polling timer as an external lifecycle sync fallback under standard KWin Wayland sessions where `zwlr_foreign_toplevel_manager_v1` is restricted, without mutating local window/output state optimistically before KWin confirmation.
+  * **KWin event bridge (Intellihide)**: in live KWin sessions with `dockIntellihide` enabled, loads the compiled QML plugin in `services/kwin/bridge/` (see `services/kwin/bridge/README.md`) through a `Loader` and merges live window geometry/minimize/desktop events from a resident KWin script (`services/kwin/scripts/kwin-event-bridge.js`) via `BridgeRecords.js` — this is the authoritative writer for `windowStates`/`windowOutputs` while healthy. If the plugin is missing, unloadable or ABI-incompatible, the Loader fails gracefully and the snapshot-based sync path above remains in charge (covered by `tests/test_bridge_fallback.py`).
 * **`services/brightness/BrightnessService.qml`**:
   * Event-driven display brightness management listening to `org.kde.ScreenBrightness` D-Bus signals (`BrightnessChanged`).
   * Dynamically discovers connected display paths via `DisplaysDBusNames` and reads hardware `MaxBrightness` and `Brightness`.
@@ -129,6 +130,34 @@ quickshell kill
 # Run QML syntax check
 qmllint shell.qml components/*.qml modules/**/*.qml services/**/*.qml
 ```
+
+### KWin Event Bridge Plugin (Intellihide)
+The event-driven Intellihide uses a small compiled Qt6 QML plugin. Sources,
+`qmldir` and `qmltypes` are committed; the `.so` binaries are built locally
+(never committed — they are Qt-build and CPU specific). Build, install,
+ABI requirements, availability check and fallback behavior are documented in
+[`services/kwin/bridge/README.md`](services/kwin/bridge/README.md). Without
+the built binaries everything still works — the shell falls back to the
+snapshot-based window sync.
+
+### Test Suite Inventory
+```bash
+# Node/offscreen/static suites — safe anywhere, no live session interaction
+python3 -m unittest tests.test_bridge_records tests.test_bridge_fallback \
+    tests.test_dock_keyboard tests.test_dock_window_filter \
+    tests.test_intellihide tests.test_milestone_3a
+
+# Isolated KWin E2E (spawns its own private D-Bus session and a nested
+# kwin_wayland --virtual; never touches the live Plasma session)
+python3 -m unittest tests.test_kwin_bridge_integration
+
+# Full-shell probes (test_dock_blitz, test_runtime_ux) launch quickshell
+# against the current Wayland session: run them ONLY inside an isolated
+# session (private XDG_RUNTIME_DIR/XDG_CONFIG_HOME + dbus-run-session +
+# kwin_wayland --virtual), never against your active desktop.
+```
+Note: `tests.test_milestone_3a` includes a 2-second full-shell startup smoke
+test; run the whole inventory inside the isolated session when in doubt.
 
 ---
 
