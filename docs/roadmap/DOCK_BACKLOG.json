@@ -105,9 +105,9 @@
       "id": "DOCK-010",
       "rank_2026_10_26": 10,
       "title": "Dosyayı uygulama ikonuna bırakıp açma",
-      "status": "in_progress",
-      "evidence_note": "AUDITED 2026-10-30: no mimeData/file/URL drop handling in modules/dock/DockItem.qml (drag code only handles intra-dock reordering/pinning). Missing; needs Qt DnD + Wayland target-app support and focus-safety testing. RUSH 2026-10-30: in_progress via interactive pilot task 3 (selected over DOCK-009, which cannot honestly reach implemented: notification-count data is not accessible to an external client and estimated badges are forbidden by its own gate).",
-      "completed_commit": null,
+      "status": "implemented",
+      "evidence_note": "RUSH 2026-10-30: implemented via supervised fresh-context worker on feat/rush-dock-010 (7f90eb7), merged to feat/rush-orchestrator (44401f7). Keyless external DropArea below the keyed itemDropArea (intra-dock DnD contract untouched, disabled during dock drags, rejects Quick-source drops); pure URI filtering + launch-command building in services/applications/FileDrop.js; ApplicationService.launchFiles executes via argv arrays + execDetached only (gio launch > gtk-launch > tokenized exec); launching is the only side effect (no focus stealing). Tests: test_dock_file_drop.py 19/19 (node-vm JS, static contracts, offscreen dry-run probe); blitz 20/20; full suite 222 OK / 2 pre-existing skips; qmllint clean. Live Dolphin->dock drag on layer-shell surface unverified (manual hardware test debt).",
+      "completed_commit": "7f90eb7",
       "live_verified": false,
       "owner": null
     },

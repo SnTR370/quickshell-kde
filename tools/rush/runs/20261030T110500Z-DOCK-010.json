@@ -1,0 +1,59 @@
+{
+  "recorded_at": "2026-10-30T08:02:49+00:00",
+  "task_id": "DOCK-010",
+  "task_title": "Dosyayı uygulama ikonuna bırakıp açma",
+  "mode": "interactive-owner-watched-pilot task 3 of 3 (supervisor dry-run validated; unattended spawn refused: no sandbox)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true
+  },
+  "feature_branch": "feat/rush-dock-010",
+  "feature_commit": "7f90eb7",
+  "merged_to": "feat/rush-orchestrator @ 44401f7",
+  "attempts": 1,
+  "outcome": {
+    "feature_id": "DOCK-010",
+    "status": "done",
+    "files_changed": [
+      "services/applications/FileDrop.js",
+      "services/applications/ApplicationService.qml",
+      "modules/dock/DockItem.qml",
+      "tests/test_dock_file_drop.py"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_file_drop",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_file_drop",
+        "count": 19
+      },
+      {
+        "name": "tests.test_dock_blitz",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_blitz",
+        "count": 20
+      },
+      {
+        "name": "full-suite",
+        "result": "pass",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 222,
+        "detail": "OK, 2 pre-existing skips; environmental live-session test passed this run"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint <changed files>"
+      }
+    ],
+    "known_limitations": "Live inter-process drag (Dolphin -> layer-shell dock) unverified on hardware; gtk-launch receives decoded local paths; exec-fallback appends files to tokenized argv (~%F semantics)."
+  }
+}
