@@ -115,9 +115,9 @@
       "id": "DOCK-011",
       "rank_2026_10_26": 11,
       "title": "Klasör ve uygulama Stacks",
-      "status": "in_progress",
-      "evidence_note": "AUDITED 2026-10-30: no stack/folder/group code in modules/dock/. Missing; must reuse KDE services, no low-level custom daemon. RUSH 2026-10-30: task started on feat/rush-orchestrator at 915287f (interactive session, no subagent supervisor).",
-      "completed_commit": null,
+      "status": "implemented",
+      "evidence_note": "RUSH 2026-10-31: implemented directly on feat/rush-orchestrator (d2f323e), recovering an interrupted interactive session (implementation preserved, test suite completed by the recovery session). Stacks are 'stack:<id>' markers interleaved in dockPinned (existing reorder/persist machinery); pure helpers in services/config/DockStacks.js (node-tested); ConfigService owns dockStacks CRUD with full-array reassignment (QVariant-signal safety) and assigns stacks before pinned on load so dangling markers drop; folder listing is live Qt.labs.folderlistmodel in StackPopup (no polling, no custom daemon, no filesystem access in config code); files open via ApplicationService.openPaths (gio open, argv arrays + execDetached only); app drops onto an apps stack join it (pinned apps leave the flat row via togglePin); Meta+N slots skip stack markers; Settings has a Dock Stacks management card. Tests: tests.test_dock_stacks 26/26 (node-vm JS, Meta+N interaction, static contracts, qmllint, isolated offscreen E2E load->mutate->persist->reload + fresh-defaults); full suite 248 with only the pre-existing environmental Spotify/MPRIS live-session failure; qmllint clean. Live drag-onto-stack and folder popup on real hardware unverified (manual test debt).",
+      "completed_commit": "d2f323e",
       "live_verified": false,
       "owner": null
     },

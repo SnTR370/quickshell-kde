@@ -1,0 +1,67 @@
+{
+  "recorded_at": "2026-10-30T23:29:54+00:00",
+  "task_id": "DOCK-011",
+  "task_title": "Klasör ve uygulama Stacks",
+  "mode": "interactive owner-watched recovery session (previous session lost mid-response to 'API Error: Connection lost'; no unattended spawn, no subagent supervisor)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true,
+    "detail": "Route verified via ~/.claude-code-router/app-data/usage.sqlite usage_events after the run; historical 503/400 gateway entries exist for glm-5.3 alias but the active route is EVREN/zai/glm-5.3-fp8 with HTTP 200."
+  },
+  "feature_branch": "feat/rush-orchestrator",
+  "feature_commit": "d2f323e",
+  "merged_to": null,
+  "attempts": 2,
+  "recovery": {
+    "interrupted_session": "previous agent connection lost while modifying StackPopup.qml and before writing the test suite",
+    "preserved": "all uncommitted implementation work from the interrupted session was kept verbatim; no reset/clean/overwrite",
+    "recovery_session_added": "tests/test_dock_stacks.py, test_04 expectation update in tests/test_dock_blitz.py"
+  },
+  "outcome": {
+    "feature_id": "DOCK-011",
+    "status": "done",
+    "files_changed": [
+      "services/config/DockStacks.js",
+      "services/config/ConfigService.qml",
+      "services/applications/ApplicationService.qml",
+      "modules/dock/Dock.qml",
+      "modules/dock/DockItem.qml",
+      "modules/dock/StackPopup.qml",
+      "modules/dock/StackMenu.qml",
+      "modules/dock/qmldir",
+      "modules/settings/SettingsWindow.qml",
+      "services/kwin/MetaShortcuts.js",
+      "tests/test_dock_blitz.py",
+      "tests/test_dock_stacks.py"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_stacks",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_stacks",
+        "count": 26
+      },
+      {
+        "name": "full-suite",
+        "result": "pass_with_known_environmental_failure",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 248,
+        "detail": "1 failure: test_runtime_ux live KWin Spotify/MPRIS enumeration, pre-existing environmental (same failure at the pre-DOCK-011 baseline); 2 pre-existing skips (bridge plugin not built)"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint modules/dock/StackPopup.qml modules/dock/StackMenu.qml modules/dock/DockItem.qml modules/dock/Dock.qml services/config/ConfigService.qml services/applications/ApplicationService.qml modules/settings/SettingsWindow.qml"
+      }
+    ],
+    "known_limitations": "Live drag-app-onto-stack, stack popup rendering and folder navigation on real hardware unverified (manual test debt); folder stacks do not check path existence in config (popup shows a visible error state instead); removing an apps stack drops its member apps with it (by design: the stack was their only dock home)."
+  }
+}
