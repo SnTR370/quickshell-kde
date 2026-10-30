@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "../config"
 import "../core/Log.js" as Log
+import "FileDrop.js" as FileDrop
 
 Singleton {
     id: root
@@ -562,6 +563,29 @@ Singleton {
             }
             return true;
         }
+    }
+
+    // DOCK-010: open local files with a specific application (external file
+    // drops onto dock icons). URI filtering and mechanism choice live in
+    // FileDrop.js (pure, node-tested); this stays the single execution point
+    // so the launch obeys the same argv/execDetached conventions as launch().
+    // Multi-file drops open in ONE invocation. Dry-run aware for tests.
+    function launchFiles(app, paths) {
+        if (!app || !Array.isArray(paths) || paths.length === 0) return false;
+        let tokenized = [];
+        if (Array.isArray(app.execArgs) && app.execArgs.length > 0) {
+            tokenized = app.execArgs;
+        } else if (app.exec && String(app.exec).trim().length > 0) {
+            tokenized = parseExecArguments(app.exec, app.icon || "", app.name || "", app.desktopFile || "");
+        }
+        const cmd = FileDrop.buildLaunchCommand(app, paths, tokenized);
+        if (!cmd) return false;
+        Log.info("ApplicationService", "Opening " + paths.length + " file(s) with app: " + (app.name || app.id));
+        root.lastLaunchedCommand = { type: "files", appId: app.id || "", args: cmd };
+        if (!root.launchDryRun) {
+            Quickshell.execDetached(cmd);
+        }
+        return true;
     }
 
     function resolvePinnedKey(appId) {

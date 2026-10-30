@@ -1,6 +1,7 @@
 import QtQuick
 import "../../services"
 import "../../components"
+import "../../services/applications/FileDrop.js" as FileDrop
 import "."
 
 Item {
@@ -31,7 +32,10 @@ Item {
     property bool dragCancelled: false
     property bool suppressClick: false
     property var acceptedDropInfo: null
+    // DOCK-010: the drop-target highlight reacts to BOTH drop sources:
+    // intra-dock item drags (keyed DropArea below) and external file drops.
     readonly property bool dropTargeted: itemDropArea.containsDrag
+        || (externalFileDropArea.enabled && externalFileDropArea.containsDrag)
     // DOCK-004 pointer-driven magnification state, assigned imperatively by
     // the Dock controller (see Dock.qml updateMagnification). Defaults keep
     // the classic single-icon contract when magnification is disabled or no
@@ -297,6 +301,51 @@ Item {
             return root.commitDrop(info);
         }
         return false;
+    }
+
+    // DOCK-010: external (inter-process) file drop - open the dropped files
+    // with this item's application. Takes the raw URI list (QUrl strings,
+    // or text/uri-list text), filters it to local paths (FileDrop.js) and
+    // dispatches ONE launch via ApplicationService.launchFiles. Returns true
+    // when a launch command was built; rejected drops (non-file URIs,
+    // non-launchable items, active intra-dock drag) are visible no-ops.
+    // Launching is the ONLY side effect: no window activation, no focus
+    // requests (Wayland focus-safety).
+    function handleExternalFileDrop(rawUrls) {
+        if (root.dragging || !root.visible || !root.enabled) return false;
+        if (root.parentWindowRef && root.parentWindowRef.isDragging) return false;
+        if (!(root.isPinned || root.isRunning) || !root.app) return false;
+        const paths = FileDrop.localPathsFromUrls(rawUrls);
+        if (paths.length === 0) return false;
+        return ApplicationService.launchFiles(root.app, paths);
+    }
+
+    // DOCK-010: external file-drop target. Sits BELOW the keyed itemDropArea
+    // in stacking order and is disabled during any intra-dock drag, so the
+    // reordering/pinning DnD contract is untouched: internal drags carry the
+    // "quickshell-dock-item" key and a Quick drag source and are handled
+    // exclusively by itemDropArea; external OS drags (Dolphin, etc.) have no
+    // keys/source and fall through to this area. Keyless by design - the
+    // guards reject anything that is not a local-file drop on a launchable
+    // app icon.
+    DropArea {
+        id: externalFileDropArea
+        anchors.fill: parent
+        enabled: root.visible && root.enabled && !root.dragging
+            && !(root.parentWindowRef && root.parentWindowRef.isDragging)
+            && (root.isPinned || root.isRunning) && root.app !== null
+
+        onDropped: drop => {
+            // Never intercept intra-dock (or any Quick-internal) drags.
+            if (drop.source || root.dragging || (root.parentWindowRef && root.parentWindowRef.isDragging)) {
+                drop.accepted = false;
+                return;
+            }
+            const raw = (drop.hasUrls && drop.urls && drop.urls.length > 0)
+                ? drop.urls
+                : FileDrop.uriListFromText(drop.text);
+            drop.accepted = root.handleExternalFileDrop(raw);
+        }
     }
 
     DropArea {
