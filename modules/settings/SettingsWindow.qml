@@ -1111,6 +1111,28 @@ Variants {
                                     }
                                 }
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Text {
+                                        text: "Meta+1..9 Activate Pinned Applications (KWin global shortcuts; activate or cycle windows)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    IconButton {
+                                        text: ConfigService.dockMetaShortcuts ? "Meta Shortcuts On" : "Meta Shortcuts Off"
+                                        size: 28
+                                        backgroundColor: ConfigService.dockMetaShortcuts ? Theme.primary : Theme.surfaceVariant
+                                        iconColor: ConfigService.dockMetaShortcuts ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                        onClicked: ConfigService.setDockMetaShortcuts(!ConfigService.dockMetaShortcuts)
+                                    }
+                                }
+
                                 // Dock Window Filter selector (default: all)
                                 Text {
                                     text: "Dock Window Filter"

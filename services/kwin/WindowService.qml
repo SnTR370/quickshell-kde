@@ -1,6 +1,7 @@
 pragma Singleton
 import "WindowFilter.js" as WindowFilter
 import "BridgeRecords.js" as BridgeRecords
+import "MetaShortcuts.js" as MetaShortcuts
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -883,6 +884,104 @@ Singleton {
         }
     }
 
+    // ---- DOCK-008: Meta+1..9 pinned dock application shortcuts ----
+    // KWin is the only Wayland component that can own global shortcuts, so
+    // a small resident KWin script (services/kwin/scripts/kwin-meta-shortcuts.js)
+    // registers Meta+1..9 and activates or cycles the Nth PINNED dock
+    // application's windows natively inside KWin. The pinned match keys are
+    // derived here (same alias rules as the dock's running indicators, via
+    // ApplicationService) and embedded into the script whenever it is
+    // (re)loaded; reloads are debounced. Lifecycle mirrors the KWin event
+    // bridge: orphan cleanup on load (stable plugin name), unload on disable
+    // and on shell shutdown.
+    readonly property string metaShortcutsPluginName: "quickshell-dock-meta-shortcuts"
+    property string metaShortcutsLoadedJson: ""
+    property bool metaShortcutsLoadInFlight: false
+    property int metaShortcutsFailedLoads: 0
+
+    readonly property bool metaShortcutsEnabled: root.isLiveKWinSession
+        && ConfigService.dockEnabled && ConfigService.dockMetaShortcuts
+
+    // Pinned match keys as JSON, recomputed when the pinned list or the
+    // application metadata changes. Pure generation lives in MetaShortcuts.js.
+    readonly property string metaShortcutsTargetJson: {
+        void(ConfigService.dockPinned);
+        void(ApplicationService.applications);
+        return MetaShortcuts.buildPinnedJson(ConfigService.dockPinned,
+            function (rawId) { return ApplicationService.getAppById(rawId); });
+    }
+
+    // Debounce only (repeat: false): pinned-list edits (drag reorder, pin/
+    // unpin) and config toggles coalesce into a single script reload. Never
+    // a polling timer.
+    Timer {
+        id: metaShortcutsDebounce
+        interval: 600
+        repeat: false
+        onTriggered: root.syncMetaShortcuts()
+    }
+
+    onMetaShortcutsEnabledChanged: {
+        root.metaShortcutsFailedLoads = 0;
+        metaShortcutsDebounce.restart();
+    }
+    onMetaShortcutsTargetJsonChanged: {
+        root.metaShortcutsFailedLoads = 0;
+        if (root.metaShortcutsEnabled) metaShortcutsDebounce.restart();
+    }
+
+    Process {
+        id: metaShortcutsProc
+        property string mode: ""
+        property string json: ""
+        stdout: SplitParser {
+            onRead: data => { void(data); }
+        }
+        onExited: exitCode => {
+            root.metaShortcutsLoadInFlight = false;
+            if (metaShortcutsProc.mode === "load") {
+                if (exitCode === 0) {
+                    root.metaShortcutsLoadedJson = metaShortcutsProc.json;
+                    root.metaShortcutsFailedLoads = 0;
+                } else {
+                    root.metaShortcutsLoadedJson = "";
+                    Log.warn("WindowService", "Meta+1..9 KWin shortcut script failed to load (exit " + exitCode + ")");
+                    // Bounded retry chain (KWin may be momentarily unreachable,
+                    // e.g. restarting): never an unbounded polling loop.
+                    if (root.metaShortcutsEnabled && root.metaShortcutsFailedLoads < 3) {
+                        root.metaShortcutsFailedLoads += 1;
+                        metaShortcutsDebounce.restart();
+                    }
+                }
+            }
+        }
+    }
+
+    function syncMetaShortcuts() {
+        if (root.metaShortcutsLoadInFlight) {
+            // A load/unload is still running; retry after it settles.
+            metaShortcutsDebounce.restart();
+            return;
+        }
+        const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-meta-shortcuts.sh";
+        const wantLoad = root.metaShortcutsEnabled && root.metaShortcutsTargetJson !== "[]";
+        const target = root.metaShortcutsTargetJson;
+        if (wantLoad && target !== root.metaShortcutsLoadedJson) {
+            root.metaShortcutsLoadInFlight = true;
+            metaShortcutsProc.mode = "load";
+            metaShortcutsProc.json = target;
+            metaShortcutsProc.command = [scriptPath, "load", target, root.metaShortcutsPluginName];
+            metaShortcutsProc.running = true;
+        } else if (!wantLoad && root.metaShortcutsLoadedJson !== "") {
+            // Disabled or nothing pinned anymore: unload the owned script.
+            root.metaShortcutsLoadInFlight = true;
+            metaShortcutsProc.mode = "unload";
+            metaShortcutsProc.json = "";
+            metaShortcutsProc.command = [scriptPath, "unload", root.metaShortcutsPluginName];
+            metaShortcutsProc.running = true;
+        }
+    }
+
     function isValidOutputName(outputName) {
         if (!outputName || typeof outputName !== "string") return false;
         const trimmed = outputName.trim();
@@ -1434,5 +1533,15 @@ Singleton {
         refreshWindows();
         refreshActiveWindow();
         refreshWindowOutputs();
+        if (root.metaShortcutsEnabled) metaShortcutsDebounce.restart();
+    }
+
+    // Shell shutdown: detach the unload so the resident KWin script (and its
+    // Meta+1..9 registrations) does not outlive the shell that owns it.
+    Component.onDestruction: {
+        if (root.metaShortcutsLoadedJson !== "") {
+            const scriptPath = Quickshell.shellDir + "/services/kwin/scripts/kwin-meta-shortcuts.sh";
+            Quickshell.execDetached([scriptPath, "unload", root.metaShortcutsPluginName]);
+        }
     }
 }
