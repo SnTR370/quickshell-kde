@@ -246,6 +246,11 @@ class TestGates(SupervisorHarness):
         self.fake_git.dirty = "?? .rush-inbox/\n?? .rush-supervisor-lock.json"
         self.supervisor.gate_base(None)  # must not raise
 
+    def test_gate_base_allows_supervisor_run_logs(self):
+        # scrubbed run logs are the supervisor's own evidence trail
+        self.fake_git.dirty = "?? tools/rush/runs/20261030T034000Z-DOCK-004.json"
+        self.supervisor.gate_base(None)  # must not raise
+
     def test_gate_base_rejects_dirty_plus_inbox(self):
         self.fake_git.dirty = "?? .rush-inbox/\n M modules/dock/Dock.qml"
         with self.assertRaises(rs.GateFailure):

@@ -368,9 +368,13 @@ class RushSupervisor:
         # possible /sandbox settings leftover. Anything else is an unexpected dirty
         # base -> stop.
         allowed_names = (".rush-inbox/", ".rush-supervisor-lock.json",
-                         "tools/rush/runs/", ".claude/settings.local.json")
-        allowed = [l for l in dirty.splitlines()
-                   if l.startswith("?? ") and l[3:].strip() in allowed_names]
+                         ".claude/settings.local.json")
+
+        def _allowed(line: str) -> bool:
+            name = line[3:].strip()
+            return name in allowed_names or name.startswith("tools/rush/runs/")
+
+        allowed = [l for l in dirty.splitlines() if l.startswith("?? ") and _allowed(l)]
         if len(dirty.splitlines()) > len(allowed):
             raise GateFailure(f"dirty base (uncommitted changes): {scrub(dirty)}")
         branch = self.git.current_branch()
