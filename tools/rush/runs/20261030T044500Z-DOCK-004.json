@@ -1,0 +1,72 @@
+{
+  "recorded_at": "2026-10-30T05:25:07+00:00",
+  "task_id": "DOCK-004",
+  "task_title": "Gerçek parabolik zoom ve komşu ikon hareketi",
+  "mode": "interactive-owner-watched-pilot (supervisor dry-run validated; unattended spawn refused: no sandbox)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true
+  },
+  "feature_branch": "feat/rush-dock-004",
+  "feature_commit": "f62d71e",
+  "merged_to": "feat/rush-orchestrator @ 555eabe",
+  "base_sha": "f56bda7",
+  "attempts": 1,
+  "outcome": {
+    "feature_id": "DOCK-004",
+    "status": "done",
+    "files_changed": [
+      "modules/dock/Magnification.js",
+      "modules/dock/MagnifySlot.qml",
+      "modules/dock/Dock.qml",
+      "modules/dock/DockItem.qml",
+      "modules/dock/DockSeparator.qml",
+      "modules/dock/qmldir",
+      "services/config/ConfigService.qml",
+      "config/dock_config.json",
+      "modules/settings/SettingsWindow.qml",
+      "tests/test_dock_magnification.py"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_magnification",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_magnification",
+        "count": 22
+      },
+      {
+        "name": "tests.test_dock_blitz",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_blitz",
+        "count": 20
+      },
+      {
+        "name": "tests.test_dock_keyboard",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_keyboard",
+        "count": 13
+      },
+      {
+        "name": "full-suite",
+        "result": "pass_env_failures_tolerated",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 180,
+        "detail": "1 failure = documented environmental live-session test test_12_live_kwin_running_apps_enumeration (same as pre-feature baseline); 2 skips = bridge plugin not built in checkout"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint shell.qml components/*.qml modules/**/*.qml services/**/*.qml"
+      }
+    ],
+    "known_limitations": "Live Wayland pointer behavior on a real dock (all edges, multi-monitor) unverified; full Dock.qml controller not runtime-tested under layer-shell PanelWindow (covered by static contracts + component-level runtime tests); maxScale < 1.15 still shows hover floor."
+  }
+}
