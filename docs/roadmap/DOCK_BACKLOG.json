@@ -105,8 +105,8 @@
       "id": "DOCK-010",
       "rank_2026_10_26": 10,
       "title": "Dosyayı uygulama ikonuna bırakıp açma",
-      "status": "candidate",
-      "evidence_note": "AUDITED 2026-10-30: no mimeData/file/URL drop handling in modules/dock/DockItem.qml (drag code only handles intra-dock reordering/pinning). Missing; needs Qt DnD + Wayland target-app support and focus-safety testing.",
+      "status": "in_progress",
+      "evidence_note": "AUDITED 2026-10-30: no mimeData/file/URL drop handling in modules/dock/DockItem.qml (drag code only handles intra-dock reordering/pinning). Missing; needs Qt DnD + Wayland target-app support and focus-safety testing. RUSH 2026-10-30: in_progress via interactive pilot task 3 (selected over DOCK-009, which cannot honestly reach implemented: notification-count data is not accessible to an external client and estimated badges are forbidden by its own gate).",
       "completed_commit": null,
       "live_verified": false,
       "owner": null
