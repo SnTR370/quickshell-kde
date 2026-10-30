@@ -115,8 +115,8 @@
       "id": "DOCK-011",
       "rank_2026_10_26": 11,
       "title": "Klasör ve uygulama Stacks",
-      "status": "candidate",
-      "evidence_note": "AUDITED 2026-10-30: no stack/folder/group code in modules/dock/. Missing; must reuse KDE services, no low-level custom daemon.",
+      "status": "in_progress",
+      "evidence_note": "AUDITED 2026-10-30: no stack/folder/group code in modules/dock/. Missing; must reuse KDE services, no low-level custom daemon. RUSH 2026-10-30: task started on feat/rush-orchestrator at 915287f (interactive session, no subagent supervisor).",
       "completed_commit": null,
       "live_verified": false,
       "owner": null
