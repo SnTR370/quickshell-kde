@@ -47,7 +47,7 @@ Variants {
                 NotificationCard {
                     required property var modelData
                     notification: modelData
-                    onDismissed: id => NotificationService.dismissToast(id)
+                    onDismissed: (id, byUser) => NotificationService.dismissToast(id, byUser)
                 }
             }
         }

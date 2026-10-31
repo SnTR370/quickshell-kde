@@ -26,6 +26,30 @@ Item {
     readonly property int pinnedIndex: isStack
         ? ConfigService.findDockPinnedIndex(root.appId, ConfigService.dockPinned)
         : ApplicationService.getPinnedIndex(root.appId)
+    // DOCK-009: notification badge state sourced from the shell's own
+    // notification server (exact active-notification state; empty when the
+    // server is disabled). Apps resolve through the canonical application
+    // id; apps stacks aggregate their members (count + critical only — a
+    // merged progress value would be arbitrary); folder stacks and
+    // unmatched notifications show nothing. Never estimated.
+    readonly property var badge: {
+        if (!ConfigService.notificationsEnabled) return null;
+        if (root.isStack) {
+            if (!root.isAppsStack || !root.stack || !root.stack.appIds) return null;
+            const keys = [];
+            const ids = root.stack.appIds;
+            for (let i = 0; i < ids.length; i++) {
+                const member = ApplicationService.getAppById(ids[i]);
+                if (member && member.id) {
+                    keys.push(String(member.id).toLowerCase().replace(/\.desktop$/, ""));
+                }
+            }
+            return NotificationService.badgeForStack(keys);
+        }
+        const app = root.app || ApplicationService.getAppById(root.appId);
+        if (!app || !app.id) return null;
+        return NotificationService.badgeForApp(String(app.id).toLowerCase().replace(/\.desktop$/, ""));
+    }
     readonly property bool canMoveLeft: !isStack && isPinned && ApplicationService.canMovePinned(root.appId, "left")
     readonly property bool canMoveRight: !isStack && isPinned && ApplicationService.canMovePinned(root.appId, "right")
     // Filtered view for THIS dock surface's own screen (not the Dock-visibility monitor list).
@@ -70,6 +94,7 @@ Item {
         + (root.isStack ? (", " + (root.isFolderStack ? "folder stack" : "application stack")) : "")
         + (root.windowCount > 1 ? (", " + root.windowCount + " windows")
            : (root.windowCount === 1 ? ", running" : ""))
+        + (root.badge && root.badge.count > 0 ? (", " + root.badge.count + (root.badge.critical ? " urgent notifications" : " notifications")) : "")
         + (root.isPinned ? ", pinned" : "")
     readonly property string dockEdge: (root.parentWindowRef && root.parentWindowRef.edge !== undefined)
         ? root.parentWindowRef.edge : ConfigService.dockEdge
@@ -606,10 +631,90 @@ Item {
             size: root.baseSize * 0.8
         }
 
+        // DOCK-009: progress ring — the freedesktop "value" hint of an
+        // active progress notification, drawn as an arc around the icon.
+        // The value is the exact client-reported number (normalized from
+        // 0..1 or percent), never estimated.
+        Canvas {
+            id: progressRing
+            property real progress: (root.badge && typeof root.badge.progress === "number")
+                ? root.badge.progress : 0
+            anchors.centerIn: parent
+            width: root.baseSize + 4
+            height: root.baseSize + 4
+            antialiasing: true
+            opacity: (root.badge && typeof root.badge.progress === "number") ? 1.0 : 0.0
+            visible: opacity > 0.0
+            Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
+
+            onPaint: {
+                const ctx = getContext("2d");
+                ctx.reset();
+                if (root.badge === null || typeof root.badge.progress !== "number") return;
+                const p = Math.max(0, Math.min(1, progressRing.progress));
+                const cx = width / 2;
+                const cy = height / 2;
+                const r = Math.min(cx, cy) - 2;
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = Theme.alpha(Theme.border, 0.7);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                if (p > 0) {
+                    ctx.strokeStyle = Theme.primary;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p));
+                    ctx.stroke();
+                }
+            }
+            onProgressChanged: progressRing.requestPaint()
+            onVisibleChanged: progressRing.requestPaint()
+        }
+
+        // DOCK-009: urgency/attention indicator — a critical (freedesktop
+        // urgency level 2) active notification pulses on the icon corner.
+        Rectangle {
+            id: urgencyDot
+            visible: root.badge !== null && root.badge.critical
+            anchors.top: iconContainer.top
+            anchors.left: iconContainer.left
+            anchors.topMargin: -4
+            anchors.leftMargin: -4
+            width: 8
+            height: 8
+            radius: 4
+            color: Theme.error
+            border.width: 1
+            border.color: Theme.background
+
+            SequentialAnimation on opacity {
+                running: urgencyDot.visible
+                loops: Animation.Infinite
+                NumberAnimation { from: 1.0; to: 0.25; duration: 800; easing.type: Easing.InOutQuad }
+                NumberAnimation { from: 0.25; to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+            }
+        }
+
+        // DOCK-009: active-notification count badge (exact server state).
+        // Takes precedence over the apps-stack member count — a pending
+        // notification outranks a group size — and is tinted error-red for
+        // critical urgency.
+        Badge {
+            visible: root.badge !== null && root.badge.count > 0
+            anchors.top: iconContainer.top
+            anchors.right: iconContainer.right
+            anchors.topMargin: -6
+            anchors.rightMargin: -6
+            count: root.badge ? root.badge.count : 0
+            badgeColor: (root.badge && root.badge.critical) ? Theme.error : Theme.primary
+        }
+
         // DOCK-011: member count for app stacks (folder contents are live
-        // and unbounded; no count is shown for them).
+        // and unbounded; no count is shown for them). Hidden while a
+        // notification badge occupies the corner (see above).
         Badge {
             visible: root.isAppsStack && root.stack.appIds !== undefined && root.stack.appIds.length > 0
+                && !(root.badge !== null && root.badge.count > 0)
             anchors.top: iconContainer.top
             anchors.right: iconContainer.right
             anchors.topMargin: -6
@@ -734,11 +839,25 @@ Item {
         }
     }
 
+    // DOCK-009: activating the app's icon is attention — its active
+    // notifications are dismissed (their dock badges clear with them).
+    // Stack activation only opens the popup; members keep their badges
+    // until the user actually opens the app.
+    function attendToNotifications() {
+        if (root.isStack) return;
+        const app = root.app || ApplicationService.getAppById(root.appId);
+        if (app && app.id) {
+            NotificationService.dismissAppNotifications(
+                String(app.id).toLowerCase().replace(/\.desktop$/, ""));
+        }
+    }
+
     // Primary activation (left click / Enter / Space): launch, toggle window, or window chooser.
     // Stacks toggle their popup (app grid / folder listing).
     function activateItem() {
         if (root.dragging) return false;
         clickBounceAnim.restart();
+        root.attendToNotifications();
         if (root.isStack) {
             root.menuOpen = false;
             root.chooserOpen = false;
@@ -796,6 +915,7 @@ Item {
         clickBounceAnim.restart();
         root.chooserOpen = false;
         root.menuOpen = false;
+        root.attendToNotifications();
         if (root.parentWindowRef && root.parentWindowRef.activePopupItem) {
             root.parentWindowRef.activePopupItem = null;
         }

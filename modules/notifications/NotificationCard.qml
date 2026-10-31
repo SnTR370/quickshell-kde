@@ -7,7 +7,10 @@ Surface {
     id: root
 
     property var notification: null
-    signal dismissed(var id)
+    // byUser is true for explicit dismissals (close button, action invoked)
+    // and false for the auto-timeout: only user dismissals close the server
+    // notification, so its dock badge persists until attended (DOCK-009).
+    signal dismissed(var id, bool byUser)
 
     implicitWidth: 320
     implicitHeight: layout.implicitHeight + 20
@@ -23,7 +26,7 @@ Surface {
         repeat: false
         onTriggered: {
             if (root.notification) {
-                root.dismissed(root.notification.id);
+                root.dismissed(root.notification.id, false);
             }
         }
     }
@@ -60,7 +63,7 @@ Surface {
                 iconColor: Theme.foregroundMuted
                 onClicked: {
                     if (root.notification) {
-                        root.dismissed(root.notification.id);
+                        root.dismissed(root.notification.id, true);
                     }
                 }
             }
@@ -124,7 +127,7 @@ Surface {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             actBtn.modelData.invoke();
-                            root.dismissed(root.notification.id);
+                            root.dismissed(root.notification.id, true);
                         }
                     }
                 }
