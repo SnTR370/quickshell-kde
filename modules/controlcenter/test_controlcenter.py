@@ -147,7 +147,17 @@ class TestControlCenterModule(unittest.TestCase):
         import tempfile
         repo_dir = os.path.dirname(os.path.dirname(MODULE_DIR))
         with tempfile.TemporaryDirectory() as tmpdir:
+            # Isolated runtime (never the user's session): offscreen QPA,
+            # no WAYLAND_DISPLAY/DISPLAY, fresh private XDG_RUNTIME_DIR and
+            # XDG_CONFIG_HOME, private D-Bus session — same recipe as
+            # tests/test_layout_presets.py.
+            runtime_dir = os.path.join(tmpdir, "runtime")
+            os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
             env = os.environ.copy()
+            env.pop("WAYLAND_DISPLAY", None)
+            env.pop("DISPLAY", None)
+            env["QT_QPA_PLATFORM"] = "offscreen"
+            env["XDG_RUNTIME_DIR"] = runtime_dir
             env["XDG_CONFIG_HOME"] = tmpdir
             env["QUICKSHELL_TEST_MODE"] = "1"
             probe_path = os.path.join(repo_dir, "_test_controlcenter_runtime_probe.qml")
@@ -235,12 +245,12 @@ Scope {
 }
 """)
                 proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
+                    ["dbus-run-session", "--", "quickshell", "-p", probe_path, "--no-duplicate"],
                     cwd=repo_dir,
                     env=env,
                     capture_output=True,
                     text=True,
-                    timeout=6
+                    timeout=30
                 )
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "CC_RUNTIME_RESULT:"
