@@ -58,6 +58,13 @@ Singleton {
     property real dockMagnifyMaxScale: 1.5
     property int dockMagnifyRadius: 80
     property var dockMonitors: "all"
+    // Dock surface opacity, independent from barOpacity (P1-1). Existing
+    // configurations have no "opacity" key in dock_config.json: on load the
+    // dock inherits the persisted barOpacity once (see the bar store's
+    // onLoadedValue migration) so the visual state users tuned before the
+    // split is preserved; from then on the two knobs are separate.
+    property real dockOpacity: 0.92
+    property bool _dockOpacityExplicit: false
     // Dock window filter: all | desktop | monitor | desktop-and-monitor (invalid -> all)
     property string dockWindowFilter: "all"
     property var dockPinned: ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
@@ -278,6 +285,18 @@ Singleton {
             if (typeof parsed.opacity === "number" && Number.isFinite(parsed.opacity) && !mod["opacity"]) {
                 root.barOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
             }
+            // One-time migration for P1-1: before dockOpacity existed the
+            // dock rendered with the bar's opacity. Configurations without
+            // an explicit dock "opacity" key keep that visual state; the
+            // dock store's own load marks _dockOpacityExplicit when the
+            // key exists, so this never overrides an explicit dock value
+            // or a pre-load runtime modification. Store load order between
+            // bar and dock does not matter: whichever load arrives later
+            // determines the final inherited value only while neither was
+            // explicit.
+            if (!root._dockOpacityExplicit && !(dockStore.modifiedBeforeLoad || {})["opacity"]) {
+                root.dockOpacity = root.barOpacity;
+            }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.barMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
             }
@@ -334,6 +353,7 @@ Singleton {
             "magnifyMaxScale": 1.5,
             "magnifyRadius": 80,
             "monitors": "all",
+            "opacity": 0.92,
             "pinned": ["org.kde.dolphin", "org.kde.konsole", "firefox", "code", "systemsettings"]
         })
         property var modifiedBeforeLoad: ({})
@@ -374,6 +394,10 @@ Singleton {
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
+            }
+            if (typeof parsed.opacity === "number" && Number.isFinite(parsed.opacity) && !mod["opacity"]) {
+                root.dockOpacity = Math.max(0.1, Math.min(1.0, parsed.opacity));
+                root._dockOpacityExplicit = true;
             }
             // DOCK-012: per-monitor overrides are sanitized against the same
             // clamping rules as the global setters; invalid entries drop.
@@ -826,6 +850,7 @@ Singleton {
             "magnifyMaxScale": root.dockMagnifyMaxScale,
             "magnifyRadius": root.dockMagnifyRadius,
             "monitors": root.dockMonitors,
+            "opacity": root.dockOpacity,
             "windowFilter": root.dockWindowFilter,
             "pinned": root.dockPinned,
             "stacks": root.dockStacks,
@@ -872,6 +897,12 @@ Singleton {
     function setDockIconSize(size) {
         root._markDockModified("iconSize");
         root.dockIconSize = Math.max(20, Math.min(128, size));
+        saveDockConfig();
+    }
+
+    function setDockOpacity(op) {
+        root._markDockModified("opacity");
+        root.dockOpacity = Math.max(0.1, Math.min(1.0, op));
         saveDockConfig();
     }
 

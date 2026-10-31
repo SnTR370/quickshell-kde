@@ -397,7 +397,7 @@ Variants {
             implicitWidth: dockWindow.isVertical ? (dockWindow.iconSize + 16) : (rowLayout.implicitWidth + 16 + dockWindow.magnifiedGrowth)
             radius: dockWindow.isFloating ? Theme.radiusLarge : 0
             borderVisible: dockWindow.isFloating
-            color: Theme.alpha(Theme.background, ConfigService.barOpacity)
+            color: Theme.alpha(Theme.background, ConfigService.dockOpacity)
 
             // Autohide Sliding Offset via Translate to avoid anchor conflicts
             transform: Translate {

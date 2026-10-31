@@ -1050,6 +1050,25 @@ Variants {
 
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    Text {
+                                        text: "Dock Opacity (" + Math.round(ConfigService.dockOpacity * 100) + "%)"
+                                        color: Theme.foregroundMuted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        Layout.fillWidth: true
+                                    }
+                                    Slider {
+                                        implicitWidth: 180
+                                        minimumValue: 0.40
+                                        maximumValue: 1.00
+                                        stepSize: 0.02
+                                        value: ConfigService.dockOpacity
+                                        onValueModified: val => ConfigService.setDockOpacity(parseFloat(val.toFixed(2)))
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
 
                                     Text {
                                         text: "Magnify Dock Icons (pointer-follow parabolic zoom)"
