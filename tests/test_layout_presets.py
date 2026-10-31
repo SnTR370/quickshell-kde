@@ -329,7 +329,12 @@ class TestStaticContracts(unittest.TestCase):
                          "model: ConfigService.barRight"):
             self.assertIn(fragment, bar)
         for fragment in ("visible: ConfigService.dockEnabled",
-                         "ConfigService.dockIconSize"):
+                         # DOCK-012: dock geometry flows through the reactive
+                         # per-monitor profile (which itself binds the global
+                         # ConfigService properties), so preset application
+                         # still updates the Dock live.
+                         "ConfigService.effectiveDockProfile(",
+                         "monitorProfile.iconSize"):
             self.assertIn(fragment, dock)
 
     def test_qml_lint(self):

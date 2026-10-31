@@ -33,7 +33,11 @@ Item {
     readonly property var appWindows: WindowService.getFilteredWindowsForApp(root.appId, ConfigService.dockWindowFilter, root.filterScreenName)
     readonly property int windowCount: appWindows.length
     readonly property bool isCurrentAppActive: WindowService.activeWindowId !== "" && appWindows.some(w => WindowService.cleanWindowId(w.id) === WindowService.activeWindowId || w.id === WindowService.activeWindowId)
-    property real baseSize: ConfigService.dockIconSize
+    // DOCK-012: icon size and dock edge follow the OWNING dock surface's
+    // per-monitor profile when present; bare items without a parent window
+    // (tests, drag mocks) fall back to the global settings.
+    property real baseSize: (root.parentWindowRef && root.parentWindowRef.iconSize !== undefined)
+        ? root.parentWindowRef.iconSize : ConfigService.dockIconSize
     property bool menuOpen: false
     property bool chooserOpen: false
     property bool stackOpen: false
@@ -67,6 +71,8 @@ Item {
         + (root.windowCount > 1 ? (", " + root.windowCount + " windows")
            : (root.windowCount === 1 ? ", running" : ""))
         + (root.isPinned ? ", pinned" : "")
+    readonly property string dockEdge: (root.parentWindowRef && root.parentWindowRef.edge !== undefined)
+        ? root.parentWindowRef.edge : ConfigService.dockEdge
     readonly property bool isVerticalDock: root.parentWindowRef && root.parentWindowRef.isVertical !== undefined
         ? root.parentWindowRef.isVertical
         : (ConfigService.dockEdge === "left" || ConfigService.dockEdge === "right")
@@ -655,7 +661,7 @@ Item {
     Tooltip {
         parentWindow: root.parentWindowRef
         anchorItem: iconContainer
-        edge: ConfigService.dockEdge
+        edge: root.dockEdge
         offset: 4
         text: root.isStack
             ? (root.appName + (root.isAppsStack && root.stack.appIds && root.stack.appIds.length > 0
@@ -671,7 +677,7 @@ Item {
         sourceComponent: WindowChooserPopup {
             parentWindow: root.parentWindowRef || root.Window.window
             anchorItem: iconContainer
-            edge: ConfigService.dockEdge
+            edge: root.dockEdge
             appId: root.appId
             filterScreenName: root.filterScreenName
             app: root.app
@@ -687,7 +693,7 @@ Item {
         sourceComponent: StackPopup {
             parentWindow: root.parentWindowRef || root.Window.window
             anchorItem: iconContainer
-            edge: ConfigService.dockEdge
+            edge: root.dockEdge
             stack: root.stack
             onClosed: root.stackOpen = false
         }
@@ -704,7 +710,7 @@ Item {
             DockMenu {
                 parentWindow: root.parentWindowRef || root.Window.window
                 anchorItem: iconContainer
-                edge: ConfigService.dockEdge
+                edge: root.dockEdge
                 appId: root.appId
                 filterScreenName: root.filterScreenName
                 app: root.app
@@ -720,7 +726,7 @@ Item {
             StackMenu {
                 parentWindow: root.parentWindowRef || root.Window.window
                 anchorItem: iconContainer
-                edge: ConfigService.dockEdge
+                edge: root.dockEdge
                 stack: root.stack
                 onActionTriggered: root.menuOpen = false
                 onClosed: root.menuOpen = false

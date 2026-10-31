@@ -82,6 +82,7 @@ If user configuration files do not exist, the shell automatically uses defaults 
 * `revealDelay`: Edge hotspot hover delay in milliseconds before sliding in (default: `120`)
 * `monitors`: `"all"` or array of display names
 * `pinned`: List of desktop application IDs displayed in the dock
+* `monitorProfiles`: Per-display dock profile overrides (DOCK-012), e.g. `{"DP-1": {"edge": "left", "iconSize": 32}}`. Valid override keys: `edge`, `floating`, `edgeOffset` (0–64), `iconSize` (20–128), `autoHide`, `intellihide`. Missing or invalid overrides fall back to the global values; the section is optional and absent on first launch. Pinned applications, stacks and display selection stay global.
 
 ---
 

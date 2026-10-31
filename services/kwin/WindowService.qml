@@ -815,13 +815,14 @@ Singleton {
     }
 
     // ---- KWin event bridge (authoritative state when healthy) ----
-    // Loaded only for a live KWin session with Intellihide enabled. If the
+    // Loaded only for a live KWin session with Intellihide enabled (on the
+    // global toggle or on any per-monitor profile — DOCK-012). If the
     // compiled plugin is missing or its Qt/ABI does not match, the Loader
     // stays in error state and the snapshot-based sync path above remains
     // the authoritative writer (graceful degradation).
     Loader {
         id: bridgeLoader
-        active: root.isLiveKWinSession && ConfigService.dockIntellihide
+        active: root.isLiveKWinSession && ConfigService.anyDockIntellihide
         source: "bridge/BridgeHost.qml"
         onLoaded: {
             if (!item.enable(Quickshell.shellDir + "/services/kwin/scripts/kwin-event-bridge.js")) {

@@ -7,6 +7,7 @@ import "../kwin"
 import "../kwin/WindowFilter.js" as WindowFilter
 import "LayoutPresets.js" as LayoutPresets
 import "DockStacks.js" as DockStacks
+import "MonitorProfiles.js" as MonitorProfiles
 
 Singleton {
     id: root
@@ -64,6 +65,13 @@ Singleton {
     // { id, type: "apps"|"folder", title, icon?, path?, appIds } objects,
     // referenced from dockPinned via "stack:<id>" markers (see DockStacks.js).
     property var dockStacks: []
+    // DOCK-012: per-monitor dock profile overrides, keyed by output name
+    // (e.g. "DP-1"). Global dock settings remain the defaults; a named
+    // output may override edge, floating, edgeOffset, iconSize, autoHide
+    // and intellihide (see MonitorProfiles.js). Pinned applications,
+    // stacks and monitor selection stay global: Meta+1..9 shortcuts and
+    // the "stack:<id>" markers address one merged dock row.
+    property var dockMonitorProfiles: ({})
     property var canonicalAppIdResolver: null
 
     // --- Window Visibility State ---
@@ -366,6 +374,11 @@ Singleton {
             }
             if (parsed.monitors !== undefined && !mod["monitors"]) {
                 root.dockMonitors = (parsed.monitors === "primary" || parsed.monitors === "default") ? "all" : root._jsArray(parsed.monitors);
+            }
+            // DOCK-012: per-monitor overrides are sanitized against the same
+            // clamping rules as the global setters; invalid entries drop.
+            if (parsed.monitorProfiles !== undefined && !mod["monitorProfiles"]) {
+                root.dockMonitorProfiles = MonitorProfiles.sanitizeProfiles(parsed.monitorProfiles);
             }
             if (parsed.windowFilter !== undefined && !mod["windowFilter"]) {
                 root.dockWindowFilter = WindowFilter.normalizeMode(parsed.windowFilter);
@@ -815,7 +828,8 @@ Singleton {
             "monitors": root.dockMonitors,
             "windowFilter": root.dockWindowFilter,
             "pinned": root.dockPinned,
-            "stacks": root.dockStacks
+            "stacks": root.dockStacks,
+            "monitorProfiles": root.dockMonitorProfiles || {}
         });
     }
 
@@ -1197,6 +1211,70 @@ Singleton {
         root._markDockModified("stacks");
         root.dockStacks = nextStacks;
         saveDockConfig();
+    }
+
+    // --- Per-Monitor Dock Profiles (DOCK-012) ---
+    // All mutations replace the whole dockMonitorProfiles object (new
+    // identity) so var-property bindings re-evaluate; the pure shaping
+    // lives in MonitorProfiles.js.
+
+    // Window tracking must stay active when any single output overrides
+    // intellihide on, even while the global toggle is off.
+    readonly property bool anyDockIntellihide: root.dockIntellihide
+        || MonitorProfiles.anyProfileKey(root.dockMonitorProfiles, "intellihide", true)
+
+    function getDockMonitorProfile(screenName) {
+        return MonitorProfiles.getProfile(root.dockMonitorProfiles, screenName);
+    }
+
+    function hasDockMonitorProfile(screenName) {
+        return MonitorProfiles.getProfile(root.dockMonitorProfiles, screenName) !== null;
+    }
+
+    // Effective per-screen dock settings (overrides merged over the
+    // globals). Bindings calling this re-evaluate whenever one of the
+    // underlying properties is reassigned.
+    function effectiveDockProfile(screenName) {
+        return MonitorProfiles.effectiveProfile(root.dockMonitorProfiles, screenName, {
+            edge: root.dockEdge,
+            floating: root.dockFloating,
+            edgeOffset: root.dockEdgeOffset,
+            iconSize: root.dockIconSize,
+            autoHide: root.dockAutoHide,
+            intellihide: root.dockIntellihide
+        });
+    }
+
+    // Set one override for one output. Returns false for an unknown
+    // output name, a non-overridable key or an invalid value.
+    function setDockMonitorProfileKey(screenName, key, value) {
+        const clean = MonitorProfiles.sanitizeValue(key, value);
+        if (!MonitorProfiles.isValidScreenName(screenName) || clean === undefined) return false;
+        root._markDockModified("monitorProfiles");
+        root.dockMonitorProfiles = MonitorProfiles.setOverride(root.dockMonitorProfiles, screenName, key, clean);
+        saveDockConfig();
+        return true;
+    }
+
+    // Reset one override key back to the global value (drops the profile
+    // when it becomes empty).
+    function clearDockMonitorProfileKey(screenName, key) {
+        if (!MonitorProfiles.isValidScreenName(screenName)) return false;
+        const profile = MonitorProfiles.getProfile(root.dockMonitorProfiles, screenName);
+        if (!profile || profile[key] === undefined) return false;
+        root._markDockModified("monitorProfiles");
+        root.dockMonitorProfiles = MonitorProfiles.clearOverride(root.dockMonitorProfiles, screenName, key);
+        saveDockConfig();
+        return true;
+    }
+
+    // Remove a screen's whole profile (back to pure global settings).
+    function clearDockMonitorProfile(screenName) {
+        if (!root.hasDockMonitorProfile(screenName)) return false;
+        root._markDockModified("monitorProfiles");
+        root.dockMonitorProfiles = MonitorProfiles.clearProfile(root.dockMonitorProfiles, screenName);
+        saveDockConfig();
+        return true;
     }
 
     // --- Layout Presets ---

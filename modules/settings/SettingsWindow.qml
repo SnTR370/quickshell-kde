@@ -38,6 +38,8 @@ Variants {
         property string stackMessage: ""
         property string expandedStackId: ""
         property string stackQueryText: ""
+        // DOCK-012: per-monitor profile editor session state (never persisted)
+        property string expandedProfileScreen: ""
 
         function toggleExpandedStack(id) {
             if (settingsWin.expandedStackId === id) {
@@ -46,6 +48,11 @@ Variants {
                 settingsWin.expandedStackId = id;
                 settingsWin.stackQueryText = "";
             }
+        }
+
+        function toggleExpandedProfileScreen(name) {
+            settingsWin.expandedProfileScreen =
+                (settingsWin.expandedProfileScreen === name) ? "" : name;
         }
 
         function addFolderStack() {
@@ -1625,6 +1632,297 @@ Variants {
                                     font.pixelSize: Theme.fontSizeSmall
                                     wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
+                                }
+                            }
+                        }
+
+                        // 3c. Per-Monitor Dock Profiles (DOCK-012)
+                        Surface {
+                            id: profilesCard
+                            Layout.fillWidth: true
+                            implicitHeight: profilesCol.implicitHeight + 20
+                            radius: Theme.radiusMedium
+                            color: Theme.alpha(Theme.surface, 0.6)
+
+                            ColumnLayout {
+                                id: profilesCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Text {
+                                    text: "Per-Monitor Dock Profiles"
+                                    color: Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: "Independent Dock layout and appearance per display. The global settings above stay the defaults; each display can override edge, floating, offset, icon size, auto-hide and intellihide. Pinned applications, stacks and display selection stay shared across all Docks."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+
+                                Repeater {
+                                    model: Quickshell.screens
+
+                                    Surface {
+                                        id: profRow
+                                        required property var modelData
+                                        readonly property string screenName: modelData ? modelData.name : ""
+                                        // Live override set / effective values for this output.
+                                        readonly property var overrides: ConfigService.getDockMonitorProfile(profRow.screenName)
+                                        readonly property var eff: ConfigService.effectiveDockProfile(profRow.screenName)
+                                        readonly property bool hasOverride: overrides !== null
+                                        readonly property bool expanded: settingsWin.expandedProfileScreen === profRow.screenName
+                                        Layout.fillWidth: true
+                                        implicitHeight: profRowCol.implicitHeight + 16
+                                        radius: Theme.radiusSmall
+                                        color: Theme.alpha(Theme.background, 0.5)
+
+                                        ColumnLayout {
+                                            id: profRowCol
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 8
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+
+                                                Text {
+                                                    text: profRow.screenName
+                                                        + (profRow.modelData && profRow.modelData.model ? (" (" + profRow.modelData.model + ")") : "")
+                                                    color: Theme.foreground
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                Text {
+                                                    text: profRow.hasOverride ? "Overrides: " + Object.keys(profRow.overrides).join(", ") : "Using global settings"
+                                                    color: profRow.hasOverride ? Theme.primary : Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                    elide: Text.ElideMiddle
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                IconButton {
+                                                    size: 24
+                                                    icon: profRow.expanded ? "arrow-up" : "arrow-down"
+                                                    iconColor: Theme.foreground
+                                                    onClicked: settingsWin.toggleExpandedProfileScreen(profRow.screenName)
+                                                }
+
+                                                IconButton {
+                                                    visible: profRow.hasOverride
+                                                    size: 24
+                                                    icon: "edit-delete"
+                                                    iconColor: Theme.error
+                                                    onClicked: ConfigService.clearDockMonitorProfile(profRow.screenName)
+                                                }
+                                            }
+
+                                            // Per-output override editor
+                                            ColumnLayout {
+                                                visible: profRow.expanded
+                                                Layout.fillWidth: true
+                                                spacing: 8
+
+                                                Text {
+                                                    text: "Edge Placement (effective: " + profRow.eff.edge + ")"
+                                                    color: Theme.foregroundMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: Theme.fontSizeSmall
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 6
+
+                                                    Repeater {
+                                                        model: [
+                                                            { id: "", name: "Default", key: "edge" },
+                                                            { id: "bottom", name: "Bottom", key: "edge" },
+                                                            { id: "top", name: "Top", key: "edge" },
+                                                            { id: "left", name: "Left", key: "edge" },
+                                                            { id: "right", name: "Right", key: "edge" }
+                                                        ]
+
+                                                        Rectangle {
+                                                            id: mpEdgeBtn
+                                                            required property var modelData
+                                                            Layout.fillWidth: true
+                                                            implicitHeight: 28
+                                                            radius: Theme.radiusSmall
+                                                            readonly property bool selected: (mpEdgeBtn.modelData.id === "")
+                                                                ? !(profRow.overrides && profRow.overrides.edge !== undefined)
+                                                                : (profRow.overrides && profRow.overrides.edge === mpEdgeBtn.modelData.id)
+                                                            color: selected ? Theme.primary : (mpEdgeMouse.containsMouse ? Theme.hover : Theme.surfaceVariant)
+
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: mpEdgeBtn.modelData.name
+                                                                color: mpEdgeBtn.selected ? Theme.contrastColor(Theme.primary) : Theme.foreground
+                                                                font.family: Theme.fontFamily
+                                                                font.pixelSize: Theme.fontSizeSmall
+                                                                font.bold: mpEdgeBtn.selected
+                                                            }
+
+                                                            MouseArea {
+                                                                id: mpEdgeMouse
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (mpEdgeBtn.modelData.id === "") {
+                                                                        ConfigService.clearDockMonitorProfileKey(profRow.screenName, "edge");
+                                                                    } else {
+                                                                        ConfigService.setDockMonitorProfileKey(profRow.screenName, "edge", mpEdgeBtn.modelData.id);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+
+                                                    Text {
+                                                        text: "Floating (effective: " + (profRow.eff.floating ? "floating" : "attached") + ")"
+                                                        color: Theme.foregroundMuted
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: Theme.fontSizeSmall
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    IconButton {
+                                                        text: (profRow.overrides && profRow.overrides.floating !== undefined)
+                                                            ? (profRow.overrides.floating ? "Floating (override)" : "Attached (override)")
+                                                            : ("Use " + (profRow.eff.floating ? "Floating" : "Attached"))
+                                                        size: 26
+                                                        backgroundColor: (profRow.overrides && profRow.overrides.floating !== undefined) ? Theme.primary : Theme.surfaceVariant
+                                                        iconColor: (profRow.overrides && profRow.overrides.floating !== undefined) ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                                        onClicked: ConfigService.setDockMonitorProfileKey(profRow.screenName, "floating", !profRow.eff.floating)
+                                                    }
+
+                                                    IconButton {
+                                                        visible: profRow.overrides && profRow.overrides.floating !== undefined
+                                                        text: "Default"
+                                                        size: 26
+                                                        iconColor: Theme.foregroundMuted
+                                                        onClicked: ConfigService.clearDockMonitorProfileKey(profRow.screenName, "floating")
+                                                    }
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    Text {
+                                                        text: "Icon Size (" + profRow.eff.iconSize + " px)"
+                                                        color: Theme.foregroundMuted
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: Theme.fontSizeSmall
+                                                        Layout.fillWidth: true
+                                                    }
+                                                    Slider {
+                                                        implicitWidth: 150
+                                                        minimumValue: 20
+                                                        maximumValue: 128
+                                                        stepSize: 2
+                                                        value: profRow.eff.iconSize
+                                                        onValueModified: val => ConfigService.setDockMonitorProfileKey(profRow.screenName, "iconSize", Math.round(val))
+                                                    }
+                                                    IconButton {
+                                                        visible: profRow.overrides && profRow.overrides.iconSize !== undefined
+                                                        text: "Default"
+                                                        size: 26
+                                                        iconColor: Theme.foregroundMuted
+                                                        onClicked: ConfigService.clearDockMonitorProfileKey(profRow.screenName, "iconSize")
+                                                    }
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    Text {
+                                                        text: "Floating Edge Offset (" + profRow.eff.edgeOffset + " px)"
+                                                        color: Theme.foregroundMuted
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: Theme.fontSizeSmall
+                                                        Layout.fillWidth: true
+                                                    }
+                                                    Slider {
+                                                        implicitWidth: 150
+                                                        minimumValue: 0
+                                                        maximumValue: 64
+                                                        stepSize: 1
+                                                        value: profRow.eff.edgeOffset
+                                                        onValueModified: val => ConfigService.setDockMonitorProfileKey(profRow.screenName, "edgeOffset", Math.round(val))
+                                                    }
+                                                    IconButton {
+                                                        visible: profRow.overrides && profRow.overrides.edgeOffset !== undefined
+                                                        text: "Default"
+                                                        size: 26
+                                                        iconColor: Theme.foregroundMuted
+                                                        onClicked: ConfigService.clearDockMonitorProfileKey(profRow.screenName, "edgeOffset")
+                                                    }
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+
+                                                    Text {
+                                                        text: "Auto-hide / Intellihide (effective: " + (profRow.eff.autoHide ? (profRow.eff.intellihide ? "intellihide" : "auto-hide") : "off") + ")"
+                                                        color: Theme.foregroundMuted
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: Theme.fontSizeSmall
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    IconButton {
+                                                        text: profRow.eff.autoHide ? "Auto-hide On" : "Auto-hide Off"
+                                                        size: 26
+                                                        backgroundColor: (profRow.overrides && profRow.overrides.autoHide !== undefined) ? Theme.primary : Theme.surfaceVariant
+                                                        iconColor: (profRow.overrides && profRow.overrides.autoHide !== undefined) ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                                        onClicked: ConfigService.setDockMonitorProfileKey(profRow.screenName, "autoHide", !profRow.eff.autoHide)
+                                                    }
+
+                                                    IconButton {
+                                                        text: profRow.eff.intellihide ? "Intellihide On" : "Intellihide Off"
+                                                        size: 26
+                                                        backgroundColor: (profRow.overrides && profRow.overrides.intellihide !== undefined) ? Theme.primary : Theme.surfaceVariant
+                                                        iconColor: (profRow.overrides && profRow.overrides.intellihide !== undefined) ? Theme.contrastColor(Theme.primary) : Theme.foregroundMuted
+                                                        onClicked: ConfigService.setDockMonitorProfileKey(profRow.screenName, "intellihide", !profRow.eff.intellihide)
+                                                    }
+
+                                                    IconButton {
+                                                        visible: profRow.overrides && (profRow.overrides.autoHide !== undefined || profRow.overrides.intellihide !== undefined)
+                                                        text: "Default"
+                                                        size: 26
+                                                        iconColor: Theme.foregroundMuted
+                                                        onClicked: {
+                                                            ConfigService.clearDockMonitorProfileKey(profRow.screenName, "autoHide");
+                                                            ConfigService.clearDockMonitorProfileKey(profRow.screenName, "intellihide");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: Quickshell.screens.length === 0
+                                    text: "No displays detected."
+                                    color: Theme.foregroundMuted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
                             }
                         }

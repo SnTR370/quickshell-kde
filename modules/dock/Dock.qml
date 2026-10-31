@@ -22,13 +22,19 @@ Variants {
         color: "transparent"
         visible: ConfigService.dockEnabled && ConfigService.isScreenAllowed(modelData, ConfigService.dockMonitors)
 
-        readonly property string edge: ConfigService.dockEdge
+        // DOCK-012: effective per-monitor profile for THIS output (overrides
+        // merged over the global defaults; see MonitorProfiles.js). The
+        // Variants model re-evaluates on hotplug, so a newly connected
+        // output resolves its profile without a restart.
+        readonly property var monitorProfile: ConfigService.effectiveDockProfile(modelData ? modelData.name : "")
+        readonly property string edge: monitorProfile.edge
         readonly property bool isVertical: edge === "left" || edge === "right"
-        readonly property bool isFloating: ConfigService.dockFloating
-        readonly property int offset: isFloating ? ConfigService.dockEdgeOffset : 0
+        readonly property bool isFloating: monitorProfile.floating
+        readonly property int offset: isFloating ? monitorProfile.edgeOffset : 0
         // autoHide = hide-capable (legacy auto-hide OR intellihide). Intellihide wins when both set.
-        readonly property bool intellihide: ConfigService.dockIntellihide
-        readonly property bool autoHide: ConfigService.dockAutoHide || ConfigService.dockIntellihide
+        readonly property bool intellihide: monitorProfile.intellihide
+        readonly property bool autoHide: monitorProfile.autoHide || monitorProfile.intellihide
+        readonly property int iconSize: monitorProfile.iconSize
         // Revealed footprint: uses implicit surface size, never the animated Translate.
         readonly property var footprint: Intellihide.dockFootprint(
             modelData ? { x: modelData.x, y: modelData.y, width: modelData.width, height: modelData.height } : null,
@@ -214,7 +220,7 @@ Variants {
                 if (!ConfigService.dockMagnification) dockWindow.resetMagnification();
             }
         }
-        readonly property bool isRevealed: Intellihide.isRevealed(ConfigService.dockAutoHide, intellihide, intellihideObstructed,
+        readonly property bool isRevealed: Intellihide.isRevealed(dockWindow.autoHide, intellihide, intellihideObstructed,
             hoverRevealed || dockAreaHover.hovered || dockHoverHandler.hovered || hasActivePopup || isDragging || keyboardNavActive)
 
         readonly property var unpinnedRunningApps: {
@@ -266,7 +272,7 @@ Variants {
 
         implicitHeight: isVertical ? (dockSurface.implicitHeight + 24) : (dockSurface.implicitHeight + (isFloating ? offset : 0))
         implicitWidth: isVertical ? (dockSurface.implicitWidth + (isFloating ? offset : 0)) : (dockSurface.implicitWidth + 24)
-        exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (ConfigService.dockIconSize + 16 + (isFloating ? offset : 0))
+        exclusiveZone: (autoHide || !ConfigService.dockReserveSpace) ? 0 : (dockWindow.iconSize + 16 + (isFloating ? offset : 0))
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:dock"
@@ -387,8 +393,8 @@ Variants {
             // the background. The surface is anchored at its center and the layout
             // is centered in the surface, so this growth is symmetric and the
             // layout's rest geometry does not move.
-            implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16 + dockWindow.magnifiedGrowth) : (ConfigService.dockIconSize + 16)
-            implicitWidth: dockWindow.isVertical ? (ConfigService.dockIconSize + 16) : (rowLayout.implicitWidth + 16 + dockWindow.magnifiedGrowth)
+            implicitHeight: dockWindow.isVertical ? (colLayout.implicitHeight + 16 + dockWindow.magnifiedGrowth) : (dockWindow.iconSize + 16)
+            implicitWidth: dockWindow.isVertical ? (dockWindow.iconSize + 16) : (rowLayout.implicitWidth + 16 + dockWindow.magnifiedGrowth)
             radius: dockWindow.isFloating ? Theme.radiusLarge : 0
             borderVisible: dockWindow.isFloating
             color: Theme.alpha(Theme.background, ConfigService.barOpacity)
@@ -473,7 +479,7 @@ Variants {
                     IconButton {
                         parentWindow: dockWindow
                         edge: dockWindow.edge
-                        size: ConfigService.dockIconSize
+                        size: dockWindow.iconSize
                         icon: "start-here-kde"
                         iconColor: Theme.primary
                         backgroundColor: Theme.alpha(Theme.primary, 0.12)
@@ -525,7 +531,7 @@ Variants {
                     IconButton {
                         parentWindow: dockWindow
                         edge: dockWindow.edge
-                        size: ConfigService.dockIconSize
+                        size: dockWindow.iconSize
                         icon: "preferences-system"
                         iconColor: Theme.foreground
                         tooltip: "Settings"
@@ -548,7 +554,7 @@ Variants {
                     IconButton {
                         parentWindow: dockWindow
                         edge: dockWindow.edge
-                        size: ConfigService.dockIconSize
+                        size: dockWindow.iconSize
                         icon: "start-here-kde"
                         iconColor: Theme.primary
                         backgroundColor: Theme.alpha(Theme.primary, 0.12)
@@ -600,7 +606,7 @@ Variants {
                     IconButton {
                         parentWindow: dockWindow
                         edge: dockWindow.edge
-                        size: ConfigService.dockIconSize
+                        size: dockWindow.iconSize
                         icon: "preferences-system"
                         iconColor: Theme.foreground
                         tooltip: "Settings"
