@@ -14,11 +14,18 @@ and mouse click interactions are marked MANUAL where automated emulation is not 
 import os
 import sys
 import json
+import shutil
+import tempfile
 import time
 import subprocess
 import unittest
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Live-session tests (real session-bus state: KWin WindowsRunner, MPRIS,
+# org.kde.ScreenBrightness) are opt-in: they depend on whatever is running
+# on the user's desktop and must not run in the default regression suite.
+LIVE_TESTS_OPT_IN = os.environ.get("QS_KDE_LIVE_SESSION_TESTS") == "1"
 sys.path.insert(0, os.path.join(REPO_DIR, "services", "applications"))
 sys.path.insert(0, os.path.join(REPO_DIR, "services", "brightness"))
 
@@ -257,6 +264,8 @@ class TestDesktopUX(unittest.TestCase):
 
     def test_08_live_dbus_brightness_display_discovery(self):
         """Live D-Bus test: Execute discover_displays.py against real org.kde.ScreenBrightness service."""
+        if not LIVE_TESTS_OPT_IN:
+            self.skipTest("live session-bus test; set QS_KDE_LIVE_SESSION_TESTS=1 to opt in")
         out = subprocess.check_output([sys.executable, os.path.join(REPO_DIR, "services/brightness/discover_displays.py")], text=True)
         disps = json.loads(out)
         self.assertIsInstance(disps, list)
@@ -322,29 +331,70 @@ class TestDesktopUX(unittest.TestCase):
     # --- 6. Startup Smoke Test ---
 
     def test_11_quickshell_process_startup_smoke_test(self):
-        """Startup smoke test: Execute quickshell with root shell.qml to verify QML compilation and initial startup."""
-        proc = subprocess.Popen(
-            ["quickshell", "-p", "./shell.qml"],
-            cwd=REPO_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        time.sleep(2)
-        poll_res = proc.poll()
-        is_alive = poll_res is None
-        proc.terminate()
-        try:
-            proc.communicate(timeout=2)
-        except Exception:
-            proc.kill()
+        """Startup smoke test against an ISOLATED virtual KWin, never the user's session.
 
-        self.assertTrue(is_alive, f"Quickshell failed to run: exit_code={poll_res}")
+        Runs the root shell.qml inside a private D-Bus session against
+        `kwin_wayland --virtual` with private XDG_RUNTIME_DIR/XDG_CONFIG_HOME
+        (same recipe as tests/test_milestone_3a.py test_09). Previously this
+        attached the real shell to the active graphical session and used the
+        user's real config directory.
+        """
+        missing = [t for t in ("quickshell", "kwin_wayland", "dbus-run-session", "bash")
+                   if shutil.which(t) is None]
+        if missing:
+            self.skipTest("isolated startup rig requires: " + ", ".join(missing))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime_dir = os.path.join(tmpdir, "runtime")
+            os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
+            env = dict(os.environ)
+            env.pop("WAYLAND_DISPLAY", None)
+            env.pop("DISPLAY", None)
+            env.update({
+                "XDG_RUNTIME_DIR": runtime_dir,
+                "XDG_CONFIG_HOME": tmpdir,
+                "QT_QPA_PLATFORM": "wayland",
+            })
+            env.pop("JOURNAL_STREAM", None)
+            env.pop("INVOCATION_ID", None)
+            rig = (
+                "set -u\n"
+                "kwin_wayland --virtual --width 1280 --height 800 --no-lockscreen "
+                "--no-global-shortcuts --no-kactivities --socket qsrigux "
+                ">'" + tmpdir + "/kwin.log' 2>&1 &\n"
+                "KWINPID=$!\n"
+                "for i in $(seq 1 150); do [ -e \"$XDG_RUNTIME_DIR/qsrigux\" ] && break; sleep 0.1; done\n"
+                "if [ ! -e \"$XDG_RUNTIME_DIR/qsrigux\" ]; then echo KWIN-NO-SOCKET; "
+                "kill $KWINPID 2>/dev/null; exit 1; fi\n"
+                "sleep 1\n"
+                "export WAYLAND_DISPLAY=qsrigux\n"
+                "quickshell -p '" + REPO_DIR + "/shell.qml' --no-duplicate "
+                ">'" + tmpdir + "/shell.log' 2>&1 &\n"
+                "QSPID=$!\n"
+                "sleep 3\n"
+                "if kill -0 $QSPID 2>/dev/null; then echo SHELL-RUNNING; else echo SHELL-EXITED; fi\n"
+                "kill $QSPID 2>/dev/null; wait $QSPID 2>/dev/null\n"
+                "kill $KWINPID 2>/dev/null; wait $KWINPID 2>/dev/null\n"
+                "exit 0\n"
+            )
+            proc = subprocess.run(
+                ["dbus-run-session", "--", "bash", "-c", rig],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            self.assertIn("SHELL-RUNNING", combined,
+                          "Quickshell failed to stay running in the isolated rig "
+                          f"(rc={proc.returncode}):\n{combined[-3000:]}")
 
     # --- 7. Live KWin WindowsRunner Enumeration Test ---
 
     def test_12_live_kwin_running_apps_enumeration(self):
         """Live Integration test: Query real KWin /WindowsRunner and verify empty-icon windows parse into runningAppIds."""
+        if not LIVE_TESTS_OPT_IN:
+            self.skipTest("live session-bus test (depends on the user's running "
+                          "apps); set QS_KDE_LIVE_SESSION_TESTS=1 to opt in")
         try:
             raw = subprocess.check_output(
                 ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Match", ""],

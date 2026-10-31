@@ -16,12 +16,48 @@ Comprehensive automated test suite covering:
 
 import os
 import json
+import shutil
 import time
 import tempfile
 import unittest
 import subprocess
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def isolated_probe_env(tmpdir):
+    """Session-safe environment for quickshell probe runs.
+
+    Never inherits the user's graphical session: strips WAYLAND_DISPLAY /
+    DISPLAY, selects the offscreen QPA platform and points XDG_RUNTIME_DIR
+    and XDG_CONFIG_HOME at the caller's temporary directory. Probes must be
+    launched through run_isolated_probe() so their D-Bus activity stays on a
+    private bus instead of the live Plasma session bus.
+    """
+    env = os.environ.copy()
+    env.pop("WAYLAND_DISPLAY", None)
+    env.pop("DISPLAY", None)
+    runtime_dir = os.path.join(tmpdir, "probe-runtime")
+    os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["XDG_RUNTIME_DIR"] = runtime_dir
+    env["XDG_CONFIG_HOME"] = tmpdir
+    env.pop("JOURNAL_STREAM", None)
+    env.pop("INVOCATION_ID", None)
+    return env
+
+
+def run_isolated_probe(probe_path, env, timeout=20):
+    """Run a quickshell probe inside its own D-Bus session (never the live one)."""
+    return subprocess.run(
+        ["dbus-run-session", "--", "quickshell", "-p", probe_path, "--no-duplicate"],
+        cwd=REPO_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout
+    )
+
 
 class TestMilestone3A(unittest.TestCase):
 
@@ -257,26 +293,62 @@ class TestMilestone3A(unittest.TestCase):
         self.assertTrue(is_allowed("eDP-1", "primary")) # legacy fallback
 
     def test_09_quickshell_startup_smoke_test(self):
-        """Startup smoke test: execute quickshell against root shell.qml to verify syntax/QML engine startup."""
+        """Startup smoke test against an ISOLATED virtual KWin, never the user's session.
+
+        Runs the root shell.qml inside a private D-Bus session against
+        `kwin_wayland --virtual` with private XDG_RUNTIME_DIR/XDG_CONFIG_HOME
+        (same rig recipe as tests/test_kwin_bridge_integration.py). Skipped
+        when the rig tools are unavailable. Previously this launched the real
+        shell against the active graphical session.
+        """
+        missing = [t for t in ("quickshell", "kwin_wayland", "dbus-run-session", "bash")
+                   if shutil.which(t) is None]
+        if missing:
+            self.skipTest("isolated startup rig requires: " + ", ".join(missing))
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
-            proc = subprocess.Popen(
-                ["quickshell", "-p", "./shell.qml", "--no-duplicate"],
-                cwd=REPO_DIR,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+            runtime_dir = os.path.join(tmpdir, "runtime")
+            os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
+            env = dict(os.environ)
+            env.pop("WAYLAND_DISPLAY", None)
+            env.pop("DISPLAY", None)
+            env.update({
+                "XDG_RUNTIME_DIR": runtime_dir,
+                "XDG_CONFIG_HOME": tmpdir,
+                "QT_QPA_PLATFORM": "wayland",
+            })
+            env.pop("JOURNAL_STREAM", None)
+            env.pop("INVOCATION_ID", None)
+            rig = (
+                "set -u\n"
+                "kwin_wayland --virtual --width 1280 --height 800 --no-lockscreen "
+                "--no-global-shortcuts --no-kactivities --socket qsrig3a "
+                ">'" + tmpdir + "/kwin.log' 2>&1 &\n"
+                "KWINPID=$!\n"
+                "for i in $(seq 1 150); do [ -e \"$XDG_RUNTIME_DIR/qsrig3a\" ] && break; sleep 0.1; done\n"
+                "if [ ! -e \"$XDG_RUNTIME_DIR/qsrig3a\" ]; then echo KWIN-NO-SOCKET; "
+                "kill $KWINPID 2>/dev/null; exit 1; fi\n"
+                "sleep 1\n"
+                "export WAYLAND_DISPLAY=qsrig3a\n"
+                "quickshell -p '" + REPO_DIR + "/shell.qml' --no-duplicate "
+                ">'" + tmpdir + "/shell.log' 2>&1 &\n"
+                "QSPID=$!\n"
+                "sleep 3\n"
+                "if kill -0 $QSPID 2>/dev/null; then echo SHELL-RUNNING; else echo SHELL-EXITED; fi\n"
+                "kill $QSPID 2>/dev/null; wait $QSPID 2>/dev/null\n"
+                "kill $KWINPID 2>/dev/null; wait $KWINPID 2>/dev/null\n"
+                "exit 0\n"
             )
-            time.sleep(2)
-            is_running = proc.poll() is None
-            proc.terminate()
-            try:
-                proc.communicate(timeout=2)
-            except Exception:
-                proc.kill()
-            self.assertTrue(is_running, "Quickshell process crashed or exited unexpectedly during startup")
+            proc = subprocess.run(
+                ["dbus-run-session", "--", "bash", "-c", rig],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            self.assertIn("SHELL-RUNNING", combined,
+                          "Quickshell failed to stay running in the isolated rig "
+                          f"(rc={proc.returncode}):\n{combined[-3000:]}")
 
     def test_10_tray_visibility_and_id_collisions(self):
         """Verify tray visibility policies, live status transitions, chevron rules, and _status_icon_N collision/transition safety."""
@@ -296,8 +368,7 @@ class TestMilestone3A(unittest.TestCase):
         self.assertIn("function setTrayItemPolicy", cfg_content)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_tray_regression_probe.qml")
             reload_probe_path = os.path.join(REPO_DIR, "_test_tray_reload_probe.qml")
             try:
@@ -403,14 +474,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=20)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "TRAY_TEST_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
@@ -469,14 +533,7 @@ Scope {
     }
 }
 """)
-                proc_reload = subprocess.run(
-                    ["quickshell", "-p", reload_probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc_reload = run_isolated_probe(reload_probe_path, env, timeout=20)
                 reload_combined = (proc_reload.stdout or "") + "\n" + (proc_reload.stderr or "")
                 reload_marker = "TRAY_RELOAD_RESULT:"
                 self.assertIn(reload_marker, reload_combined, f"Missing reload marker:\\n{reload_combined}")
@@ -495,8 +552,7 @@ Scope {
     def test_11_window_identity_and_ghost_dock_prevention(self):
         """Verify KWin window identity resolution ignores window titles, resolves StartupWMClass/desktopFile, filters uninstalled pinned apps, and keeps unknown apps deterministic."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_window_identity_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -606,14 +662,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=20)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "WINDOW_IDENTITY_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
@@ -664,8 +713,7 @@ Scope {
     def test_12_kwin_metadata_cache_edge_cases(self):
         """Verify KWin metadata cache handles failure retries, closed windows during query, and queued queries."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_cache_edge_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -740,14 +788,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=20)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "CACHE_EDGE_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
@@ -795,8 +836,7 @@ Scope {
         self.assertIn("WindowService.getTargetOutputsForWindow(", dm_text)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_window_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -968,14 +1008,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=20)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "WINDOW_ACTIONS_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
@@ -1037,8 +1070,7 @@ Scope {
     def test_16_json_store_and_config_service_durability(self):
         """Live QML Runtime Test: Verify JsonStore and ConfigService durability under pre-load mutations, rapid saves, deferred loads, serialize/write failures, and corrupt/empty JSON preservation."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             cfg_dir = os.path.join(tmpdir, "quickshell-kde")
             os.makedirs(cfg_dir, exist_ok=True)
             corrupt_path = os.path.join(cfg_dir, "corrupt_store.json")
@@ -1162,14 +1194,7 @@ Scope {{
     }}
 }}
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=30)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "PHASE_C_DURABILITY_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\\n{combined}")
