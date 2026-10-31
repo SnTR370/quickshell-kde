@@ -32,7 +32,23 @@ Singleton {
         }
     }
 
+    // The theme id is substituted into a file path under themes/ and read
+    // by a process; only a strict id charset is accepted (no separators,
+    // no traversal, no absolute paths). theme_config.json is user-writable,
+    // so this must not be trusted blindly.
+    function isValidThemeId(themeId) {
+        if (typeof themeId !== "string") return false;
+        const id = themeId.trim();
+        if (id.length === 0 || id.length > 64) return false;
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(id)) return false;
+        return id.indexOf("..") === -1;
+    }
+
     function selectTheme(themeId) {
+        if (!isValidThemeId(themeId)) {
+            Log.warn("ThemeService", "Rejected invalid theme id: " + themeId);
+            return;
+        }
         // Load theme file safely using resolved path
         const themePath = Qt.resolvedUrl("../../themes/" + themeId + ".json").toString().replace(/^file:\/\//, "");
         themeReader.command = ["cat", themePath];
@@ -63,6 +79,10 @@ Singleton {
     }
 
     function saveThemeSelection(themeId) {
+        if (!isValidThemeId(themeId)) {
+            Log.warn("ThemeService", "Refused to save invalid theme id: " + themeId);
+            return;
+        }
         selectTheme(themeId);
         themeConfigStore.save({ "activeTheme": themeId });
     }
