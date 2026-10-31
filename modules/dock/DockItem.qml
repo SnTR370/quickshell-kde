@@ -719,7 +719,7 @@ Item {
             anchors.right: iconContainer.right
             anchors.topMargin: -6
             anchors.rightMargin: -6
-            count: root.stack.appIds ? root.stack.appIds.length : 0
+            count: (root.stack && root.stack.appIds) ? root.stack.appIds.length : 0
             badgeColor: Theme.primary
         }
 

@@ -310,6 +310,14 @@ class TestMetaShortcutsStackInteraction(unittest.TestCase):
 class TestStaticContracts(unittest.TestCase):
     """Source contracts for the QML integration (no runtime)."""
 
+    def test_dock_item_stack_bindings_null_safe(self):
+        """Every DockItem (stack or plain app) evaluates the member-count
+        Badge's count binding: it must not dereference root.stack when the
+        item is not a stack (TypeError warning spam otherwise)."""
+        src = read(os.path.join(REPO, "modules/dock/DockItem.qml"))
+        self.assertIn(
+            "count: (root.stack && root.stack.appIds) ? root.stack.appIds.length : 0", src)
+
     def test_config_service_stack_api(self):
         src = read(CONFIG_SERVICE)
         self.assertIn('import "DockStacks.js" as DockStacks', src)
