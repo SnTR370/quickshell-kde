@@ -970,6 +970,31 @@ Singleton {
         onTriggered: root.syncMetaShortcuts()
     }
 
+    // Bounded health check (P1-5): KWin does not keep transiently loaded
+    // scripts across a restart, which would silently kill Meta+1..9 until
+    // the pinned list changed. While the feature is enabled AND a load has
+    // succeeded, ask KWin at a slow fixed cadence whether the owned script
+    // is still loaded; a definitive "not loaded" answer (KWin reachable,
+    // script gone) clears the loaded marker and re-enters the ordinary
+    // debounced reload path. An unreachable KWin (restart in progress,
+    // qdbus failure) is ignored — the next tick re-checks, so there is no
+    // retry storm and no unbounded work while the feature is off.
+    Timer {
+        id: metaShortcutsHealthTimer
+        interval: 5000
+        repeat: true
+        running: root.metaShortcutsEnabled && root.metaShortcutsLoadedJson !== ""
+        onTriggered: {
+            if (root.metaShortcutsLoadInFlight || metaShortcutsProc.running) return;
+            metaShortcutsProc.mode = "check";
+            metaShortcutsProc.json = "";
+            metaShortcutsProc.buf = "";
+            metaShortcutsProc.command = ["qdbus6", "org.kde.KWin", "/Scripting",
+                "org.kde.kwin.Scripting.isScriptLoaded", root.metaShortcutsPluginName];
+            metaShortcutsProc.running = true;
+        }
+    }
+
     onMetaShortcutsEnabledChanged: {
         root.metaShortcutsFailedLoads = 0;
         metaShortcutsDebounce.restart();
@@ -983,12 +1008,29 @@ Singleton {
         id: metaShortcutsProc
         property string mode: ""
         property string json: ""
+        property string buf: ""
         stdout: SplitParser {
-            onRead: data => { void(data); }
+            onRead: data => { metaShortcutsProc.buf += data; }
         }
         onExited: exitCode => {
+            const mode = metaShortcutsProc.mode;
+            const buf = metaShortcutsProc.buf;
+            metaShortcutsProc.buf = "";
+            if (mode === "check") {
+                // Health check (P1-5): only a definitive "not loaded" answer
+                // (exit 0, KWin replied false) triggers a resync. A failed
+                // call means KWin is unreachable (e.g. restarting); the next
+                // health tick re-checks — never a retry loop.
+                if (exitCode === 0 && buf.trim().indexOf("false") !== -1) {
+                    Log.info("WindowService", "Meta+1..9 KWin script no longer loaded (KWin restart?); resyncing");
+                    root.metaShortcutsLoadedJson = "";
+                    root.metaShortcutsFailedLoads = 0;
+                    metaShortcutsDebounce.restart();
+                }
+                return;
+            }
             root.metaShortcutsLoadInFlight = false;
-            if (metaShortcutsProc.mode === "load") {
+            if (mode === "load") {
                 if (exitCode === 0) {
                     root.metaShortcutsLoadedJson = metaShortcutsProc.json;
                     root.metaShortcutsFailedLoads = 0;
@@ -1007,8 +1049,8 @@ Singleton {
     }
 
     function syncMetaShortcuts() {
-        if (root.metaShortcutsLoadInFlight) {
-            // A load/unload is still running; retry after it settles.
+        if (root.metaShortcutsLoadInFlight || metaShortcutsProc.running) {
+            // A load/unload/health-check is still running; retry after it settles.
             metaShortcutsDebounce.restart();
             return;
         }

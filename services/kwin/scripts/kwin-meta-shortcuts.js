@@ -25,6 +25,11 @@
  *   - otherwise                     -> cycle to the window after the last
  *                                      one this script activated (click
  *                                      "chooser" becomes cycling)
+ *
+ * Lifecycle: KWin drops transiently loaded scripts on restart (and on
+ * kwin --replace). WindowService's bounded health check
+ * (metaShortcutsHealthTimer) detects the loss and reloads this script
+ * through services/kwin/scripts/kwin-meta-shortcuts.sh.
  */
 (function () {
     "use strict";

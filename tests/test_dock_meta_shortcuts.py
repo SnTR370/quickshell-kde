@@ -211,9 +211,19 @@ class TestStaticWiring(unittest.TestCase):
         self.assertIn("root.isLiveKWinSession", block)
         self.assertIn("ConfigService.dockEnabled", block)
         self.assertIn("ConfigService.dockMetaShortcuts", block)
-        # Debounce only: the timer must never repeat (no polling).
+        # Debounce timer must never repeat.
         self.assertIn("repeat: false", block)
-        self.assertNotIn("repeat: true", block)
+        # The only repeating timer in this block is the bounded P1-5 health
+        # check: slow cadence, gated on the feature being enabled AND a
+        # successful load, and it only reads KWin state (never mutates).
+        self.assertEqual(block.count("repeat: true"), 1)
+        self.assertIn("id: metaShortcutsHealthTimer", block)
+        self.assertIn("running: root.metaShortcutsEnabled && root.metaShortcutsLoadedJson !== \"\"",
+                      block)
+        self.assertIn("interval: 5000", block)
+        # Health check decision: only a definitive KWin answer ("not loaded",
+        # exit 0) resyncs; unreachable KWin is ignored (no retry loop).
+        self.assertIn('buf.trim().indexOf("false") !== -1', block)
         # Argument arrays only, never sh -c string commands.
         self.assertIn('metaShortcutsProc.command = [scriptPath, "load", target', block)
         self.assertIn('metaShortcutsProc.command = [scriptPath, "unload",', block)
@@ -229,8 +239,15 @@ class TestStaticWiring(unittest.TestCase):
 
     def test_window_service_no_new_polling_timers(self):
         src = read(WINDOW_SERVICE)
-        # Only the pre-existing window sync timer may repeat.
-        self.assertEqual(src.count("repeat: true"), 1)
+        # Exactly three repeating timers may exist, each justified:
+        # syncTimer (1 s KWin fallback sync), bridgeScannerTimer (5 s
+        # safety net while the event bridge is active, P1-2) and
+        # metaShortcutsHealthTimer (5 s gated KWin-restart survival check,
+        # P1-5). No other repeating timer may be added.
+        self.assertEqual(src.count("repeat: true"), 3)
+        for timer_id in ("id: syncTimer", "id: bridgeScannerTimer",
+                         "id: metaShortcutsHealthTimer"):
+            self.assertIn(timer_id, src)
 
     def test_config_service_knob(self):
         src = read(CONFIG_SERVICE)
@@ -456,14 +473,80 @@ def run_inner(testroot):
             "shortcut for unmatched pinned app changed window state"
         print("RIG-STEP unmatched-noop")
 
-        # 5) Reload (orphan cleanup path) and clean unload.
+        # 5) Reload (orphan cleanup path).
         p = run([HELPER, "load", js, plugin])
         assert p.returncode == 0, "helper reload failed: %s%s" % (p.stdout, p.stderr)
         wait_for(is_loaded, 10, "script reloaded")
+        print("RIG-STEP reloaded")
+
+        # 6) P1-5: KWin restart survival. KWin drops transiently loaded
+        #    scripts on restart; the shell's health check
+        #    (WindowService.metaShortcutsHealthTimer) reacts by re-running
+        #    the exact helper load below, restoring Meta+1..9.
+        kwin.kill()
+        kwin.wait(timeout=15)
+        for w in wins:
+            try:
+                w.wait(timeout=10)
+            except Exception:
+                w.kill()
+        print("RIG-STEP kwin-killed")
+        kwin = subprocess.Popen(
+            ["kwin_wayland", "--virtual", "--width", "1280", "--height", "800",
+             "--no-lockscreen", "--no-kactivities", "--socket", "kwine2e2"],
+            stdout=open(os.path.join(logs, "kwin2.log"), "w"),
+            stderr=subprocess.STDOUT, env=os.environ)
+        socket2 = os.path.join(runtime, "kwine2e2")
+        wait_for(lambda: os.path.exists(socket2), 15, "second kwin wayland socket")
+        os.environ["WAYLAND_DISPLAY"] = "kwine2e2"
+        run(["dbus-update-activation-environment", "WAYLAND_DISPLAY=kwine2e2"])
+        wait_for(lambda: qdbus("org.kde.KWin", "/KWin", "org.kde.KWin.activeOutputName").returncode == 0,
+                 30, "second kwin D-Bus availability")
+        # Platform behavior, verified: the transient script did NOT survive.
+        r = qdbus("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.isScriptLoaded", plugin)
+        assert r.returncode == 0 and "false" in r.stdout.lower(), \
+            "isScriptLoaded must answer false after KWin restart: %s%s" % (r.stdout, r.stderr)
+        print("RIG-STEP script-gone-after-restart")
+        # Resync exactly as the WindowService health check triggers it.
+        p = run([HELPER, "load", js, plugin])
+        assert p.returncode == 0, "helper resync load failed: %s%s" % (p.stdout, p.stderr)
+        wait_for(is_loaded, 10, "script restored after resync")
+        print("RIG-STEP script-restored")
+        # The shortcut is functional again on the new KWin.
+        fresh_path = os.path.join(scripts, "meta-rig-fresh.qml")
+        with open(fresh_path, "w") as f:
+            f.write(WIN_QML % "meta-rig-fresh")
+        fresh = subprocess.Popen(
+            [QML_BIN, "-platform", "wayland", fresh_path],
+            stdout=open(os.path.join(logs, "meta-rig-fresh.log"), "w"),
+            stderr=subprocess.STDOUT, env=os.environ)
+        wins.append(fresh)
+        wait_for(lambda: any(w.get("c") == "meta-rig-fresh" for w in kwin_state()),
+                 20, "fresh window mapped on second kwin")
+
+        def fresh_state():
+            for w in kwin_state():
+                if w.get("c") == "meta-rig-fresh":
+                    return w
+            return {}
+
+        invoke("quickshell-dock-meta-1")
+        # The fresh window is usually already active on the new KWin, so the
+        # first invoke may exercise the toggle (minimize) path; either
+        # outcome proves the reloaded script handles the shortcut.
+        wait_for(lambda: fresh_state().get("a") is True or fresh_state().get("m") is True,
+                 10, "shortcut reacted after restart")
+        if fresh_state().get("m"):
+            invoke("quickshell-dock-meta-1")
+        wait_for(lambda: fresh_state().get("a") is True and not fresh_state().get("m"),
+                 10, "shortcut activates fresh window after restart")
+        print("RIG-STEP shortcut-alive-after-restart")
+
+        # 7) Clean unload.
         p = run([HELPER, "unload", plugin])
         assert p.returncode == 0, "helper unload failed: %s%s" % (p.stdout, p.stderr)
         wait_for(lambda: not is_loaded(), 10, "script unloaded")
-        print("RIG-STEP reloaded-and-unloaded")
+        print("RIG-STEP unloaded")
     finally:
         for w in wins:
             if w.poll() is None:
