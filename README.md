@@ -207,26 +207,47 @@ quickshell-kde/
 
 ### Verified Reference Environment
 * **OS**: Arch Linux (`x86_64`, rolling)
-* **Desktop / Compositor**: KDE Plasma `6.7.5` / KWin Wayland (`kwin_wayland 6.7.5`)
-* **Shell Host**: Quickshell `0.3.2` (`>= 0.3.0` required)
+* **Desktop / Compositor**: KDE Plasma `6.8.1` / KWin Wayland (`kwin_wayland 6.8.1`)
+* **Shell Host**: Quickshell `0.3.2` (`0.3.2` required — the notification badge/urgency/progress indicators use the `Quickshell.Services.Notifications` API as of that release)
 * **Qt / Python**: Qt6 (`qdbus6`, `qmllint`, `qmltestrunner`) / Python `3.14` (`>= 3.9` required)
 
 ### Runtime Dependencies
 
+Audited against the actual process/D-Bus calls in `services/` and `modules/`
+(P1-4). Everything the shell spawns at runtime:
+
 | Component | Package / Binary (Arch Linux) | Role | Requirement |
 | :--- | :--- | :--- | :--- |
-| **Quickshell** | `quickshell` (`>= 0.3.0`) | Wayland layer-shell QML host & native service bindings | **Required** |
-| **KWin Wayland** | `kwin` / `plasma-workspace` | Compositor, `/VirtualDesktopManager`, `/WindowsRunner`, KWin Scripting | **Required** |
-| **Qt6 D-Bus Tools** | `qt6-tools` (`qdbus6`) | D-Bus IPC for KWin workspace, window metadata, and brightness queries | **Required** |
-| **Python 3** | `python` (`>= 3.9`) | Non-blocking XDG `.desktop` entry parser (`scan_apps.py`) | **Required** |
-| **PipeWire** | `pipewire` / `pipewire-pulse` | Audio sink/source volume and mute integration | **Required** |
-| **KDE CLI Tools** | `kde-cli-tools` (`kcmshell6`, `kioclient`) | Launching KDE Control Modules (KCMs) and `.desktop` files | **Recommended** |
-| **UPower** | `upower` | Battery percentage and AC power state monitoring | **Recommended** (Laptops) |
+| **Quickshell** | `quickshell` (`0.3.2`) | Wayland layer-shell QML host & native service bindings (system tray, notifications, networking) | **Required** |
+| **KWin Wayland** | `kwin` / `plasma-workspace` (6.8+) | Compositor; `/VirtualDesktopManager`, `/WindowsRunner`, KWin Scripting D-Bus, `kglobalaccel` (embedded since KWin 6.8, used by Meta+1..9) | **Required** |
+| **Qt6 D-Bus Tools** | `qt6-tools` (`qdbus6`) | D-Bus IPC for KWin workspace, window metadata, desktops, brightness and KCM dispatch | **Required** |
+| **kdotool** | `kdotool` | Active-window query (`getactivewindow`) and KWin script actions (`kwinscript --inline`) | **Required** |
+| **GLib** | `glib2` (`gio`) | Application launching (`gio launch`) and URI/file opening | **Required** |
+| **Python 3** | `python` (`>= 3.9`, stdlib only) | XDG `.desktop` parser (`scan_apps.py`), brightness display discovery (`discover_displays.py`) | **Required** |
+| **D-Bus** | `dbus` (`dbus-monitor`) | Brightness change signals (`org.kde.ScreenBrightness`) | **Required** |
+| **WirePlumber** | `wireplumber` (`wpctl`) | Audio sink/source volume and mute control over PipeWire | **Required** |
+| **coreutils / sed** | `coreutils`, `sed` (`cat`, `sh`, `sed`, `tr`, …) | JSON config/theme reads and the KWin script loader helpers | **Required** (implicit) |
+| **systemd** | `systemd` (`loginctl`) | Session lock from the power menu | **Required** |
+| **Fonts** | `noto-fonts`, a Hack font package | Theme typography defaults (`Noto Sans`, `Hack`) | **Recommended** |
+| **KDE CLI Tools** | `kde-cli-tools` (`kcmshell6`), `systemsettings` | Opening KDE Control Modules and System Settings from the shell UI | **Recommended** |
+| **UPower** | `upower` | Battery percentage and AC power state via `Quickshell.Services.UPower` | **Recommended** (Laptops) |
 | **NetworkManager** | `networkmanager` | Network connectivity state via `Quickshell.Networking` | **Recommended** |
+| **KWin Event Bridge** | compiled locally, see [`services/kwin/bridge/README.md`](services/kwin/bridge/README.md) | Optional compiled Qt6 QML plugin (event-driven Intellihide + bridge-based window state). Not shipped: build it with CMake + Qt6 Qml/DBus dev headers; without it the shell falls back to snapshot-based sync | **Optional** |
+
+D-Bus services consumed (provided by the Plasma/PipeWire stack, no extra
+packages): `org.kde.KWin`, `org.kde.kglobalaccel`, `org.kde.ScreenBrightness`
+(KWin 6+), `org.mpris.MediaPlayer2.*` (running media players),
+`org.kde.StatusNotifierItem` / `org.freedesktop.Notifications` (via
+Quickshell's built-in tray and notification server).
 
 ### Development & Test Dependencies
-* `qt6-declarative` (`qmllint`, `qmlformat`, `qmltestrunner`)
-* `python3` (`unittest` runner for `tests/test_milestone_3a.py` and `tests/test_runtime_ux.py`)
+* `qt6-declarative` (`qmllint`, `qmlformat`, `qmltestrunner`, `qml` runtime)
+* `python3` (`unittest` runner — all suites in `tests/`)
+* `dbus` (`dbus-run-session`) — private D-Bus sessions for isolated runtime tests
+* `kwin` (`kwin_wayland --virtual`) — isolated compositor rigs (bridge E2E, Meta+1..9 E2E, full-shell startup smoke)
+* `node` — pure-JS logic tests (`BridgeRecords.js`, `Intellihide.js`, …)
+* `glib2` (`gdbus`) — notification badge E2E driver
+* CMake >= 3.21, C++17 compiler, Qt6 Qml/DBus dev headers — building the optional KWin event bridge plugin
 
 ---
 
@@ -261,11 +282,15 @@ quickshell kill
 ### 3. Run Linting & Automated Verification Tests
 
 ```bash
-# Run the Milestone 3A test suite (includes qmllint across all QML files + 13 subsystem tests)
-python3 -m unittest tests/test_milestone_3a.py -v
+# Full regression suite. Every test is session-safe: runtime probes run
+# offscreen inside private D-Bus sessions, and compositor tests spawn
+# their own nested kwin_wayland --virtual — your active Plasma session is
+# never touched. Live-session tests are opt-in (QS_KDE_LIVE_SESSION_TESTS=1).
+python3 -m unittest discover -s tests -v
 
-# Run the runtime UX regression test suite (7 tests)
-python3 -m unittest tests/test_runtime_ux.py -v
+# Individual suites, e.g. the Milestone 3A suite (static contracts +
+# qmllint + isolated full-shell startup smoke)
+python3 -m unittest tests.test_milestone_3a -v
 ```
 
 ---

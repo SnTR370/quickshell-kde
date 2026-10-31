@@ -144,22 +144,27 @@ snapshot-based window sync.
 
 ### Test Suite Inventory
 ```bash
-# Node/offscreen/static suites — safe anywhere, no live session interaction
-python3 -m unittest tests.test_bridge_records tests.test_bridge_fallback \
-    tests.test_dock_keyboard tests.test_dock_window_filter \
-    tests.test_intellihide tests.test_layout_presets tests.test_milestone_3a
+# Full regression suite — every test is session-safe (P1-3 remediation):
+# runtime probes run offscreen inside private D-Bus sessions with private
+# XDG_RUNTIME_DIR/XDG_CONFIG_HOME, and compositor tests spawn their own
+# nested kwin_wayland --virtual. The live Plasma session is never touched.
+python3 -m unittest discover -s tests
 
-# Isolated KWin E2E (spawns its own private D-Bus session and a nested
-# kwin_wayland --virtual; never touches the live Plasma session)
-python3 -m unittest tests.test_kwin_bridge_integration
+# Suites with isolated compositor rigs (nested kwin_wayland --virtual under
+# dbus-run-session; skipped automatically when the tools are missing):
+#   tests.test_kwin_bridge_integration  — event bridge E2E (needs the built
+#                                         bridge plugin, see bridge/README.md)
+#   tests.test_dock_meta_shortcuts      — Meta+1..9 incl. KWin-restart survival
+#   tests.test_milestone_3a test_09 / tests.test_runtime_ux test_11
+#                                     — full-shell startup smoke on a virtual KWin
 
-# Full-shell probes (test_dock_blitz, test_runtime_ux) launch quickshell
-# against the current Wayland session: run them ONLY inside an isolated
-# session (private XDG_RUNTIME_DIR/XDG_CONFIG_HOME + dbus-run-session +
-# kwin_wayland --virtual), never against your active desktop.
+# Live-session tests (real session-bus state: KWin WindowsRunner, MPRIS,
+# org.kde.ScreenBrightness) are opt-in only:
+QS_KDE_LIVE_SESSION_TESTS=1 python3 -m unittest tests.test_runtime_ux
 ```
-Note: `tests.test_milestone_3a` includes a 2-second full-shell startup smoke
-test; run the whole inventory inside the isolated session when in doubt.
+The `tests/` directory is the single regression entry point: module-scoped
+suites outside `tests/` (e.g. the controlcenter suite) are loaded through
+shims like `tests/test_controlcenter_module.py` so `discover` runs them too.
 
 ---
 
