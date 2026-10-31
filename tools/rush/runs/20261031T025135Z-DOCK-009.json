@@ -1,0 +1,57 @@
+{
+  "recorded_at": "2026-10-31T02:51:35+00:00",
+  "task_id": "DOCK-009",
+  "task_title": "Bildirim, aciliyet ve ilerleme göstergeleri",
+  "mode": "interactive owner-watched fresh-context feature worker subagent (no unattended spawn, no supervisor relaunch)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true,
+    "detail": "Active CCR profile EVREN - QS KDE routing to EVREN/zai/glm-5.3-fp8; session ran without gateway outages, malformed output or model fallback."
+  },
+  "feature_branch": "feat/rush-orchestrator",
+  "feature_commit": "d4719cb",
+  "merged_to": null,
+  "attempts": 1,
+  "outcome": {
+    "feature_id": "DOCK-009",
+    "status": "done",
+    "files_changed": [
+      "services/notifications/NotificationBadges.js",
+      "services/notifications/NotificationService.qml",
+      "modules/notifications/NotificationCard.qml",
+      "modules/notifications/ToastHost.qml",
+      "modules/dock/DockItem.qml",
+      "tests/test_dock_notification_badges.py"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_notification_badges",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_notification_badges",
+        "count": 18
+      },
+      {
+        "name": "full-suite",
+        "result": "pass",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 290,
+        "detail": "OK, 2 pre-existing skips (bridge plugin not built in this checkout); the known live Spotify/MPRIS environmental test (test_runtime_ux test_12) passed in this recorded run - live-session state, not a code regression either way"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint modules/dock/DockItem.qml modules/notifications/NotificationCard.qml modules/notifications/ToastHost.qml services/notifications/NotificationService.qml",
+        "detail": "zero warnings/errors"
+      }
+    ],
+    "known_limitations": "All indicator data comes from the shell's own freedesktop notification server: when ConfigService.notificationsEnabled is false (the default) the shell runs no server and shows NO notification badges - honest degradation, Plasma's daemon owns the data instead. KWin window-attention (demandsAttention) indicators are SCOPED OUT as blocked-on-bridge: the resident KWin event bridge does not forward demandsAttention, its compiled plugin is not built in this checkout and the bridge is Intellihide-gated. expireTimeout -1/0 notifications persist until the user attends (dismisses the toast, invokes an action or activates the app's dock icon) - a deliberate, documented server default rather than an estimate. Apps stacks aggregate count+critical but never progress (one merged ring value would be arbitrary). Not verified on live hardware (offscreen E2E only): visual composition of ring/dot/badge, magnification interplay and real multi-monitor stacking remain manual test debt (live_verified false)."
+  }
+}
