@@ -26,6 +26,8 @@ const input = JSON.parse(process.argv[2]);
 let res;
 if (input.op === 'validate') {
   res = B.validateWindowRecord(input.raw);
+} else if (input.op === 'membership') {
+  res = B.membershipChanged(input.states || {}, input.payloads);
 } else {
   res = B.applyBatch(input.states || {}, input.outputs || {}, input.payloads);
 }
@@ -218,6 +220,49 @@ class TestApplyBatch(unittest.TestCase):
                     "moveableAcrossScreens", "onAllDesktops", "desktops",
                     "x", "y", "width", "height"):
             self.assertIn(key, st)
+
+
+class TestMembershipChanged(unittest.TestCase):
+    """P1-2: bridge batches drive scanner refreshes instead of 1 Hz polling."""
+
+    def membership(self, payloads, states=None):
+        return run("membership", states=states, payloads=payloads)
+
+    def test_update_for_known_window_is_not_membership(self):
+        states = {UUID: {"minimized": False}}
+        self.assertFalse(self.membership(
+            [{"type": "update", "window": rec(minimized=True)}], states))
+
+    def test_update_for_new_window_is_membership(self):
+        self.assertTrue(self.membership([{"type": "update", "window": rec()}]))
+
+    def test_remove_is_membership(self):
+        states = {UUID: {"minimized": False}}
+        self.assertTrue(self.membership([{"type": "remove", "uuid": UUID}], states))
+        # Even when the uuid is already absent (scanner pass is harmless).
+        self.assertTrue(self.membership([{"type": "remove", "uuid": UUID2}]))
+
+    def test_snapshot_is_membership(self):
+        self.assertTrue(self.membership([{"type": "snapshot", "windows": []}]))
+
+    def test_desktop_only_is_not_membership(self):
+        self.assertFalse(self.membership([{"type": "desktop", "desktop": "d2"}]))
+
+    def test_mixed_batch_is_membership(self):
+        states = {UUID: {"minimized": False}}
+        self.assertTrue(self.membership([
+            {"type": "desktop", "desktop": "d2"},
+            {"type": "update", "window": rec(uuid=UUID2)},
+        ], states))
+
+    def test_malformed_payloads_are_not_membership(self):
+        self.assertFalse(self.membership([]))
+        self.assertFalse(self.membership(None))
+        self.assertFalse(self.membership([None, 42, "x", {}]))
+        # update without a usable window/uuid is not a membership event.
+        self.assertFalse(self.membership([{"type": "update", "window": None}]))
+        self.assertFalse(self.membership(
+            [{"type": "update", "window": {"uuid": "not-a-uuid"}}]))
 
 
 if __name__ == "__main__":

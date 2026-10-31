@@ -133,6 +133,27 @@ class TestBridgePluginFallback(unittest.TestCase):
         # Bridge drop repopulates state through the snapshot path.
         self.assertIn("if (!root.bridgeActive && root.isLiveKWinSession)", src)
 
+    def test_05_windowservice_bridge_polling_reduction(self):
+        """Static contract (P1-2): no 1 Hz window-list scan while the bridge is healthy.
+
+        The active-window poll keeps its 1 s cadence (no bridge event source
+        for focus changes); the window-list scan must not run from the 1 s
+        timer while bridgeActive, must keep a slow safety net, and bridge
+        membership changes must trigger the debounced refresh.
+        """
+        with open(os.path.join(REPO, "services/kwin/WindowService.qml")) as f:
+            src = f.read()
+        # 1 s timer: active window always, window scan only without the bridge.
+        self.assertIn("if (!root.bridgeActive) {\n                root.refreshWindows();", src)
+        # Slow safety net gated on the bridge being active.
+        self.assertIn("id: bridgeScannerTimer", src)
+        self.assertIn("running: root.bridgeActive && KWinService.isKWin && root.outputsOverride === null", src)
+        # Debounced event-driven refresh for bridge membership changes.
+        self.assertIn("id: bridgeMembershipTimer", src)
+        self.assertIn("repeat: false", src)
+        self.assertIn("const membership = BridgeRecords.membershipChanged(root.windowStates, payloads);", src)
+        self.assertIn("bridgeMembershipTimer.restart();", src)
+
 
 if __name__ == "__main__":
     unittest.main()

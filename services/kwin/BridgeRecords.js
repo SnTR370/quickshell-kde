@@ -202,3 +202,23 @@ function applyBatch(states, outputs, payloads) {
         skipped: skipped
     };
 }
+
+// True when the payload list changes window membership relative to the
+// pre-batch states: a remove, a snapshot, or an update for a uuid that is
+// not present yet. WindowService uses this to run one debounced scanner
+// pass (titles/icons/app resolution) when the event bridge reports a
+// window open/close, instead of idle 1 Hz polling.
+function membershipChanged(states, payloads) {
+    if (!payloads || !Array.isArray(payloads)) return false;
+    var known = (states && typeof states === "object") ? states : {};
+    for (var i = 0; i < payloads.length; i++) {
+        var p = payloads[i];
+        if (!p || typeof p !== "object") continue;
+        if (p.type === "remove" || p.type === "snapshot") return true;
+        if (p.type === "update" && p.window && typeof p.window.uuid === "string") {
+            var uuid = cleanUuid(p.window.uuid);
+            if (uuid && !known[uuid]) return true;
+        }
+    }
+    return false;
+}

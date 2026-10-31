@@ -297,12 +297,51 @@ Singleton {
         }
     }
 
-    // Periodic sync timer for external window changes (KWin fallback)
+    // Periodic sync timer for external window changes (KWin fallback).
+    //
+    // The active-window poll keeps its 1 s cadence in every mode: focus
+    // changes have no bridge event source (the compiled plugin whitelists
+    // record types) and the dock's active-app indicator binds
+    // activeWindowId directly.
+    //
+    // The window-list scan is NOT run at 1 Hz while the KWin event bridge
+    // is healthy: the bridge forwards window add/remove events (each
+    // triggers one debounced scanner pass via bridgeMembershipTimer) and
+    // is the authoritative writer of window state, so the scan drops to a
+    // slow safety net (bridgeScannerTimer, titles/app resolution only).
+    // Without the bridge (plugin missing, intellihide off, KWin gone) the
+    // original 1 s fallback cadence is unchanged.
     Timer {
         id: syncTimer
         interval: 1000
         repeat: true
         running: KWinService.isKWin && root.outputsOverride === null
+        onTriggered: {
+            root.refreshActiveWindow();
+            if (!root.bridgeActive) {
+                root.refreshWindows();
+            }
+        }
+    }
+
+    // Slow safety-net cadence for the window-list scan while the bridge is
+    // active (see syncTimer).
+    Timer {
+        id: bridgeScannerTimer
+        interval: 5000
+        repeat: true
+        running: root.bridgeActive && KWinService.isKWin && root.outputsOverride === null
+        onTriggered: root.refreshWindows()
+    }
+
+    // Bridge-reported membership changes (window open/close, snapshots)
+    // still need one scanner pass for titles/icons/app resolution and an
+    // active-window refresh; run them promptly but debounced, never once
+    // per record.
+    Timer {
+        id: bridgeMembershipTimer
+        interval: 250
+        repeat: false
         onTriggered: {
             root.refreshWindows();
             root.refreshActiveWindow();
@@ -875,6 +914,9 @@ Singleton {
         if (!Array.isArray(payloads)) return;
         const res = BridgeRecords.applyBatch(root.windowStates, root.windowOutputs, payloads);
         if (!res.ok) return;
+        // Membership must be evaluated against the pre-batch state before
+        // the maps are replaced below.
+        const membership = BridgeRecords.membershipChanged(root.windowStates, payloads);
         root.windowStates = res.states;
         root.windowOutputs = res.outputs;
         if (res.changed) {
@@ -882,6 +924,12 @@ Singleton {
         }
         if (res.desktopId) {
             KWinService.applyExternalDesktop(res.desktopId);
+        }
+        if (membership) {
+            // Window open/close per bridge event: refresh the window list
+            // (titles/app resolution) and the active window promptly, but
+            // debounced (see bridgeMembershipTimer).
+            bridgeMembershipTimer.restart();
         }
     }
 
