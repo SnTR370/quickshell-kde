@@ -1,0 +1,60 @@
+{
+  "recorded_at": "2026-10-31T00:39:52+00:00",
+  "task_id": "DOCK-012",
+  "task_title": "Monitör başına bağımsız Dock profilleri",
+  "mode": "interactive owner-watched fresh-context feature worker subagent (no unattended spawn, no supervisor relaunch)",
+  "provider_route": {
+    "providers": [
+      "EVREN"
+    ],
+    "models": [
+      "zai/glm-5.3-fp8"
+    ],
+    "status_codes": [
+      200
+    ],
+    "ok": true,
+    "detail": "Active CCR profile EVREN - QS KDE routing to EVREN/zai/glm-5.3-fp8; session ran without gateway outages, malformed output or model fallback."
+  },
+  "feature_branch": "feat/rush-orchestrator",
+  "feature_commit": "bbe1ce5",
+  "merged_to": null,
+  "attempts": 1,
+  "outcome": {
+    "feature_id": "DOCK-012",
+    "status": "done",
+    "files_changed": [
+      "services/config/MonitorProfiles.js",
+      "services/config/ConfigService.qml",
+      "modules/dock/Dock.qml",
+      "modules/dock/DockItem.qml",
+      "services/kwin/WindowService.qml",
+      "modules/settings/SettingsWindow.qml",
+      "docs/CONFIGURATION.md",
+      "tests/test_dock_monitor_profiles.py",
+      "tests/test_layout_presets.py"
+    ],
+    "tests": [
+      {
+        "name": "tests.test_dock_monitor_profiles",
+        "result": "pass",
+        "command": "python3 -m unittest tests.test_dock_monitor_profiles",
+        "count": 24
+      },
+      {
+        "name": "full-suite",
+        "result": "pass",
+        "command": "python3 -m unittest discover -s tests",
+        "count": 272,
+        "detail": "OK, 2 pre-existing skips (bridge plugin not built in this checkout); the known live Spotify/MPRIS environmental failure (test_runtime_ux test_12) passed in this recorded run - live-session state, not a code regression either way"
+      },
+      {
+        "name": "qmllint",
+        "result": "pass",
+        "command": "qmllint modules/dock/Dock.qml modules/dock/DockItem.qml services/config/ConfigService.qml services/kwin/WindowService.qml modules/settings/SettingsWindow.qml",
+        "detail": "zero warnings/errors"
+      }
+    ],
+    "known_limitations": "Pinned applications, stacks, monitor selection, magnification and hide/reveal delays are global by design: Meta+1..9 shortcuts (DOCK-008) and stack:<id> markers (DOCK-011) address one merged dock row, so per-monitor pinned lists were scoped OUT and recorded as a limitation. Fractional-scale rendering and real Wayland output hotplug are not verifiable offscreen (the offscreen platform exposes exactly one unnamed screen, which correctly resolves to pure global defaults): hotplug is covered by pure resolution tests over simulated screen lists plus the reactive Variants model wiring; live-hardware verification remains manual test debt (live_verified false)."
+  }
+}
