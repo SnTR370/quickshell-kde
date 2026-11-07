@@ -19,8 +19,33 @@ Item {
     implicitWidth: 150
     implicitHeight: 24
 
+    // Internal interaction state.
+    //
+    // `value` is deliberately never assigned from inside this component: an
+    // imperative assignment from QML replaces a consumer's declarative binding
+    // (e.g. `value: AudioService.volume`), after which later external updates
+    // would no longer move the slider. While the user drives the slider we
+    // render `_interactiveValue`; as soon as `value` changes from outside we
+    // adopt it and fall back to the declarative value.
+    property real _interactiveValue: 0.0
+    property bool _userInteracting: false
+    readonly property real _displayValue: _userInteracting ? _interactiveValue : value
+
+    onValueChanged: {
+        if (_userInteracting) {
+            _interactiveValue = value;
+            _userInteracting = false;
+        }
+    }
+
     function clamp(val) {
         return Math.max(root.minimumValue, Math.min(root.maximumValue, val));
+    }
+
+    function beginInteraction(newValue) {
+        root._interactiveValue = newValue;
+        root._userInteracting = true;
+        root.valueModified(newValue);
     }
 
     // Background track
@@ -39,7 +64,7 @@ Item {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: Math.max(0, Math.min(parent.width, parent.width * ((root.value - root.minimumValue) / (root.maximumValue - root.minimumValue))))
+            width: Math.max(0, Math.min(parent.width, parent.width * ((root._displayValue - root.minimumValue) / (root.maximumValue - root.minimumValue))))
             radius: parent.radius
             color: root.progressColor
         }
@@ -73,8 +98,7 @@ Item {
             const rawVal = root.minimumValue + (ratio * range);
             const stepped = Math.round(rawVal / root.stepSize) * root.stepSize;
             const finalVal = root.clamp(stepped);
-            root.value = finalVal;
-            root.valueModified(finalVal);
+            root.beginInteraction(finalVal);
         }
 
         onPressed: mouse => updateFromMouse(mouse.x)
@@ -83,9 +107,8 @@ Item {
         }
         onWheel: wheel => {
             const delta = wheel.angleDelta.y > 0 ? root.stepSize : -root.stepSize;
-            const next = root.clamp(root.value + delta);
-            root.value = next;
-            root.valueModified(next);
+            const next = root.clamp(root._displayValue + delta);
+            root.beginInteraction(next);
         }
     }
 }
