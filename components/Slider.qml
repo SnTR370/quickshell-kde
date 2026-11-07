@@ -19,20 +19,34 @@ Item {
     implicitWidth: 150
     implicitHeight: 24
 
-    // Internal interaction state.
+    // Interaction-value contract.
     //
-    // `value` is deliberately never assigned from inside this component: an
-    // imperative assignment from QML replaces a consumer's declarative binding
-    // (e.g. `value: AudioService.volume`), after which later external updates
-    // would no longer move the slider. While the user drives the slider we
-    // render `_interactiveValue`; as soon as `value` changes from outside we
-    // adopt it and fall back to the declarative value.
+    // QML offers no way to ask whether a property is currently bound, so the
+    // component cannot auto-detect "controlled" (value bound to a model) vs
+    // "uncontrolled" (value owned by the slider) usage. Instead the consumer
+    // selects the mode explicitly:
+    //
+    //   false (default, legacy): interaction assigns `value` directly, so an
+    //     uncontrolled slider's public value follows mouse/wheel input. This
+    //     is byte-for-byte the pre-fix behaviour, including the fact that a
+    //     declarative `value:` binding is replaced by the first interaction.
+    //
+    //   true (opt-in): `value` is input-only. Interaction renders from
+    //     `_interactiveValue` and reports through valueModified, so a
+    //     declarative binding (e.g. `value: AudioService.volume`) survives and
+    //     later external updates keep moving the slider. Consumers using this
+    //     mode must update their model in onValueModified.
+    //
+    // In-repo consumers that bind `value` to a service and apply
+    // valueModified set this to true.
+    property bool preserveValueBinding: false
+
     property real _interactiveValue: 0.0
     property bool _userInteracting: false
-    readonly property real _displayValue: _userInteracting ? _interactiveValue : value
+    readonly property real _displayValue: (root.preserveValueBinding && root._userInteracting) ? root._interactiveValue : value
 
     onValueChanged: {
-        if (_userInteracting) {
+        if (root.preserveValueBinding && root._userInteracting) {
             _interactiveValue = value;
             _userInteracting = false;
         }
@@ -44,7 +58,12 @@ Item {
 
     function beginInteraction(newValue) {
         root._interactiveValue = newValue;
-        root._userInteracting = true;
+        if (root.preserveValueBinding) {
+            root._userInteracting = true;
+        } else {
+            // Legacy/uncontrolled contract: the slider owns `value`.
+            root.value = newValue;
+        }
         root.valueModified(newValue);
     }
 

@@ -147,6 +147,7 @@ Surface {
                         }
 
                         Slider {
+                            preserveValueBinding: true
                             Layout.fillWidth: true
                             value: dispItem.modelData.maxBrightness > 0 ? (dispItem.modelData.brightness / dispItem.modelData.maxBrightness) : 0.0
                             minimumValue: 0.0
@@ -200,6 +201,7 @@ Surface {
 
                 // Interactive slider
                 Slider {
+                    preserveValueBinding: true
                     visible: !BrightnessService.isReadOnly
                     Layout.fillWidth: true
                     value: BrightnessService.brightness

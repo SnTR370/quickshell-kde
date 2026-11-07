@@ -76,6 +76,7 @@ AnchoredPopup {
             }
 
             Slider {
+                preserveValueBinding: true
                 Layout.fillWidth: true
                 value: AudioService.volume
                 minimumValue: 0.0
@@ -119,6 +120,7 @@ AnchoredPopup {
             }
 
             Slider {
+                preserveValueBinding: true
                 Layout.fillWidth: true
                 value: AudioService.inputVolume
                 minimumValue: 0.0

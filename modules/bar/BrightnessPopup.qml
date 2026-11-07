@@ -102,6 +102,7 @@ AnchoredPopup {
                 }
 
                 Slider {
+                    preserveValueBinding: true
                     Layout.fillWidth: true
                     value: displayRow.modelData.maxBrightness > 0 ? (displayRow.modelData.brightness / displayRow.modelData.maxBrightness) : 0.0
                     minimumValue: 0.0
@@ -174,6 +175,7 @@ AnchoredPopup {
 
             // Interactive slider only when writable
             Slider {
+                preserveValueBinding: true
                 visible: !BrightnessService.isReadOnly
                 Layout.fillWidth: true
                 value: BrightnessService.brightness

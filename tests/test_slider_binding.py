@@ -3,8 +3,10 @@
 P1 regression: Slider must not destroy a consumer's declarative `value` binding.
 
 Layer: OFFSCREEN runtime. The real components/Slider.qml is driven by QtTest
-mouse drag / click / wheel events inside `QT_QPA_PLATFORM=offscreen`, with an
-isolated XDG_CONFIG_HOME. No KWin / Plasma session is touched.
+mouse drag / click / wheel events inside `QT_QPA_PLATFORM=offscreen`, with a
+private XDG_RUNTIME_DIR / XDG_CONFIG_HOME and a private D-Bus session
+(dbus-run-session). The live graphical session, session bus and Plasma
+instance are never touched.
 
 Defect (pre-fix): MouseArea.updateFromMouse() and onWheel assigned
 `root.value = ...` imperatively. In QML that assignment replaces the consumer's
@@ -18,6 +20,7 @@ Expected after the fix:
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -57,6 +60,7 @@ FloatingWindow {
             minimumValue: 0.0
             maximumValue: 1.0
             stepSize: 0.01
+            preserveValueBinding: true
             value: win.boundValue
             onValueModified: v => { win.emittedBound.push(v); win.boundValue = v; }
         }
@@ -70,10 +74,11 @@ FloatingWindow {
             minimumValue: 0.0
             maximumValue: 1.0
             stepSize: 0.01
+            preserveValueBinding: true
             value: win.freeValue
         }
 
-        // C: uncontrolled slider, no external binding.
+        // C: uncontrolled slider, no external binding, default (legacy) contract.
         Slider {
             id: plainSlider
             width: 200
@@ -140,6 +145,19 @@ FloatingWindow {
             wait(30);
             R.wheelBackEmitted = win.emittedPlain.length;
 
+            // ---- 3b. Default (legacy) uncontrolled contract ------------------------
+            // With preserveValueBinding left at its default, the slider owns
+            // `value`: interaction must keep updating the public property.
+            R.plainDefaultPreserve = plainSlider.preserveValueBinding;
+            R.plainValueBeforeLegacyDrag = plainSlider.value;
+            win.emittedPlain = [];
+            mouseDrag(plainSlider, 100, plainSlider.height / 2, 40, 0, Qt.LeftButton);
+            wait(30);
+            R.legacyDragEmitted = win.emittedPlain.slice();
+            R.legacyDragLast = R.legacyDragEmitted.length ? R.legacyDragEmitted[R.legacyDragEmitted.length - 1] : -1;
+            R.legacyValueAfterDrag = plainSlider.value;
+            R.legacyDisplayAfterDrag = tc.shown(plainSlider);
+
             // ---- 4. Hover / press-without-move must not emit -----------------------
             win.emittedBound = [];
             mouseMove(boundSlider, 60, boundSlider.height / 2);
@@ -150,6 +168,9 @@ FloatingWindow {
             mouseDrag(freeSlider, 40, freeSlider.height / 2, 120, 0, Qt.LeftButton);
             wait(30);
             R.freeDisplayedAfterDrag = tc.shown(freeSlider);
+            // Opt-in contract: `value` is input-only while interacting; the
+            // model is still the external one until it is updated.
+            R.freeInputValueDuringInteraction = freeSlider.value;
             win.freeValue = 0.60;
             wait(30);
             R.freeValueAfterExternal = freeSlider.value;
@@ -159,6 +180,8 @@ FloatingWindow {
             R.hasSignal = (boundSlider.valueModified !== undefined);
             R.initialBoundIsExternal = (R.initialBound === 0.20);
             R.initialFreeIsExternal = (R.initialFree === 0.20);
+            R.hasPreserveProperty = (boundSlider.preserveValueBinding === true);
+            R.defaultPreserveIsFalse = (plainSlider.preserveValueBinding === false);
 
             console.log("SLIDER_BINDING_RESULT:" + JSON.stringify(R));
         }
@@ -181,17 +204,34 @@ FloatingWindow {
 """
 
 
-def run_harness(timeout=60):
-    with tempfile.TemporaryDirectory() as tmp:
+def run_harness(timeout=90):
+    if shutil.which("quickshell") is None or shutil.which("dbus-run-session") is None:
+        raise unittest.SkipTest("quickshell or dbus-run-session not available")
+    with tempfile.TemporaryDirectory(prefix="qs-slider-binding-") as tmp:
+        runtime_dir = os.path.join(tmp, "runtime")
+        os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
+        config_home = os.path.join(tmp, "cfg")
+        os.makedirs(config_home, exist_ok=True)
+
+        # Never inherit the live graphical session or its session bus.
         env = os.environ.copy()
-        env["XDG_CONFIG_HOME"] = tmp
-        env["QT_QPA_PLATFORM"] = "offscreen"
+        env.pop("WAYLAND_DISPLAY", None)
+        env.pop("DISPLAY", None)
+        env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+        env.pop("JOURNAL_STREAM", None)
+        env.pop("INVOCATION_ID", None)
+        env.update({
+            "QT_QPA_PLATFORM": "offscreen",
+            "XDG_RUNTIME_DIR": runtime_dir,
+            "XDG_CONFIG_HOME": config_home,
+        })
+
         probe = os.path.join(REPO_DIR, "_test_slider_binding_probe.qml")
         try:
             with open(probe, "w") as f:
                 f.write(HARNESS)
             proc = subprocess.run(
-                ["quickshell", "-p", probe, "--no-duplicate"],
+                ["dbus-run-session", "--", "quickshell", "-p", probe, "--no-duplicate"],
                 cwd=REPO_DIR, env=env, capture_output=True, text=True, timeout=timeout,
             )
         finally:
@@ -251,6 +291,22 @@ class TestSliderBinding(unittest.TestCase):
         self.assertTrue(self.R["hasSignal"])
         self.assertTrue(self.R["initialBoundIsExternal"])
         self.assertTrue(self.R["initialFreeIsExternal"])
+        self.assertTrue(self.R["hasPreserveProperty"])
+
+    def test_09_legacy_uncontrolled_value_updates(self):
+        # Backward compatibility: the default mode keeps the historical
+        # contract where an uncontrolled slider owns and updates `value`.
+        self.assertTrue(self.R["defaultPreserveIsFalse"])
+        self.assertFalse(self.R["plainDefaultPreserve"])
+        self.assertTrue(self.R["legacyDragEmitted"])
+        self.assertAlmostEqual(self.R["legacyDragLast"], 0.70, delta=0.02)
+        self.assertAlmostEqual(self.R["legacyValueAfterDrag"], 0.70, delta=0.02)
+        self.assertAlmostEqual(self.R["legacyDisplayAfterDrag"], 0.70, delta=0.02)
+
+    def test_10_opt_in_value_is_input_only(self):
+        # Opt-in contract evidence: the bound model value is not overwritten
+        # by interaction; it changes only when the owner updates it.
+        self.assertAlmostEqual(self.R["freeInputValueDuringInteraction"], 0.20, delta=0.001)
 
 
 if __name__ == "__main__":

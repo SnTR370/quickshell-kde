@@ -585,6 +585,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 0
                                         maximumValue: 32
@@ -624,6 +625,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 24
                                         maximumValue: 72
@@ -643,6 +645,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 0.40
                                         maximumValue: 1.00
@@ -1000,6 +1003,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 0
                                         maximumValue: 32
@@ -1039,6 +1043,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 28
                                         maximumValue: 72
@@ -1058,6 +1063,7 @@ Variants {
                                         Layout.fillWidth: true
                                     }
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 0.40
                                         maximumValue: 1.00
@@ -1100,6 +1106,7 @@ Variants {
                                     }
 
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 1.1
                                         maximumValue: 2.5
@@ -1122,6 +1129,7 @@ Variants {
                                     }
 
                                     Slider {
+                                        preserveValueBinding: true
                                         implicitWidth: 180
                                         minimumValue: 24
                                         maximumValue: 240
@@ -1851,6 +1859,7 @@ Variants {
                                                         Layout.fillWidth: true
                                                     }
                                                     Slider {
+                                                        preserveValueBinding: true
                                                         implicitWidth: 150
                                                         minimumValue: 20
                                                         maximumValue: 128
@@ -1877,6 +1886,7 @@ Variants {
                                                         Layout.fillWidth: true
                                                     }
                                                     Slider {
+                                                        preserveValueBinding: true
                                                         implicitWidth: 150
                                                         minimumValue: 0
                                                         maximumValue: 64
