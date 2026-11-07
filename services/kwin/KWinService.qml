@@ -40,6 +40,10 @@ Singleton {
     signal desktopsUpdated()
     signal activeOutputChanged(string outputName)
     signal activeWindowChanged(string windowId)
+    // Emitted after every successful active-window query, even when the value
+    // did not change. Consumers that need an authoritative snapshot (rather
+    // than the cached property) must wait for this signal.
+    signal activeWindowRefreshed(string windowId)
 
     function refreshActiveOutput() {
         if (!root.isKWin || activeOutputProc.running) return;
@@ -101,6 +105,7 @@ Singleton {
                     root.activeWindowId = wid;
                     root.activeWindowChanged(wid);
                 }
+                root.activeWindowRefreshed(wid);
             }
         }
     }

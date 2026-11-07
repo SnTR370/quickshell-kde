@@ -14,6 +14,12 @@ PopupWindow {
     property string initialActiveWindow: ""
     property string accessibleName: ""
 
+    // True between becoming visible and the first authoritative active-window
+    // refresh. The cached KWinService.activeWindowId may be stale, so the
+    // baseline must come from that refresh; until then focus events are
+    // treated as baseline syncs rather than legitimate dismissals.
+    property bool _awaitingActiveWindowBaseline: false
+
     visible: true
     grabFocus: false
 
@@ -132,12 +138,17 @@ PopupWindow {
     onVisibleChanged: {
         if (visible) {
             root.initialDesktopId = KWinService.currentDesktopId;
-            root.initialActiveWindow = KWinService.activeWindowId;
+            // Do not trust the cached value: it may predate the last focus
+            // change, and using it as the baseline makes the first refresh
+            // look like a focus change (closing the popup immediately).
+            root.initialActiveWindow = "";
+            root._awaitingActiveWindowBaseline = true;
             KWinService.refreshActiveWindow();
         } else {
             root.setKeyboardTarget(null);
             root.initialDesktopId = "";
             root.initialActiveWindow = "";
+            root._awaitingActiveWindowBaseline = false;
             root.closed();
         }
     }
@@ -153,8 +164,28 @@ PopupWindow {
         function onShowingDesktopChanged() {
             root.close();
         }
+        function onActiveWindowRefreshed(winId) {
+            if (!root.visible) return;
+            if (root._awaitingActiveWindowBaseline) {
+                // First authoritative snapshot after opening: this is the
+                // baseline, not a focus change.
+                root.initialActiveWindow = winId;
+                root._awaitingActiveWindowBaseline = false;
+                return;
+            }
+            if (winId !== "" && root.initialActiveWindow !== "" && winId !== root.initialActiveWindow) {
+                root.close();
+            }
+        }
         function onActiveWindowChanged(winId) {
             if (!root.visible) return;
+            if (root._awaitingActiveWindowBaseline) {
+                // Changed before the baseline refresh completed (e.g. a push
+                // from an external bridge): adopt it instead of closing.
+                root.initialActiveWindow = winId;
+                root._awaitingActiveWindowBaseline = false;
+                return;
+            }
             if (root.initialActiveWindow === "") {
                 root.initialActiveWindow = winId;
             } else if (winId !== "" && winId !== root.initialActiveWindow) {
