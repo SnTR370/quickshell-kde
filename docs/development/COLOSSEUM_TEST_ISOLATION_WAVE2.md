@@ -52,8 +52,8 @@ workspace must link every top-level entry the linked trees can escape into
 set is all four trees. QML probe sources are otherwise byte-identical.
 
 Suites migrated to workspaces: all wave-2 targets **plus** wave-1 suites that
-were still writing probes into the repo root (`test_dock_blitz.py` ×14
-probes, `test_dock_keyboard.py`, `test_dock_file_drop.py`,
+were still writing probes into the repo root (`test_dock_blitz.py` ×11
+probe files, `test_dock_keyboard.py`, `test_dock_file_drop.py`,
 `test_dock_magnification.py`, `test_dock_notification_badges.py`).
 `C4` in the contract suite now fails if any `_test_*.qml` reappears in the
 repository root. No fixture needed production changes; subprocesses
@@ -128,5 +128,5 @@ pass unchanged, which re-lints the touched trees' consumers.
    via `QS_KDE_LIVE_SESSION_TESTS=1` (skipped by default; honest skip).
 5. Scanner limitations are listed in Mission C above.
 
-COMMIT / PUSH: see branch `test/colosseum-isolation-wave2` (SHA recorded in
-the checkpoint commit). Never merged to `main`.
+COMMIT / PUSH: `75f690d`, pushed to `test/colosseum-isolation-wave2`.
+Never merged to `main`.
