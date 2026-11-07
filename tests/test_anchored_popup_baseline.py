@@ -4,9 +4,10 @@ P1 regression: AnchoredPopup must establish its active-window baseline from a
 *fresh* query, not from the cached KWinService.activeWindowId.
 
 Layer: OFFSCREEN runtime. The real components/AnchoredPopup.qml and the real
-services/kwin/KWinService.qml run in `QT_QPA_PLATFORM=offscreen` with an
-isolated XDG_CONFIG_HOME. `kdotool` is replaced by a tiny script that returns
-the contents of a state file, so focus changes are simulated deterministically.
+services/kwin/KWinService.qml run in `QT_QPA_PLATFORM=offscreen` with a private
+XDG_RUNTIME_DIR / XDG_CONFIG_HOME and a private D-Bus session
+(dbus-run-session). `kdotool` is replaced by a tiny script that returns the
+contents of a state file, so focus changes are simulated deterministically.
 No KWin compositor and no live Plasma session is involved.
 
 Defect (pre-fix): onVisibleChanged captured `KWinService.activeWindowId`
@@ -22,6 +23,7 @@ Expected after the fix:
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -69,6 +71,14 @@ FloatingWindow {
             stateProc.command = ["sh", "-c", "printf '%s' '" + v + "' > \"$FAKE_KWIN_STATE/active\""];
             stateProc.running = true;
             wait(150);
+        }
+
+        function setBlock(on) {
+            stateProc.command = ["sh", "-c", on
+                ? "touch \"$FAKE_KWIN_STATE/block\""
+                : "rm -f \"$FAKE_KWIN_STATE/block\""];
+            stateProc.running = true;
+            wait(120);
         }
 
         function waitFor(fn, ms) {
@@ -179,6 +189,31 @@ FloatingWindow {
             R.cyclesVisible = cycleVisible;
             R.cyclesBaselineReset = (popup.initialActiveWindow === "");
 
+            // ---- 8. Open while an earlier active-window query is in flight ---------
+            // The fake kdotool reads the active id and then blocks until the
+            // block file is removed. A query started before the popup opens
+            // therefore samples a pre-open focus and completes late; the
+            // popup must not adopt that sample as its baseline.
+            R.inflightPrimed = primeActive("F1");
+            setBlock(true);
+            KWinService.refreshActiveWindow();   // starts and blocks, sampled F1
+            wait(300);
+            R.inflightQueryGeneration = KWinService.activeWindowQueryGeneration;
+            setActive("F2");                     // focus converges while blocked
+            popup.visible = true;
+            wait(500);                           // still blocked: popup must stay open
+            R.inflightStayedOpenWhileBlocked = popup.visible;
+            R.inflightAwaiting = popup._awaitingActiveWindowBaseline;
+            setBlock(false);                     // stale sample (F1) now completes
+            wait(900);                           // in-flight sample ignored, next poll adopts F2
+            R.inflightVisibleAfterStaleSample = popup.visible;
+            R.inflightBaseline = popup.initialActiveWindow;
+            R.inflightGenerationAdvanced = (KWinService.activeWindowQueryGeneration > R.inflightQueryGeneration);
+            setActive("F3");                     // genuine change after baseline
+            R.inflightFocusClosed = waitFor(() => !popup.visible, 2000);
+            wait(80);
+            R.inflightBaselineReset = (popup.initialActiveWindow === "");
+
             console.log("POPUP_BASELINE_RESULT:" + JSON.stringify(R));
         }
     }
@@ -201,7 +236,13 @@ FloatingWindow {
 
 FAKE_KDOTOOL = """#!/bin/sh
 if [ "$1" = "getactivewindow" ]; then
-  cat "$FAKE_KWIN_STATE/active" 2>/dev/null || printf ''
+  # Sample first, then optionally block: this lets a test create an in-flight
+  # query whose result predates a later focus change.
+  val=$(cat "$FAKE_KWIN_STATE/active" 2>/dev/null)
+  if [ -e "$FAKE_KWIN_STATE/block" ]; then
+    while [ -e "$FAKE_KWIN_STATE/block" ]; do sleep 0.02; done
+  fi
+  printf '%s' "$val"
   exit 0
 fi
 exit 0
@@ -212,13 +253,19 @@ exit 1
 """
 
 
-def run_harness(timeout=90):
-    tmp = tempfile.TemporaryDirectory()
+def run_harness(timeout=120):
+    if shutil.which("quickshell") is None or shutil.which("dbus-run-session") is None:
+        raise unittest.SkipTest("quickshell or dbus-run-session not available")
+    tmp = tempfile.TemporaryDirectory(prefix="qs-popup-baseline-")
     root = tmp.name
     bindir = os.path.join(root, "bin")
     state = os.path.join(root, "state")
+    runtime_dir = os.path.join(root, "runtime")
+    config_home = os.path.join(root, "cfg")
     os.makedirs(bindir)
     os.makedirs(state)
+    os.makedirs(runtime_dir, mode=0o700)
+    os.makedirs(config_home, exist_ok=True)
     for name, body in (("kdotool", FAKE_KDOTOOL), ("qdbus6", FAKE_QDBUS)):
         p = os.path.join(bindir, name)
         with open(p, "w") as f:
@@ -227,20 +274,29 @@ def run_harness(timeout=90):
     with open(os.path.join(state, "active"), "w") as f:
         f.write("")
 
+    # Never inherit the live graphical session or its session bus.
     env = os.environ.copy()
-    env["XDG_CONFIG_HOME"] = os.path.join(root, "cfg")
-    env["XDG_CURRENT_DESKTOP"] = "KDE"
-    env["KDE_FULL_SESSION"] = "true"
-    env["QT_QPA_PLATFORM"] = "offscreen"
-    env["FAKE_KWIN_STATE"] = state
-    env["PATH"] = bindir + os.pathsep + env.get("PATH", "")
+    env.pop("WAYLAND_DISPLAY", None)
+    env.pop("DISPLAY", None)
+    env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+    env.pop("JOURNAL_STREAM", None)
+    env.pop("INVOCATION_ID", None)
+    env.update({
+        "XDG_CONFIG_HOME": config_home,
+        "XDG_RUNTIME_DIR": runtime_dir,
+        "XDG_CURRENT_DESKTOP": "KDE",
+        "KDE_FULL_SESSION": "true",
+        "QT_QPA_PLATFORM": "offscreen",
+        "FAKE_KWIN_STATE": state,
+        "PATH": bindir + os.pathsep + env.get("PATH", ""),
+    })
 
     probe = os.path.join(REPO_DIR, "_test_popup_baseline_probe.qml")
     try:
         with open(probe, "w") as f:
             f.write(HARNESS)
         proc = subprocess.run(
-            ["quickshell", "-p", probe, "--no-duplicate"],
+            ["dbus-run-session", "--", "quickshell", "-p", probe, "--no-duplicate"],
             cwd=REPO_DIR, env=env, capture_output=True, text=True, timeout=timeout,
         )
     finally:
@@ -313,6 +369,19 @@ class TestAnchoredPopupBaseline(unittest.TestCase):
     def test_09_repeated_open_close_cycles(self):
         self.assertEqual(self.R["cyclesVisible"], [True, True, True])
         self.assertTrue(self.R["cyclesBaselineReset"])
+
+    def test_10_open_during_inflight_query(self):
+        self.assertTrue(self.R["inflightPrimed"])
+        # The popup must stay open while the pre-open query is still blocked.
+        self.assertTrue(self.R["inflightStayedOpenWhileBlocked"])
+        self.assertTrue(self.R["inflightAwaiting"])
+        # Its late, stale sample must be ignored rather than used as baseline.
+        self.assertTrue(self.R["inflightVisibleAfterStaleSample"])
+        self.assertTrue(self.R["inflightGenerationAdvanced"])
+        self.assertEqual(self.R["inflightBaseline"], "F2")
+        # Once a fresh baseline exists, genuine focus changes still dismiss.
+        self.assertTrue(self.R["inflightFocusClosed"])
+        self.assertTrue(self.R["inflightBaselineReset"])
 
 
 if __name__ == "__main__":

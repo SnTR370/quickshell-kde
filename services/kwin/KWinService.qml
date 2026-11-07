@@ -43,7 +43,13 @@ Singleton {
     // Emitted after every successful active-window query, even when the value
     // did not change. Consumers that need an authoritative snapshot (rather
     // than the cached property) must wait for this signal.
-    signal activeWindowRefreshed(string windowId)
+    //
+    // `generation` identifies the query that produced the sample: it increases
+    // when a query *starts*, so a caller that records the generation before
+    // issuing a refresh can discard samples gathered by a query that was
+    // already in flight (possibly before the caller's state of interest).
+    signal activeWindowRefreshed(string windowId, int generation)
+    property int activeWindowQueryGeneration: 0
 
     function refreshActiveOutput() {
         if (!root.isKWin || activeOutputProc.running) return;
@@ -85,6 +91,7 @@ Singleton {
 
     function refreshActiveWindow() {
         if (!root.isKWin || activeWindowProc.running) return;
+        root.activeWindowQueryGeneration += 1;
         activeWindowProc.buf = "";
         activeWindowProc.running = true;
     }
@@ -105,7 +112,7 @@ Singleton {
                     root.activeWindowId = wid;
                     root.activeWindowChanged(wid);
                 }
-                root.activeWindowRefreshed(wid);
+                root.activeWindowRefreshed(wid, root.activeWindowQueryGeneration);
             }
         }
     }

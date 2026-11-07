@@ -19,6 +19,10 @@ PopupWindow {
     // baseline must come from that refresh; until then focus events are
     // treated as baseline syncs rather than legitimate dismissals.
     property bool _awaitingActiveWindowBaseline: false
+    // Generation of the active-window query that was already in flight (or
+    // last started) when we opened. Samples from it may predate the open, so
+    // only a query started after this generation may establish the baseline.
+    property int _baselineQueryGeneration: 0
 
     visible: true
     grabFocus: false
@@ -142,6 +146,7 @@ PopupWindow {
             // change, and using it as the baseline makes the first refresh
             // look like a focus change (closing the popup immediately).
             root.initialActiveWindow = "";
+            root._baselineQueryGeneration = KWinService.activeWindowQueryGeneration;
             root._awaitingActiveWindowBaseline = true;
             KWinService.refreshActiveWindow();
         } else {
@@ -164,11 +169,13 @@ PopupWindow {
         function onShowingDesktopChanged() {
             root.close();
         }
-        function onActiveWindowRefreshed(winId) {
+        function onActiveWindowRefreshed(winId, generation) {
             if (!root.visible) return;
             if (root._awaitingActiveWindowBaseline) {
-                // First authoritative snapshot after opening: this is the
-                // baseline, not a focus change.
+                // Ignore samples from a query that was already running before
+                // we opened: it may have observed the pre-open focus. Wait for
+                // a query that started after the baseline generation.
+                if (generation <= root._baselineQueryGeneration) return;
                 root.initialActiveWindow = winId;
                 root._awaitingActiveWindowBaseline = false;
                 return;
@@ -179,13 +186,10 @@ PopupWindow {
         }
         function onActiveWindowChanged(winId) {
             if (!root.visible) return;
-            if (root._awaitingActiveWindowBaseline) {
-                // Changed before the baseline refresh completed (e.g. a push
-                // from an external bridge): adopt it instead of closing.
-                root.initialActiveWindow = winId;
-                root._awaitingActiveWindowBaseline = false;
-                return;
-            }
+            // While the baseline is pending, let onActiveWindowRefreshed apply
+            // the generation rule; a change notification alone cannot tell us
+            // whether its sample predates the open.
+            if (root._awaitingActiveWindowBaseline) return;
             if (root.initialActiveWindow === "") {
                 root.initialActiveWindow = winId;
             } else if (winId !== "" && winId !== root.initialActiveWindow) {
