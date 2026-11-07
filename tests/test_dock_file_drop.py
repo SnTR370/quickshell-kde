@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Session-safe launch harness: probes must never inherit the live
 # compositor/session-bus environment (tests/qs_test_env.py).
-from qs_test_env import isolated_probe_env, run_isolated_probe
+from qs_test_env import isolated_probe_env, isolated_probe_workspace, run_isolated_probe
 JS = os.path.join(REPO, "services/applications/FileDrop.js")
 
 
@@ -290,9 +290,10 @@ class TestRuntimeFileDrop(unittest.TestCase):
     executed (no real gio/gtk-launch process is spawned)."""
 
     def test_runtime_drop_handling_logic(self):
-        probe_path = os.path.join(REPO, "_test_dock_file_drop_probe.qml")
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_file_drop_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick

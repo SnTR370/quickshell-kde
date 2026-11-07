@@ -5,9 +5,18 @@ Unit and Integration Tests for quickshell-kde Control Center Module.
 
 import os
 import subprocess
+import sys
 import unittest
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(os.path.dirname(MODULE_DIR))
+sys.path.insert(0, os.path.join(_REPO, "tests"))
+
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+)
 
 class TestControlCenterModule(unittest.TestCase):
     @classmethod
@@ -145,22 +154,17 @@ class TestControlCenterModule(unittest.TestCase):
         """Real QML Runtime Test (via quickshell): Verify ControlCenterButton starts closed, ModuleRegistry slot preservation, Badge coloring, small-screen height clamping, and safe dry-run session actions."""
         import json
         import tempfile
-        repo_dir = os.path.dirname(os.path.dirname(MODULE_DIR))
         with tempfile.TemporaryDirectory() as tmpdir:
             # Isolated runtime (never the user's session): offscreen QPA,
-            # no WAYLAND_DISPLAY/DISPLAY, fresh private XDG_RUNTIME_DIR and
-            # XDG_CONFIG_HOME, private D-Bus session — same recipe as
-            # tests/test_layout_presets.py.
-            runtime_dir = os.path.join(tmpdir, "runtime")
-            os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-            env = os.environ.copy()
-            env.pop("WAYLAND_DISPLAY", None)
-            env.pop("DISPLAY", None)
-            env["QT_QPA_PLATFORM"] = "offscreen"
-            env["XDG_RUNTIME_DIR"] = runtime_dir
-            env["XDG_CONFIG_HOME"] = tmpdir
-            env["QUICKSHELL_TEST_MODE"] = "1"
-            probe_path = os.path.join(repo_dir, "_test_controlcenter_runtime_probe.qml")
+            # no WAYLAND_DISPLAY/DISPLAY, private HOME/XDG state, private
+            # D-Bus session — the shared qs_test_env harness.
+            env = isolated_probe_env(tmpdir)
+            env.update({
+                "XDG_CONFIG_HOME": tmpdir,
+                "QUICKSHELL_TEST_MODE": "1",
+            })
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_controlcenter_runtime_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -244,14 +248,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["dbus-run-session", "--", "quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=repo_dir,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=30)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "CC_RUNTIME_RESULT:"
                 self.assertIn(marker, combined, f"Missing runtime marker:\n{combined}")

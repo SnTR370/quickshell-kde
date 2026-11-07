@@ -19,10 +19,19 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+    write_probe,
+)
 MONITOR_PROFILES_JS = os.path.join(REPO, "services/config/MonitorProfiles.js")
 CONFIG_SERVICE = os.path.join(REPO, "services/config/ConfigService.qml")
 DOCK_QML = os.path.join(REPO, "modules/dock/Dock.qml")
@@ -542,32 +551,23 @@ class TestMonitorProfilesRuntimeE2E(unittest.TestCase):
         if shutil.which("quickshell") is None or shutil.which("dbus-run-session") is None:
             raise unittest.SkipTest("quickshell or dbus-run-session not available")
         cls.testroot = tempfile.mkdtemp(prefix="qs-profiles-e2e-")
-        cls.probe = os.path.join(REPO, "_test_dock_monitor_profiles_probe.qml")
-        with open(cls.probe, "w") as f:
-            f.write(PROBE_QML)
+        cls.workspace = isolated_probe_workspace(os.path.join(cls.testroot, "ws"))
+        cls.probe = write_probe(cls.workspace, PROBE_QML, "_dock_monitor_profiles_probe.qml")
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.probe):
-            os.remove(cls.probe)
         if hasattr(cls, "testroot"):
             shutil.rmtree(cls.testroot, ignore_errors=True)
 
     def _run_phase(self, phase, config_home):
-        env = dict(os.environ)
-        env.pop("WAYLAND_DISPLAY", None)
-        env.pop("DISPLAY", None)
-        runtime_dir = os.path.join(self.testroot, "runtime-" + phase)
+        # Fresh private run root per phase (isolated HOME/XDG state); the
+        # seeded config home persists across phases on purpose.
+        env = isolated_probe_env(os.path.join(self.testroot, "runtime-" + phase))
         env.update({
-            "QT_QPA_PLATFORM": "offscreen",
-            "XDG_RUNTIME_DIR": runtime_dir,
             "XDG_CONFIG_HOME": config_home,
             "PROFILES_PHASE": phase,
         })
-        os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-        proc = subprocess.run(
-            ["dbus-run-session", "--", "quickshell", "-p", self.probe, "--no-duplicate"],
-            cwd=REPO, env=env, capture_output=True, text=True, timeout=90)
+        proc = run_isolated_probe(self.probe, env, timeout=90)
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
         return proc.returncode, combined
 

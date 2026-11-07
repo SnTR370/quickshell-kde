@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Session-safe launch harness: probes must never inherit the live
 # compositor/session-bus environment (tests/qs_test_env.py).
-from qs_test_env import isolated_probe_env, run_isolated_probe
+from qs_test_env import isolated_probe_env, isolated_probe_workspace, run_isolated_probe
 
 WFF1 = "0_{11111111-1111-1111-1111-111111111111}"
 WFF2 = "0_{22222222-2222-2222-2222-222222222222}"
@@ -503,7 +503,8 @@ class TestDockKeyboardRuntime(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         env = isolated_probe_env(cls.tmp.name)
-        probe = os.path.join(REPO_DIR, "_test_dock_keyboard_probe.qml")
+        workspace = isolated_probe_workspace(os.path.join(cls.tmp.name, "ws"))
+        probe = os.path.join(workspace, "_test_dock_keyboard_probe.qml")
         try:
             with open(probe, "w") as f:
                 f.write(HARNESS)

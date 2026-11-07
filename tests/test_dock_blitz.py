@@ -22,7 +22,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Session-safe launch harness: probes must never inherit the live
 # compositor/session-bus environment (tests/qs_test_env.py).
-from qs_test_env import isolated_probe_env, run_isolated_probe, run_isolated_command
+from qs_test_env import (
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+    run_isolated_command,
+)
 
 class TestDockBlitz(unittest.TestCase):
 
@@ -99,7 +104,8 @@ class TestDockBlitz(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_bounce_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_bounce_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -196,7 +202,8 @@ Scope {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_cycling_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_cycling_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -427,8 +434,9 @@ Scope {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_reorder_probe.qml")
-            reload_probe_path = os.path.join(REPO_DIR, "_test_dock_reorder_reload_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_reorder_probe.qml")
+            reload_probe_path = os.path.join(workspace, "_test_dock_reorder_reload_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -679,8 +687,9 @@ Scope {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_probe.qml")
-            reload_probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_reload_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_dnd_reorder_probe.qml")
+            reload_probe_path = os.path.join(workspace, "_test_dock_dnd_reorder_reload_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -905,7 +914,8 @@ Scope {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_pin_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_dnd_pin_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -1153,7 +1163,8 @@ FloatingWindow {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_safety_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_dnd_safety_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -1373,7 +1384,8 @@ FloatingWindow {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_phase_a_reliability_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_phase_a_reliability_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -1649,7 +1661,8 @@ Scope {
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_dock_phase_b_reliability_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_phase_b_reliability_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -1872,7 +1885,8 @@ FloatingWindow {
 
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_phase1_window_actions_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_phase1_window_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -2244,7 +2258,8 @@ Scope {
         # 6. Live QML Runtime Test with ApplicationService & DockMenu
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_phase2_quick_actions_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_phase2_quick_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick

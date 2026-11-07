@@ -26,6 +26,14 @@ import tempfile
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+    write_probe,
+)
 PRESETS_JS = os.path.join(REPO, "services/config/LayoutPresets.js")
 
 # The 11 modules registered in services/core/ModuleRegistry.qml.
@@ -454,36 +462,26 @@ class TestPresetRuntimeE2E(unittest.TestCase):
         if shutil.which("quickshell") is None or shutil.which("dbus-run-session") is None:
             raise unittest.SkipTest("quickshell or dbus-run-session not available")
         cls.testroot = tempfile.mkdtemp(prefix="qs-presets-e2e-")
-        cls.probe = os.path.join(REPO, "_test_layout_presets_probe.qml")
-        with open(cls.probe, "w") as f:
-            f.write(PROBE_QML)
+        cls.workspace = isolated_probe_workspace(os.path.join(cls.testroot, "ws"))
+        cls.probe = write_probe(cls.workspace, PROBE_QML, "_layout_presets_probe.qml")
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.probe):
-            os.remove(cls.probe)
         if hasattr(cls, "testroot"):
             shutil.rmtree(cls.testroot, ignore_errors=True)
 
     def _run_phase(self, phase, config_home):
-        env = dict(os.environ)
-        env.pop("WAYLAND_DISPLAY", None)
-        env.pop("DISPLAY", None)
-        # Fresh runtime dir per phase: quickshell keeps per-instance IPC and
-        # log state under XDG_RUNTIME_DIR, and the phases must not influence
-        # each other through it.
-        runtime_dir = os.path.join(self.testroot, "runtime-" + phase)
+        # Fresh private run root per phase: quickshell keeps per-instance IPC
+        # and log state under XDG_RUNTIME_DIR (and HOME/STATE under the run
+        # root), and the phases must not influence each other through it.
+        # The seeded config home persists across phases on purpose.
+        env = isolated_probe_env(os.path.join(self.testroot, "runtime-" + phase))
         env.update({
-            "QT_QPA_PLATFORM": "offscreen",
-            "XDG_RUNTIME_DIR": runtime_dir,
             "XDG_CONFIG_HOME": config_home,
             "LAYOUT_PRESET_PHASE": phase,
             "LAYOUT_PRESET_ID": "minimal",
         })
-        os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-        proc = subprocess.run(
-            ["dbus-run-session", "--", "quickshell", "-p", self.probe, "--no-duplicate"],
-            cwd=REPO, env=env, capture_output=True, text=True, timeout=90)
+        proc = run_isolated_probe(self.probe, env, timeout=90)
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
         return proc.returncode, combined
 

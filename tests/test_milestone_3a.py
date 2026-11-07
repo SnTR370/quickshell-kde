@@ -17,46 +17,23 @@ Comprehensive automated test suite covering:
 import os
 import json
 import shutil
+import sys
 import time
 import tempfile
 import unittest
 import subprocess
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-def isolated_probe_env(tmpdir):
-    """Session-safe environment for quickshell probe runs.
-
-    Never inherits the user's graphical session: strips WAYLAND_DISPLAY /
-    DISPLAY, selects the offscreen QPA platform and points XDG_RUNTIME_DIR
-    and XDG_CONFIG_HOME at the caller's temporary directory. Probes must be
-    launched through run_isolated_probe() so their D-Bus activity stays on a
-    private bus instead of the live Plasma session bus.
-    """
-    env = os.environ.copy()
-    env.pop("WAYLAND_DISPLAY", None)
-    env.pop("DISPLAY", None)
-    runtime_dir = os.path.join(tmpdir, "probe-runtime")
-    os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-    env["QT_QPA_PLATFORM"] = "offscreen"
-    env["XDG_RUNTIME_DIR"] = runtime_dir
-    env["XDG_CONFIG_HOME"] = tmpdir
-    env.pop("JOURNAL_STREAM", None)
-    env.pop("INVOCATION_ID", None)
-    return env
-
-
-def run_isolated_probe(probe_path, env, timeout=20):
-    """Run a quickshell probe inside its own D-Bus session (never the live one)."""
-    return subprocess.run(
-        ["dbus-run-session", "--", "quickshell", "-p", probe_path, "--no-duplicate"],
-        cwd=REPO_DIR,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout
-    )
+# Shared isolation harness (wave 1 single source of truth). This suite used
+# to carry a private copy; it now uses the hardened version that also
+# isolates HOME/XDG_CACHE/DATA/STATE and credential variables.
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+)
 
 
 class TestMilestone3A(unittest.TestCase):
@@ -306,18 +283,13 @@ class TestMilestone3A(unittest.TestCase):
         if missing:
             self.skipTest("isolated startup rig requires: " + ", ".join(missing))
         with tempfile.TemporaryDirectory() as tmpdir:
-            runtime_dir = os.path.join(tmpdir, "runtime")
-            os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-            env = dict(os.environ)
-            env.pop("WAYLAND_DISPLAY", None)
-            env.pop("DISPLAY", None)
-            env.update({
-                "XDG_RUNTIME_DIR": runtime_dir,
-                "XDG_CONFIG_HOME": tmpdir,
-                "QT_QPA_PLATFORM": "wayland",
-            })
-            env.pop("JOURNAL_STREAM", None)
-            env.pop("INVOCATION_ID", None)
+            # Private HOME + XDG state via the shared harness; this is the
+            # one legitimate exception to offscreen QPA: the rig drives a
+            # nested virtual KWin, so the shell must talk to THAT compositor
+            # socket (exported below inside the private dbus-run-session).
+            env = isolated_probe_env(tmpdir)
+            env["XDG_CONFIG_HOME"] = tmpdir
+            env["QT_QPA_PLATFORM"] = "wayland"
             rig = (
                 "set -u\n"
                 "kwin_wayland --virtual --width 1280 --height 800 --no-lockscreen "
@@ -369,8 +341,14 @@ class TestMilestone3A(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_tray_regression_probe.qml")
-            reload_probe_path = os.path.join(REPO_DIR, "_test_tray_reload_probe.qml")
+            # Preserve this suite's historical config root (tmpdir itself) on
+            # top of the shared isolation.
+            env["XDG_CONFIG_HOME"] = tmpdir
+            # Probe never touches the repository; default links include
+            # modules/ and components/ (TrayModule imports "../../components").
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_tray_regression_probe.qml")
+            reload_probe_path = os.path.join(workspace, "_tray_reload_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -553,7 +531,11 @@ Scope {
         """Verify KWin window identity resolution ignores window titles, resolves StartupWMClass/desktopFile, filters uninstalled pinned apps, and keeps unknown apps deterministic."""
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_window_identity_probe.qml")
+            # Preserve this suite's historical config root (tmpdir itself)
+            # on top of the shared isolation.
+            env["XDG_CONFIG_HOME"] = tmpdir
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_window_identity_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -714,7 +696,11 @@ Scope {
         """Verify KWin metadata cache handles failure retries, closed windows during query, and queued queries."""
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_cache_edge_probe.qml")
+            # Preserve this suite's historical config root (tmpdir itself)
+            # on top of the shared isolation.
+            env["XDG_CONFIG_HOME"] = tmpdir
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_cache_edge_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -837,7 +823,11 @@ Scope {
 
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
-            probe_path = os.path.join(REPO_DIR, "_test_window_actions_probe.qml")
+            # Preserve this suite's historical config root (tmpdir itself)
+            # on top of the shared isolation.
+            env["XDG_CONFIG_HOME"] = tmpdir
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_window_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -1071,6 +1061,9 @@ Scope {
         """Live QML Runtime Test: Verify JsonStore and ConfigService durability under pre-load mutations, rapid saves, deferred loads, serialize/write failures, and corrupt/empty JSON preservation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
+            # ConfigService must root at tmpdir (where cfg_dir is seeded and
+            # asserted) — same layout as before the shared harness.
+            env["XDG_CONFIG_HOME"] = tmpdir
             cfg_dir = os.path.join(tmpdir, "quickshell-kde")
             os.makedirs(cfg_dir, exist_ok=True)
             corrupt_path = os.path.join(cfg_dir, "corrupt_store.json")
@@ -1087,7 +1080,8 @@ Scope {
                 json.dump({"version": 1}, rf)
             os.chmod(readonly_dir, 0o500)
 
-            probe_path = os.path.join(REPO_DIR, "_test_phase_c_durability_probe.qml")
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_phase_c_durability_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write(f"""import QtQuick

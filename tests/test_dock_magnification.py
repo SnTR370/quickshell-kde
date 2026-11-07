@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Session-safe launch harness: probes must never inherit the live
 # compositor/session-bus environment (tests/qs_test_env.py).
-from qs_test_env import isolated_probe_env, run_isolated_probe
+from qs_test_env import isolated_probe_env, isolated_probe_workspace, run_isolated_probe
 JS = os.path.join(REPO, "modules/dock/Magnification.js")
 
 
@@ -306,9 +306,11 @@ class TestRuntimeMagnification(unittest.TestCase):
     """Offscreen Quickshell runtime probe with real DockItem components."""
 
     def test_runtime_scale_displacement_and_axis_switch(self):
-        probe_path = os.path.join(REPO, "_test_dock_magnify_probe.qml")
         with tempfile.TemporaryDirectory() as tmpdir:
             env = isolated_probe_env(tmpdir)
+            # Probe lives in a throwaway symlink workspace, never in the repo.
+            workspace = isolated_probe_workspace(os.path.join(tmpdir, "ws"))
+            probe_path = os.path.join(workspace, "_test_dock_magnify_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick

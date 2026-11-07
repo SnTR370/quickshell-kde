@@ -35,6 +35,14 @@ import tempfile
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+    run_isolated_probe,
+    write_probe,
+)
 JSON_STORE_QML = os.path.join(REPO, "services/core/JsonStore.qml")
 
 DEFAULT_VALUE = {"d": True}
@@ -304,14 +312,11 @@ class TestJsonStoreRuntime(unittest.TestCase):
         if shutil.which("quickshell") is None or shutil.which("dbus-run-session") is None:
             raise unittest.SkipTest("quickshell or dbus-run-session not available")
         cls.testroot = tempfile.mkdtemp(prefix="qs-jsonstore-e2e-")
-        cls.probe = os.path.join(REPO, "_test_json_store_probe.qml")
-        with open(cls.probe, "w") as f:
-            f.write(PROBE_QML)
+        cls.workspace = isolated_probe_workspace(os.path.join(cls.testroot, "ws"))
+        cls.probe = write_probe(cls.workspace, PROBE_QML, "_json_store_probe.qml")
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.probe):
-            os.remove(cls.probe)
         if hasattr(cls, "testroot"):
             shutil.rmtree(cls.testroot, ignore_errors=True)
 
@@ -332,23 +337,17 @@ class TestJsonStoreRuntime(unittest.TestCase):
             with open(fallback_path, "w") as f:
                 f.write(fallback_seed)
 
-        runtime_dir = os.path.join(self.testroot,
-                                   "runtime-" + scenario + "-" + os.path.basename(config_home))
-        os.makedirs(runtime_dir, mode=0o700, exist_ok=True)
-        env = dict(os.environ)
-        env.pop("WAYLAND_DISPLAY", None)
-        env.pop("DISPLAY", None)
+        run_root = os.path.join(self.testroot,
+                                "runtime-" + scenario + "-" + os.path.basename(config_home))
+        # Private HOME/XDG state per scenario (fresh runtime dir included).
+        env = isolated_probe_env(run_root)
         env.update({
-            "QT_QPA_PLATFORM": "offscreen",
-            "XDG_RUNTIME_DIR": runtime_dir,
             "XDG_CONFIG_HOME": config_home,
             "JSON_STORE_SCENARIO": scenario,
             "JSON_STORE_PATH": store_path,
             "JSON_STORE_FALLBACK": fallback_path,
         })
-        proc = subprocess.run(
-            ["dbus-run-session", "--", "quickshell", "-p", self.probe, "--no-duplicate"],
-            cwd=REPO, env=env, capture_output=True, text=True, timeout=60)
+        proc = run_isolated_probe(self.probe, env, timeout=60)
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
         self.assertEqual(proc.returncode, 0,
                          f"probe failed for {scenario}:\n{combined}\nSTORE PATH: {store_path}")

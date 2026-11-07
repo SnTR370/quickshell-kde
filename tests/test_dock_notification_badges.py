@@ -21,11 +21,18 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from qs_test_env import (  # noqa: E402
+    isolated_probe_env,
+    isolated_probe_workspace,
+)
 BADGES_JS = os.path.join(REPO, "services/notifications/NotificationBadges.js")
 NOTIF_SERVICE = os.path.join(REPO, "services/notifications/NotificationService.qml")
 NOTIF_CARD = os.path.join(REPO, "modules/notifications/NotificationCard.qml")
@@ -506,14 +513,14 @@ class TestNotificationBadgesRuntimeE2E(unittest.TestCase):
         if not os.path.exists("/usr/share/applications/org.kde.dolphin.desktop"):
             raise unittest.SkipTest("org.kde.dolphin desktop entry not available")
         cls.testroot = tempfile.mkdtemp(prefix="qs-notifbadges-e2e-")
-        cls.probe = os.path.join(REPO, "_test_dock_notification_badges_probe.qml")
+        # Probe lives in a throwaway symlink workspace, never in the repo.
+        cls.workspace = isolated_probe_workspace(os.path.join(cls.testroot, "ws"))
+        cls.probe = os.path.join(cls.workspace, "_test_dock_notification_badges_probe.qml")
         with open(cls.probe, "w") as f:
             f.write(PROBE_QML)
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.probe):
-            os.remove(cls.probe)
         if hasattr(cls, "testroot"):
             shutil.rmtree(cls.testroot, ignore_errors=True)
 
@@ -539,9 +546,12 @@ class TestNotificationBadgesRuntimeE2E(unittest.TestCase):
                 "for i in $(seq 1 20); do kill -0 $QSPID 2>/dev/null || break; sleep 0.3; done\n"
                 "kill -9 $QSPID 2>/dev/null\nwait $QSPID 2>/dev/null\nexit 0\n")
         os.chmod(script, 0o755)
-        env = dict(os.environ)
-        env.pop("WAYLAND_DISPLAY", None)
-        env.pop("DISPLAY", None)
+        # Outer env: shared isolation harness (session/credential stripping,
+        # private HOME/XDG state). The driver script keeps its per-phase
+        # inline overrides and runs inside its own dbus-run-session, so the
+        # in-session quickshell + notification-sending helpers only ever see
+        # the private bus.
+        env = isolated_probe_env(os.path.join(self.testroot, "env-" + phase))
         subprocess.run(["dbus-run-session", "--", script], cwd=REPO, env=env,
                        capture_output=True, text=True, timeout=180)
         with open(logfile, errors="replace") as f:
