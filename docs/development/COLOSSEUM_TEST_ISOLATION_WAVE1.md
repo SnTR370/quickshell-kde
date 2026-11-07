@@ -93,5 +93,5 @@ virtual KWin. No test was skipped in any run above.
    `_test_*.qml`). Tree hygiene issue only, not a session risk.
 4. qmllint was not re-run (no QML files changed).
 
-COMMIT / PUSH: recorded in the commit that adds this file; pushed only to
-`test/colosseum-isolation`, never merged to `main`.
+COMMIT / PUSH: `aaee5ab` (this branch, on top of base `67abda2`); pushed to
+`origin/test/colosseum-isolation`, never merged to `main`.
