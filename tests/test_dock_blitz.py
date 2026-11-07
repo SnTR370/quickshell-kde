@@ -13,10 +13,16 @@ Validates:
 """
 
 import os
+import sys
 import unittest
 import subprocess
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Session-safe launch harness: probes must never inherit the live
+# compositor/session-bus environment (tests/qs_test_env.py).
+from qs_test_env import isolated_probe_env, run_isolated_probe, run_isolated_command
 
 class TestDockBlitz(unittest.TestCase):
 
@@ -92,8 +98,7 @@ class TestDockBlitz(unittest.TestCase):
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_bounce_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -142,14 +147,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=6)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_BOUNCE_RUNTIME:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -197,8 +195,7 @@ Scope {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_cycling_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -373,14 +370,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=6)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_CYCLING_RUNTIME:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -436,8 +426,7 @@ Scope {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_reorder_probe.qml")
             reload_probe_path = os.path.join(REPO_DIR, "_test_dock_reorder_reload_probe.qml")
             try:
@@ -563,14 +552,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=6)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_REORDER_RUNTIME:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -613,7 +595,7 @@ Scope {
                 self.assertIn("code", data["finalRaw"])
 
                 # Verify on-disk dock_config.json was written
-                dock_cfg_file = os.path.join(tmpdir, "quickshell-kde", "dock_config.json")
+                dock_cfg_file = os.path.join(env["XDG_CONFIG_HOME"], "quickshell-kde", "dock_config.json")
                 self.assertTrue(os.path.isfile(dock_cfg_file), "dock_config.json must be persisted to XDG_CONFIG_HOME")
                 with open(dock_cfg_file) as df:
                     persisted_json = json.load(df)
@@ -648,14 +630,7 @@ Scope {
     }
 }
 """)
-                proc_reload = subprocess.run(
-                    ["quickshell", "-p", reload_probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc_reload = run_isolated_probe(reload_probe_path, env, timeout=6)
                 reload_combined = (proc_reload.stdout or "") + "\n" + (proc_reload.stderr or "")
                 reload_marker = "DOCK_RELOAD_RUNTIME:"
                 self.assertIn(reload_marker, reload_combined, f"Missing reload marker:\n{reload_combined}")
@@ -703,9 +678,7 @@ Scope {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
-            env["QT_QPA_PLATFORM"] = "offscreen"
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_probe.qml")
             reload_probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_reorder_reload_probe.qml")
             try:
@@ -865,14 +838,7 @@ FloatingWindow {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_DND_REORDER_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -918,14 +884,7 @@ Scope {
     }
 }
 """)
-                proc_reload = subprocess.run(
-                    ["quickshell", "-p", reload_probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=6
-                )
+                proc_reload = run_isolated_probe(reload_probe_path, env, timeout=6)
                 reload_combined = (proc_reload.stdout or "") + "\n" + (proc_reload.stderr or "")
                 reload_marker = "DOCK_DND_RELOAD_RESULT:"
                 self.assertIn(reload_marker, reload_combined, f"Missing reload marker:\n{reload_combined}")
@@ -945,9 +904,7 @@ Scope {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
-            env["QT_QPA_PLATFORM"] = "offscreen"
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_pin_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -1149,14 +1106,7 @@ FloatingWindow {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_DND_PIN_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -1202,9 +1152,7 @@ FloatingWindow {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
-            env["QT_QPA_PLATFORM"] = "offscreen"
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_dnd_safety_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -1390,14 +1338,7 @@ FloatingWindow {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_DND_SAFETY_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -1431,8 +1372,7 @@ FloatingWindow {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_phase_a_reliability_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -1662,14 +1602,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "PHASE_A_RELIABILITY_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -1715,8 +1648,7 @@ Scope {
         import json
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_dock_phase_b_reliability_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -1880,14 +1812,7 @@ FloatingWindow {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "PHASE_B_RELIABILITY_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -1933,17 +1858,20 @@ FloatingWindow {
         import tempfile
 
         script_path = os.path.join(REPO_DIR, "services/kwin/scripts/kwin-window-action.sh")
-        # 1. Verify script rejects malformed UUIDs and invalid target args safely without calling KWin
-        bad_uuid_res = subprocess.run([script_path, "maximize", "bad;uuid"], capture_output=True, text=True)
-        self.assertNotEqual(bad_uuid_res.returncode, 0)
-        bad_desk_res = subprocess.run([script_path, "move-desktop", "0_{11111111-1111-1111-1111-111111111111}", "desk;rm"], capture_output=True, text=True)
-        self.assertNotEqual(bad_desk_res.returncode, 0)
-        bad_fs_res = subprocess.run([script_path, "fullscreen", "0_{11111111-1111-1111-1111-111111111111}", "invalid_bool"], capture_output=True, text=True)
-        self.assertNotEqual(bad_fs_res.returncode, 0)
+        # 1. Verify script rejects malformed UUIDs and invalid target args safely without calling KWin.
+        # Run off the live session: a rejection-path bug in the script must never
+        # be able to reach the user's real KWin/D-Bus session.
+        with tempfile.TemporaryDirectory() as script_tmpdir:
+            script_env = isolated_probe_env(script_tmpdir)
+            bad_uuid_res = run_isolated_command([script_path, "maximize", "bad;uuid"], script_env, timeout=10)
+            self.assertNotEqual(bad_uuid_res.returncode, 0)
+            bad_desk_res = run_isolated_command([script_path, "move-desktop", "0_{11111111-1111-1111-1111-111111111111}", "desk;rm"], script_env, timeout=10)
+            self.assertNotEqual(bad_desk_res.returncode, 0)
+            bad_fs_res = run_isolated_command([script_path, "fullscreen", "0_{11111111-1111-1111-1111-111111111111}", "invalid_bool"], script_env, timeout=10)
+            self.assertNotEqual(bad_fs_res.returncode, 0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_phase1_window_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -2180,14 +2108,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "PHASE1_WINDOW_ACTIONS_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")
@@ -2322,8 +2243,7 @@ Scope {
 
         # 6. Live QML Runtime Test with ApplicationService & DockMenu
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
+            env = isolated_probe_env(tmpdir)
             probe_path = os.path.join(REPO_DIR, "_test_phase2_quick_actions_probe.qml")
             try:
                 with open(probe_path, "w") as pf:
@@ -2406,14 +2326,7 @@ Scope {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO_DIR,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=8
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=8)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "PHASE2_QUICK_ACTIONS_RESULT:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")

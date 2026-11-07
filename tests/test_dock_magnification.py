@@ -10,10 +10,16 @@ No quickshell/KWin/Wayland is launched against the live session.
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Session-safe launch harness: probes must never inherit the live
+# compositor/session-bus environment (tests/qs_test_env.py).
+from qs_test_env import isolated_probe_env, run_isolated_probe
 JS = os.path.join(REPO, "modules/dock/Magnification.js")
 
 
@@ -302,9 +308,7 @@ class TestRuntimeMagnification(unittest.TestCase):
     def test_runtime_scale_displacement_and_axis_switch(self):
         probe_path = os.path.join(REPO, "_test_dock_magnify_probe.qml")
         with tempfile.TemporaryDirectory() as tmpdir:
-            env = os.environ.copy()
-            env["XDG_CONFIG_HOME"] = tmpdir
-            env["QT_QPA_PLATFORM"] = "offscreen"
+            env = isolated_probe_env(tmpdir)
             try:
                 with open(probe_path, "w") as pf:
                     pf.write("""import QtQuick
@@ -521,10 +525,7 @@ FloatingWindow {
     }
 }
 """)
-                proc = subprocess.run(
-                    ["quickshell", "-p", probe_path, "--no-duplicate"],
-                    cwd=REPO, env=env, capture_output=True, text=True, timeout=20
-                )
+                proc = run_isolated_probe(probe_path, env, timeout=20)
                 combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 marker = "DOCK_MAGNIFY_RUNTIME:"
                 self.assertIn(marker, combined, f"Missing marker in output:\n{combined}")

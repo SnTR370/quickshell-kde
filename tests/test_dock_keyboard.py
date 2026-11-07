@@ -14,11 +14,16 @@ Layers (kept distinct):
 
 import json
 import os
-import subprocess
+import sys
 import tempfile
 import unittest
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Session-safe launch harness: probes must never inherit the live
+# compositor/session-bus environment (tests/qs_test_env.py).
+from qs_test_env import isolated_probe_env, run_isolated_probe
 
 WFF1 = "0_{11111111-1111-1111-1111-111111111111}"
 WFF2 = "0_{22222222-2222-2222-2222-222222222222}"
@@ -497,17 +502,12 @@ class TestDockKeyboardRuntime(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        env = os.environ.copy()
-        env["XDG_CONFIG_HOME"] = cls.tmp.name
-        env["QT_QPA_PLATFORM"] = "offscreen"
+        env = isolated_probe_env(cls.tmp.name)
         probe = os.path.join(REPO_DIR, "_test_dock_keyboard_probe.qml")
         try:
             with open(probe, "w") as f:
                 f.write(HARNESS)
-            proc = subprocess.run(
-                ["quickshell", "-p", probe, "--no-duplicate"],
-                cwd=REPO_DIR, env=env, capture_output=True, text=True, timeout=60,
-            )
+            proc = run_isolated_probe(probe, env, timeout=60)
         finally:
             if os.path.exists(probe):
                 os.remove(probe)
